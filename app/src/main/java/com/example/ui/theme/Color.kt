@@ -3,7 +3,7 @@ package com.example.ui.theme
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
-val LogoGreen = Color(0xFF059669) // Exact vibrant primary green from Fintel logo
+val LogoGreen = Color(0xFF059669) // Exact vibrant primary green from Finsay logo
 val Emerald950 = Color(0xFF022C22)
 val Emerald900 = Color(0xFF064E3B)
 val Emerald850 = Color(0xFF065440)

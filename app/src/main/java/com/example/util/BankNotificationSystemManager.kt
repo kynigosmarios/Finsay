@@ -16,8 +16,9 @@ import com.example.service.BankNotificationDismissReceiver
 import java.util.Locale
 
 object BankNotificationSystemManager {
-    const val CHANNEL_ID = "fintel_bank_transactions_channel"
-    private const val PREFS_NAME = "fintel_bank_catcher_prefs"
+    const val CHANNEL_ID = "finsay_bank_transactions_channel"
+    private const val PREFS_NAME = "finsay_bank_catcher_prefs"
+    private const val LEGACY_PREFS_NAME = "fintel_bank_catcher_prefs"
     private const val KEY_AUTO_CATCHER_ENABLED = "bank_auto_catcher_enabled"
     private const val TAG = "BankNotifSysMgr"
 
@@ -30,7 +31,17 @@ object BankNotificationSystemManager {
     }
 
     private fun getPrefs(context: Context): SharedPreferences {
-        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.contains(KEY_AUTO_CATCHER_ENABLED)) {
+            val legacy = context.getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+            if (legacy.contains(KEY_AUTO_CATCHER_ENABLED)) {
+                prefs.edit().putBoolean(
+                    KEY_AUTO_CATCHER_ENABLED,
+                    legacy.getBoolean(KEY_AUTO_CATCHER_ENABLED, true)
+                ).apply()
+            }
+        }
+        return prefs
     }
 
     fun isAutoCatcherEnabled(context: Context): Boolean {

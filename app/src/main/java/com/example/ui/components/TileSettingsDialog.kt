@@ -192,8 +192,8 @@ fun TileSettingsDialog(
                             val statusBarManager = context.getSystemService(StatusBarManager::class.java)
                             statusBarManager?.requestAddTileService(
                                 ComponentName(context, QuickExpenseTileService::class.java),
-                                "Fintel",
-                                Icon.createWithResource(context, R.drawable.fintel_logo),
+                                "Finsay",
+                                Icon.createWithResource(context, R.drawable.finsay_logo),
                                 context.mainExecutor
                             ) { result ->
                                 addTileStatusMessage = if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED) {
@@ -204,9 +204,9 @@ fun TileSettingsDialog(
                             }
                         } else {
                             addTileStatusMessage = if (lang == Localization.Language.ENGLISH)
-                                "Swipe down the notification shade, tap the edit pencil and drag the Fintel tile to active tiles."
+                                "Swipe down the notification shade, tap the edit pencil and drag the Finsay tile to active tiles."
                             else
-                                "Σύρετε τη μπάρα ειδοποιήσεων προς τα κάτω, πατήστε το μολύβι επεξεργασίας και σύρετε το πλακίδιο Fintel στα ενεργά."
+                                "Σύρετε τη μπάρα ειδοποιήσεων προς τα κάτω, πατήστε το μολύβι επεξεργασίας και σύρετε το πλακίδιο Finsay στα ενεργά."
                         }
                     },
                     shape = RoundedCornerShape(14.dp),

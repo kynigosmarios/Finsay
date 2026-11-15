@@ -142,6 +142,8 @@ data class FirebaseRecurringExpense(
     var categoryName: String = "",
     var frequency: String = "MONTHLY",
     var dayOfMonth: Int = 1,
+    var reminderHour: Int = 9,
+    var reminderMinute: Int = 0,
     var splitType: String = "ALL_FAMILY",
     var memberIdsCsv: String = "",
     var memberNamesDisplay: String = "Κοινό Οικογένειας",

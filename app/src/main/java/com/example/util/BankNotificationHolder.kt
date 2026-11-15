@@ -23,7 +23,14 @@ object BankNotificationHolder {
         }
     }
 
-    private fun loadFromPrefs() {
+    fun reloadFromPrefs(context: Context? = null) {
+        if (context != null && prefs == null) {
+            init(context)
+        }
+        loadFromPrefs()
+    }
+
+    fun loadFromPrefs() {
         val p = prefs ?: return
         val raw = p.getString("pending_tx_json", null) ?: return
         try {
@@ -65,22 +72,62 @@ object BankNotificationHolder {
         } catch (_: Exception) {}
     }
 
-    fun addTransaction(tx: PendingBankTransaction, context: Context? = null) {
+    fun isSignatureHandled(sig: String, context: Context? = null): Boolean {
+        if (prefs == null && context != null) {
+            init(context)
+        }
+        val set = prefs?.getStringSet("handled_notif_sigs", emptySet()) ?: emptySet()
+        return set.contains(sig)
+    }
+
+    fun markSignatureHandled(sig: String, context: Context? = null) {
+        if (prefs == null && context != null) {
+            init(context)
+        }
+        val p = prefs ?: return
+        val existing = p.getStringSet("handled_notif_sigs", emptySet())?.toMutableList() ?: mutableListOf()
+        if (!existing.contains(sig)) {
+            existing.add(sig)
+            val trimmed = if (existing.size > 200) existing.takeLast(200) else existing
+            p.edit().putStringSet("handled_notif_sigs", trimmed.toSet()).apply()
+        }
+    }
+
+    fun addTransaction(tx: PendingBankTransaction, context: Context? = null): Boolean {
         if (prefs == null && context != null) {
             init(context)
         }
         val current = _pendingTransactions.value.toMutableList()
-        // Deduplicate recent identical transactions within 30 seconds
-        val isDuplicate = current.any {
-            it.amount == tx.amount &&
-            it.merchantName.equals(tx.merchantName, ignoreCase = true) &&
-            Math.abs(it.timestamp - tx.timestamp) < 30_000
+
+        // Deduplicate both identical notifications and cross-app duplicates (e.g. Google Pay + Eurobank)
+        val duplicateIndex = current.indexOfFirst { existing ->
+            val sameAmount = kotlin.math.abs(existing.amount - tx.amount) < 0.01
+            val closeInTime = kotlin.math.abs(existing.timestamp - tx.timestamp) < 120_000L
+            val sameMerchant = existing.merchantName.equals(tx.merchantName, ignoreCase = true) ||
+                existing.merchantName.contains(tx.merchantName, ignoreCase = true) ||
+                tx.merchantName.contains(existing.merchantName, ignoreCase = true)
+            val crossWalletAndBank = (existing.bankName == "Google Pay" && tx.bankName != "Google Pay") ||
+                (tx.bankName == "Google Pay" && existing.bankName != "Google Pay")
+            sameAmount && closeInTime && (sameMerchant || crossWalletAndBank)
         }
-        if (!isDuplicate) {
-            current.add(0, tx)
-            _pendingTransactions.value = current.take(10) // keep max 10
-            saveToPrefs()
+
+        if (duplicateIndex >= 0) {
+            val existing = current[duplicateIndex]
+            val existingIsGeneric = existing.merchantName.startsWith("Συναλλαγή ")
+            val newIsRicher = !tx.merchantName.startsWith("Συναλλαγή ") &&
+                (existingIsGeneric || (tx.bankName == "Google Pay" && existing.merchantName.length < tx.merchantName.length))
+            if (newIsRicher) {
+                current[duplicateIndex] = existing.copy(merchantName = tx.merchantName)
+                _pendingTransactions.value = current
+                saveToPrefs()
+            }
+            return false
         }
+
+        current.add(0, tx)
+        _pendingTransactions.value = current.sortedByDescending { it.timestamp }.take(15)
+        saveToPrefs()
+        return true
     }
 
     fun removeTransaction(id: String) {

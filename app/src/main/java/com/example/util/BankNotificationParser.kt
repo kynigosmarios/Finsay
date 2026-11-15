@@ -29,27 +29,56 @@ object BankNotificationParser {
      */
     private val ALLOWED_BANK_PACKAGES = mapOf(
         // Eurobank
+        "com.EurobankEFG" to "Eurobank",
+        "gr.eurobank.mobile.app" to "Eurobank",
         "gr.eurobank.mobile" to "Eurobank",
         "gr.eurobank.cards" to "Eurobank",
+        "gr.eurobank.smartwallet" to "Eurobank",
+        // Google Wallet / Google Pay
+        "com.google.android.apps.walletnfcrel" to "Google Pay",
+        "com.google.android.apps.nbu.paisa.user" to "Google Pay",
         // Alpha Bank
+        "com.mobileloft.alpha.droid" to "Alpha Bank",
         "gr.alphabank.mobilebanking" to "Alpha Bank",
         "gr.alpha.bonusextra" to "Alpha Bank",
+        "gr.alpha.mobilebanking" to "Alpha Bank",
+        "gr.alpha.mobile" to "Alpha Bank",
+        "gr.alphabank.wallet" to "Alpha Bank",
         // NBG (Εθνική Τράπεζα)
+        "mbanking.NBG" to "Εθνική Τράπεζα",
         "gr.nbg.mobilebanking" to "Εθνική Τράπεζα",
+        "gr.nbg.mobile" to "Εθνική Τράπεζα",
+        "gr.nbg.cards" to "Εθνική Τράπεζα",
+        "gr.nbg.pay" to "Εθνική Τράπεζα",
         // Piraeus (Τράπεζα Πειραιώς)
         "gr.winbank.mobile" to "Τράπεζα Πειραιώς",
+        "gr.winbank.mobile.redesign" to "Τράπεζα Πειραιώς",
         "gr.piraeusbank.winbank" to "Τράπεζα Πειραιώς",
+        "gr.piraeusbank.mobile" to "Τράπεζα Πειραιώς",
+        "gr.piraeusbank.pay" to "Τράπεζα Πειραιώς",
         // Revolut
         "com.revolut.revolut" to "Revolut",
+        "com.revolut.business" to "Revolut",
         // Payzy
         "gr.cosmote.payzy" to "Payzy",
-        // Viber Pay
-        "com.viber.voip" to "Viber Pay",
-        // PayPal
-        "com.paypal.android.p2pmobile" to "PayPal",
+        "com.payzy.app" to "Payzy",
+        // Viva Wallet
+        "com.vivawallet.app" to "Viva Wallet",
+        "gr.vivawallet.app" to "Viva Wallet",
+        "com.vivawallet.merchant" to "Viva Wallet",
+        // Optima Bank
+        "gr.optimabank.mobile" to "Optima Bank",
+        "gr.optimabank.mobilebanking" to "Optima Bank",
+        // Attica Bank
+        "gr.atticabank.mobile" to "Attica Bank",
+        "gr.atticabank.mobilebanking" to "Attica Bank",
         // Snappi
         "eu.snappi.app" to "Snappi",
-        "gr.snappi.mobile" to "Snappi"
+        "gr.snappi.mobile" to "Snappi",
+        // PayPal
+        "com.paypal.android.p2pmobile" to "PayPal",
+        // Viber Pay
+        "com.viber.voip" to "Viber Pay"
     )
 
     // Known popular brands and merchant keywords mapping to their canonical name & category domain
@@ -123,6 +152,13 @@ object BankNotificationParser {
         KnownBrand("Sephora", "CLOTHING", listOf("sephora")),
         KnownBrand("Hondos Center", "CLOTHING", listOf("hondos center", "hondos")),
 
+        // Entertainment & Streaming
+        KnownBrand("Netflix", "ENTERTAINMENT", listOf("netflix", "νετφλιξ")),
+        KnownBrand("Spotify", "ENTERTAINMENT", listOf("spotify")),
+        KnownBrand("Disney+", "ENTERTAINMENT", listOf("disney+", "disney plus", "disney")),
+        KnownBrand("Steam", "ENTERTAINMENT", listOf("steam")),
+        KnownBrand("PlayStation", "ENTERTAINMENT", listOf("playstation", "psn")),
+
         // Utilities & Subscriptions
         KnownBrand("Cosmote", "BILLS", listOf("cosmote", "κοσμοτε")),
         KnownBrand("Vodafone", "BILLS", listOf("vodafone", "βονταφον")),
@@ -133,30 +169,61 @@ object BankNotificationParser {
         KnownBrand("Ήρων", "BILLS", listOf("heron", "ηρων", "ήρων")),
         KnownBrand("ΕΥΔΑΠ", "BILLS", listOf("ευδαπ", "eydap")),
         KnownBrand("ΕΥΑΘ", "BILLS", listOf("ευαθ", "eyath")),
-        KnownBrand("Netflix", "BILLS", listOf("netflix", "νετφλιξ")),
-        KnownBrand("Spotify", "BILLS", listOf("spotify")),
-        KnownBrand("Apple", "BILLS", listOf("apple", "itunes")),
+        KnownBrand("Apple", "BILLS", listOf("apple.com", "apple", "itunes")),
         KnownBrand("Google", "BILLS", listOf("google play", "google")),
 
         // Pets
         KnownBrand("Pet City", "PETS", listOf("pet city", "petcity"))
     )
 
+    fun getBankName(packageName: String): String? {
+        ALLOWED_BANK_PACKAGES[packageName]?.let { return it }
+        val pkg = packageName.lowercase(Locale.ROOT)
+        return when {
+            pkg.contains("eurobank") -> "Eurobank"
+            pkg.contains("walletnfcrel") || pkg.contains("paisa.user") -> "Google Pay"
+            pkg.contains("winbank") || pkg.contains("piraeus") -> "Τράπεζα Πειραιώς"
+            pkg.contains("alphabank") || pkg.startsWith("gr.alpha.") || pkg.contains("mobileloft.alpha") -> "Alpha Bank"
+            pkg.contains("nbg") -> "Εθνική Τράπεζα"
+            pkg.contains("revolut") -> "Revolut"
+            pkg.contains("payzy") -> "Payzy"
+            pkg.contains("vivawallet") || pkg.contains("viva.wallet") -> "Viva Wallet"
+            pkg.contains("optimabank") || pkg.contains("optima") -> "Optima Bank"
+            pkg.contains("atticabank") || pkg.contains("attica") -> "Attica Bank"
+            pkg.contains("snappi") -> "Snappi"
+            pkg.contains("paypal") -> "PayPal"
+            pkg == "com.viber.voip" -> "Viber Pay"
+            else -> null
+        }
+    }
+
     fun isBankPackage(packageName: String): Boolean {
-        return ALLOWED_BANK_PACKAGES.containsKey(packageName)
+        return getBankName(packageName) != null || packageName == "com.google.android.gms"
     }
 
     fun parse(
         packageName: String,
         title: String,
-        text: String
+        text: String,
+        timestamp: Long = System.currentTimeMillis()
     ): PendingBankTransaction? {
-        val bankName = ALLOWED_BANK_PACKAGES[packageName] ?: return null
-
         val combined = "$title $text".trim()
         if (combined.isBlank()) return null
 
         val lower = combined.lowercase(Locale.ROOT)
+
+        // Google Play Services ("com.google.android.gms") sometimes posts Google Wallet tap-to-pay receipts
+        val bankName = if (packageName == "com.google.android.gms") {
+            val isWalletTx = (lower.contains("με την κάρτα") || lower.contains("με την καρτα") ||
+                lower.contains("with card") || lower.contains("with your") ||
+                lower.contains("google pay") || lower.contains("google wallet") ||
+                lower.contains("πορτοφόλι google") || lower.contains("mastercard") || lower.contains("visa")) &&
+                (lower.contains("€") || lower.contains("eur") || lower.contains("ευρώ") || lower.contains("ευρω"))
+            if (!isWalletTx) return null
+            "Google Pay"
+        } else {
+            getBankName(packageName) ?: return null
+        }
 
         // Reject incoming funds/credits so only actual expenses/debits are tracked
         val incomingKeywords = listOf(
@@ -179,7 +246,7 @@ object BankNotificationParser {
 
         // Must have transaction-related keywords or financial indicators
         val hasTransactionKeywords = hasTransactionKeywords(combined)
-        if (!hasTransactionKeywords && packageName != "com.revolut.revolut" && packageName != "com.paypal.android.p2pmobile") {
+        if (!hasTransactionKeywords && !packageName.contains("revolut") && !packageName.contains("paypal") && bankName != "Google Pay") {
             return null
         }
 
@@ -187,14 +254,14 @@ object BankNotificationParser {
         val amount = extractAmount(combined) ?: return null
         if (amount <= 0.05) return null
 
-        // Extract merchant / recipient / brand
-        val merchant = extractMerchant(combined)
+        // Extract merchant / recipient / brand (prioritize body over title so titles like "Αγορά/Πληρωμή σε POS" don't hijack "σε POS")
+        val merchant = extractMerchant(body = text, title = title, combined = combined, bankName = bankName)
 
         return PendingBankTransaction(
             bankName = bankName,
             merchantName = merchant.ifBlank { "Συναλλαγή $bankName" },
             amount = amount,
-            timestamp = System.currentTimeMillis(),
+            timestamp = timestamp,
             rawText = combined
         )
     }
@@ -205,6 +272,7 @@ object BankNotificationParser {
             "αγορά", "αγορα", "συναλλαγή", "συναλλαγη", "χρέωση", "χρεωση",
             "πληρωμή", "πληρωμη", "εγκρίθηκε", "εγκριθηκε", "κάρτα", "καρτα",
             "έξοδο", "εξοδο", "μεταφορά", "μεταφορα",
+            "e-commerce", "ecommerce", "ηλεκτρονικά", "ηλεκτρονικα", "online",
             "purchase", "spent", "transaction", "payment", "card charged", "paid", "sent",
             "money", "debit", "approved", "€", "eur", "ευρώ", "ευρω"
         )
@@ -221,32 +289,42 @@ object BankNotificationParser {
         // Matches "υπόλοιπο" or "balance" followed by any characters until a number, and that number
         // Examples: "υπόλοιπο της κάρτας σας είναι 350.00 EUR", "Balance: €450.00", "διαθέσιμο υπόλοιπο: 120.50€"
         var clean = text.replace(
-            Regex("(?i)(?:νέο\\s+|διαθέσιμο\\s+|λογιστικό\\s+)?(?:υπόλοιπο|υπολοιπο|υπολοίπου|υπολοιπου|balance|bal\\.)[^.,;!\\n]*?[0-9]+(?:[.,][0-9]{1,2})?\\s*(?:€|EUR|eur|ευρώ|ευρω)?"),
+            Regex("(?i)(?:νέο\\s+|διαθέσιμο\\s+|λογιστικό\\s+)?(?:υπόλοιπο|υπολοιπο|υπολοίπου|υπολοιπου|balance|bal\\.)[^.,;!\\n]*?(?:[0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)(?:[.,][0-9]{1,2})?\\s*(?:€|EUR|eur|ευρώ|ευρω)?"),
             " "
         )
         // Also if text contains balance and after it there is a number
         clean = clean.replace(
-            Regex("(?i)(?:υπόλοιπο|υπολοιπο|balance)[^0-9]*[0-9]+(?:[.,][0-9]{1,2})?\\s*(?:€|EUR|eur|ευρώ|ευρω)?"),
+            Regex("(?i)(?:υπόλοιπο|υπολοιπο|balance)[^0-9]*(?:[0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)(?:[.,][0-9]{1,2})?\\s*(?:€|EUR|eur|ευρώ|ευρω)?"),
             " "
         )
         return clean
     }
 
+    private fun parseAmountNumber(raw: String): Double? {
+        val s = raw.trim()
+        val normalized = when {
+            s.matches(Regex("\\d{1,3}(\\.\\d{3})+,\\d{1,2}")) -> s.replace(".", "").replace(",", ".")
+            s.matches(Regex("\\d{1,3}(,\\d{3})+\\.\\d{1,2}")) -> s.replace(",", "")
+            else -> s.replace(',', '.')
+        }
+        return normalized.toDoubleOrNull()
+    }
+
     private fun extractAmount(text: String): Double? {
         val cleaned = removeBalanceClauses(text)
+        val numGroup = "((?:[0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)(?:[.,][0-9]{1,2})?)"
 
         val amountPatterns = listOf(
-            Regex("(?:€|EUR|eur)\\s*([0-9]+(?:[.,][0-9]{1,2})?)"),
-            Regex("([0-9]+(?:[.,][0-9]{1,2})?)\\s*(?:€|EUR|eur|ευρώ|ευρω)"),
-            Regex("(?i)(?:ποσό|ποσο|amount|sum)[:\\s]+([0-9]+(?:[.,][0-9]{1,2})?)"),
-            Regex("([0-9]+[.,][0-9]{2})")
+            Regex("(?:€|EUR|eur)\\s*$numGroup"),
+            Regex("$numGroup\\s*(?:€|EUR|eur|ευρώ|ευρω)"),
+            Regex("(?i)(?:ποσό|ποσο|amount|sum)[:\\s]+$numGroup"),
+            Regex("((?:[0-9]{1,3}(?:[.,][0-9]{3})+|[0-9]+)[.,][0-9]{2})")
         )
 
         for (pattern in amountPatterns) {
             val match = pattern.find(cleaned)
             if (match != null) {
-                val numStr = match.groupValues[1].replace(',', '.')
-                val parsed = numStr.toDoubleOrNull()
+                val parsed = parseAmountNumber(match.groupValues[1])
                 if (parsed != null && parsed > 0.05 && parsed < 50000.0) {
                     return parsed
                 }
@@ -255,33 +333,74 @@ object BankNotificationParser {
         return null
     }
 
-    private fun extractMerchant(text: String): String {
-        val lower = text.lowercase(Locale.ROOT)
+    private fun extractMerchant(
+        body: String,
+        title: String = "",
+        combined: String = "$title $body".trim(),
+        bankName: String = ""
+    ): String {
+        // 0. Google Pay / Google Wallet notifications put the merchant directly in the notification title
+        // e.g. Title: "SHELL MYRTEA THESSALON" | Text: "18,00 € με την κάρτα Eurobank Classic Ma..."
+        if (bankName == "Google Pay") {
+            val cleanTitle = title.trim()
+                .replace(Regex("^(?:PAYPAL\\s*\\*|PP\\*|GOOGLE\\s*\\*|AMZN\\s*\\*|AMAZON\\s*\\*)\\s*", RegexOption.IGNORE_CASE), "")
+                .trim()
+            val titleLower = cleanTitle.lowercase(Locale.ROOT)
+            val isGenericWalletTitle = titleLower in setOf(
+                "google pay", "google wallet", "πορτοφόλι google", "πορτοφολι google",
+                "πληρωμή", "πληρωμη", "συναλλαγή", "συναλλαγη", "αγορά", "αγορα",
+                "payment", "purchase", "notification"
+            )
+            val looksLikeAmount = Regex("^[0-9.,]+\\s*(?:€|eur|ευρώ)?$", RegexOption.IGNORE_CASE).matches(cleanTitle)
+            if (cleanTitle.length in 2..60 && !isGenericWalletTitle && !looksLikeAmount) {
+                return cleanTitle
+            }
+        }
 
         // 1. Pattern-based extraction from notification phrasing
+        // Search body first, then combined text so generic headers like "Αγορά/Πληρωμή σε POS" don't override "στην εταιρεία ..."
+        val terminator = "(?=\\s+(?:με|την|στις|on|with|\\d{1,2}/\\d{1,2}|\\d{1,2}:\\d{2})|[,;!\\n]|(?<!\\b[A-ZΑ-ΩΆ-Ώ])\\.(?!\\s*[A-ZΑ-ΩΆ-Ώ]\\.)|\\z)"
         val merchantPatterns = listOf(
-            Regex("(?:στο κατάστημα|στο|στην|στη|σε)\\s+([a-zA-Zα-ωΑ-Ωά-ώΆ-Ώ0-9\\s&.-]+?)(?:\\s+με|\\s+την|\\s+στις|\\.|,|\\z)", RegexOption.IGNORE_CASE),
-            Regex("(?:at|in|to)\\s+([a-zA-Zα-ωΑ-Ωά-ώΆ-Ώ0-9\\s&.-]+?)(?:\\s+with|\\s+on|\\.|,|\\z)", RegexOption.IGNORE_CASE),
-            Regex("(?:επιχείρηση|εμπορος|merchant|προς)[:\\s]+([a-zA-Zα-ωΑ-Ωά-ώΆ-Ώ0-9\\s&.-]+?)(?:\\s+με|\\.|,|\\z)", RegexOption.IGNORE_CASE),
-            Regex("(?:αγορά|αγορα|πληρωμή|πληρωμη|purchase|spent|payment)\\s+(?:ποσού|ποσου|of)?\\s*[0-9.,€eurEUR\\s]+\\s*(?:σε|στο|στην|στη|at|to)?\\s*([a-zA-Zα-ωΑ-Ωά-ώΆ-Ώ0-9\\s&.-]+?)(?:\\s+με|\\s+στις|\\s+την|\\.|,|\\z)", RegexOption.IGNORE_CASE)
+            Regex("(?:στο κατάστημα|στο|στην|στη|σε(?!\\s+POS\\b)|προς|at|in|to)\\s+(?:την\\s+|τον\\s+|το\\s+)?(?:εταιρεία|εταιρία|επιχείρηση|επιχειρηση|επιχ/ση|έμπορο|εμπορο|κατάστημα|καταστημα|merchant)?\\s*[:\\s]*([a-zA-Zα-ωΑ-Ωά-ώΆ-Ώ0-9\\s&.*#_/-]+?)$terminator", RegexOption.IGNORE_CASE),
+            Regex("(?:επιχείρηση|επιχειρηση|έμπορος|εμπορος|merchant|προς)[:\\s]+([a-zA-Zα-ωΑ-Ωά-ώΆ-Ώ0-9\\s&.*#_/-]+?)$terminator", RegexOption.IGNORE_CASE),
+            Regex("(?:αγορά|αγορα|πληρωμή|πληρωμη|purchase|spent|payment)\\s+(?:ποσού|ποσου|of)?\\s*[0-9.,€eurEUR\\s]+\\s*(?:σε|στο|στην|στη|at|to)?\\s*(?:εταιρεία|εταιρία|επιχείρηση|επιχειρηση)?\\s*([a-zA-Zα-ωΑ-Ωά-ώΆ-Ώ0-9\\s&.*#_/-]+?)$terminator", RegexOption.IGNORE_CASE)
         )
 
-        for (pattern in merchantPatterns) {
-            val match = pattern.find(text)
-            if (match != null) {
-                val candidate = match.groupValues[1].trim()
-                if (candidate.length in 2..40 &&
-                    !candidate.contains("κάρτα", ignoreCase = true) &&
-                    !candidate.contains("card", ignoreCase = true) &&
-                    !candidate.contains("υπόλοιπο", ignoreCase = true) &&
-                    !candidate.contains("balance", ignoreCase = true)
-                ) {
-                    return candidate
+        val textsToSearch = listOf(body, combined).filter { it.isNotBlank() }.distinct()
+        for (sourceText in textsToSearch) {
+            for (pattern in merchantPatterns) {
+                val match = pattern.find(sourceText)
+                if (match != null) {
+                    var candidate = match.groupValues[1].trim()
+
+                    // Strip leading prefixes like "εταιρεία", "επιχείρηση"
+                    candidate = candidate.replace(Regex("^(?:εταιρεία|εταιρία|επιχείρηση|επιχειρηση|έμπορο|εμπορο|κατάστημα|καταστημα)\\s+", RegexOption.IGNORE_CASE), "").trim()
+
+                    // Handle payment aggregators (e.g. PAYPAL *NETFLIX -> NETFLIX, GOOGLE *XYZ -> XYZ)
+                    candidate = candidate.replace(Regex("^(?:PAYPAL\\s*\\*|PP\\*|GOOGLE\\s*\\*|AMZN\\s*\\*|AMAZON\\s*\\*)\\s*", RegexOption.IGNORE_CASE), "").trim()
+
+                    // Strip corporate/domain suffixes (e.g. "COM DE", "COM GR", "COM", "LTD", "SA", "ΑΕ")
+                    candidate = candidate.replace(Regex("\\s+(?:COM\\s+[A-Z]{2}|COM|GR|LTD|SA|LLC|INC|IKE|ΕΠΕ|ΑΕ)$", RegexOption.IGNORE_CASE), "").trim()
+
+                    if (candidate.length in 2..45 &&
+                        !candidate.contains("κάρτα", ignoreCase = true) &&
+                        !candidate.contains("καρτα", ignoreCase = true) &&
+                        !candidate.contains("card", ignoreCase = true) &&
+                        !candidate.contains("υπόλοιπο", ignoreCase = true) &&
+                        !candidate.contains("balance", ignoreCase = true) &&
+                        !candidate.contains("κάνατε", ignoreCase = true) &&
+                        !candidate.equals("POS", ignoreCase = true) &&
+                        !candidate.equals("ετ", ignoreCase = true) &&
+                        !candidate.equals("ετ.", ignoreCase = true)
+                    ) {
+                        return candidate
+                    }
                 }
             }
         }
 
-        // 2. Check known popular brands anywhere in text as fallback
+        // 2. Fallback: Check known popular brands directly across full notification text
+        val lower = combined.lowercase(Locale.ROOT)
         for (brand in KNOWN_BRANDS) {
             for (alias in brand.aliases) {
                 val pattern = "(?:^|[^\\p{L}\\p{Nd}])" + Regex.escape(alias) + "(?:$|[^\\p{L}\\p{Nd}])"
@@ -324,7 +443,10 @@ object BankNotificationParser {
                     ?: categories.find { it.name.contains("Φαγητό", ignoreCase = true) }
                 "FUEL" -> categories.find { it.name.contains("Καύσιμα", ignoreCase = true) || it.name.contains("Μετακινήσεις", ignoreCase = true) || it.name.contains("Βενζίνη", ignoreCase = true) || it.name.contains("Αυτοκίνητο", ignoreCase = true) }
                 "CLOTHING" -> categories.find { it.name.contains("Ρούχα", ignoreCase = true) || it.name.contains("Ένδυση", ignoreCase = true) || it.name.contains("Shopping", ignoreCase = true) }
-                "BILLS" -> categories.find { it.name.contains("Συνδρομές", ignoreCase = true) || it.name.contains("Τηλέφων", ignoreCase = true) || it.name.contains("Ρεύμα", ignoreCase = true) || it.name.contains("Bills", ignoreCase = true) }
+                "ENTERTAINMENT" -> categories.find { it.name.contains("Διασκέδαση", ignoreCase = true) || it.name.contains("Ψυχαγωγία", ignoreCase = true) || it.name.contains("Entertainment", ignoreCase = true) }
+                    ?: categories.find { it.name.contains("Συνδρομές", ignoreCase = true) || it.name.contains("Λογαριασμ", ignoreCase = true) || it.name.contains("Bills", ignoreCase = true) }
+                "BILLS" -> categories.find { it.name.contains("Συνδρομές", ignoreCase = true) || it.name.contains("Τηλέφων", ignoreCase = true) || it.name.contains("Ρεύμα", ignoreCase = true) || it.name.contains("Bills", ignoreCase = true) || it.name.contains("Λογαριασμ", ignoreCase = true) }
+                    ?: categories.find { it.name.contains("Διασκέδαση", ignoreCase = true) || it.name.contains("Ψυχαγωγία", ignoreCase = true) }
                 "PETS" -> categories.find { it.name.contains("Γατι", ignoreCase = true) || it.name.contains("Κατοικίδια", ignoreCase = true) || it.name.contains("Pets", ignoreCase = true) }
                 else -> null
             }

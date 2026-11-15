@@ -21,7 +21,7 @@ import com.example.data.entity.SavingsGoal
         SavingsGoal::class,
         Income::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,29 +31,40 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        val MIGRATION_12_13 = object : androidx.room.migration.Migration(12, 13) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE recurring_expenses ADD COLUMN reminderHour INTEGER NOT NULL DEFAULT 9")
+                db.execSQL("ALTER TABLE recurring_expenses ADD COLUMN reminderMinute INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 // Copy legacy database file if present
                 try {
                     val appContext = context.applicationContext
-                    val oldDb = appContext.getDatabasePath("oikonomos_database")
-                    val newDb = appContext.getDatabasePath("fintel_database")
-                    if (oldDb.exists() && !newDb.exists()) {
-                        oldDb.copyTo(newDb, overwrite = true)
-                        val oldWal = appContext.getDatabasePath("oikonomos_database-wal")
-                        val newWal = appContext.getDatabasePath("fintel_database-wal")
-                        if (oldWal.exists()) oldWal.copyTo(newWal, overwrite = true)
-                        val oldShm = appContext.getDatabasePath("oikonomos_database-shm")
-                        val newShm = appContext.getDatabasePath("fintel_database-shm")
-                        if (oldShm.exists()) oldShm.copyTo(newShm, overwrite = true)
+                    val newDb = appContext.getDatabasePath("finsay_database")
+                    if (!newDb.exists()) {
+                        val legacyName = listOf("fintel_database", "oikonomos_database")
+                            .firstOrNull { appContext.getDatabasePath(it).exists() }
+                        if (legacyName != null) {
+                            appContext.getDatabasePath(legacyName).copyTo(newDb, overwrite = true)
+                            val oldWal = appContext.getDatabasePath("$legacyName-wal")
+                            val newWal = appContext.getDatabasePath("finsay_database-wal")
+                            if (oldWal.exists()) oldWal.copyTo(newWal, overwrite = true)
+                            val oldShm = appContext.getDatabasePath("$legacyName-shm")
+                            val newShm = appContext.getDatabasePath("finsay_database-shm")
+                            if (oldShm.exists()) oldShm.copyTo(newShm, overwrite = true)
+                        }
                     }
                 } catch (ignored: Exception) {}
 
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "fintel_database"
+                    "finsay_database"
                 )
+                    .addMigrations(MIGRATION_12_13)
                     .fallbackToDestructiveMigration()
                     .build()
 

@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -257,7 +258,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     private val _deletedCategories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
     val deletedCategories: StateFlow<List<ExpenseCategory>> = _deletedCategories.asStateFlow()
 
-    private val _showOnboardingCarousel = MutableStateFlow(false)
+    private val _showOnboardingCarousel = MutableStateFlow(
+        !prefs.getBoolean("onboarding_shown_v3", false)
+    )
     val showOnboardingCarousel = _showOnboardingCarousel.asStateFlow()
 
     private val _notificationConsentCompleted = MutableStateFlow(
@@ -1251,9 +1254,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
                 if (remoteGoals.isNotEmpty()) {
                     val domainGoals = remoteGoals.map { rg ->
-                        val hashId = Math.abs(rg.id.hashCode().toLong()).coerceAtLeast(1L)
+                        val resolvedId = RecurringExpenseAutoProcessor.resolveCloudEntityId(rg.id)
                         SavingsGoal(
-                            id = hashId,
+                            id = resolvedId,
                             title = rg.title,
                             targetAmount = rg.targetAmount,
                             currentAmount = rg.currentAmount,
@@ -1276,29 +1279,36 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 if (remoteRecurring.isNotEmpty()) {
-                    val domainRecurring = remoteRecurring.map { rr ->
-                        val hashId = Math.abs(rr.id.hashCode().toLong()).coerceAtLeast(1L)
-                        RecurringExpense(
-                            id = hashId,
-                            title = rr.title,
-                            amount = rr.amount,
-                            categoryId = rr.categoryId,
-                            categoryName = rr.categoryName,
-                            frequency = rr.frequency,
-                            dayOfMonth = rr.dayOfMonth,
-                            splitType = rr.splitType,
-                            memberIdsCsv = rr.memberIdsCsv,
-                            memberNamesDisplay = rr.memberNamesDisplay,
-                            note = rr.note,
-                            isActive = rr.isActive,
-                            lastGeneratedMonth = rr.lastGeneratedMonth,
-                            payerMemberId = rr.payerMemberId,
-                            payerMemberName = rr.payerMemberName,
-                            payerMemberIdsCsv = rr.payerMemberIdsCsv,
-                            payerAmountsCsv = rr.payerAmountsCsv
-                        )
-                    }
+                    val domainRecurring = RecurringExpenseAutoProcessor.deduplicateRecurringExpenses(
+                        remoteRecurring.map { rr ->
+                            val resolvedId = RecurringExpenseAutoProcessor.resolveCloudEntityId(rr.id)
+                            RecurringExpense(
+                                id = resolvedId,
+                                title = rr.title,
+                                amount = rr.amount,
+                                categoryId = rr.categoryId,
+                                categoryName = rr.categoryName,
+                                frequency = rr.frequency,
+                                dayOfMonth = rr.dayOfMonth,
+                                reminderHour = rr.reminderHour,
+                                reminderMinute = rr.reminderMinute,
+                                splitType = rr.splitType,
+                                memberIdsCsv = rr.memberIdsCsv,
+                                memberNamesDisplay = rr.memberNamesDisplay,
+                                note = rr.note,
+                                isActive = rr.isActive,
+                                lastGeneratedMonth = rr.lastGeneratedMonth,
+                                payerMemberId = rr.payerMemberId,
+                                payerMemberName = rr.payerMemberName,
+                                payerMemberIdsCsv = rr.payerMemberIdsCsv,
+                                payerAmountsCsv = rr.payerAmountsCsv
+                            )
+                        }
+                    )
                     repository.replaceAllRecurringExpenses(domainRecurring)
+                    domainRecurring.filter { it.isActive }.forEach { rec ->
+                        com.example.reminder.BillReminderManager.scheduleReminder(getApplication(), rec)
+                    }
                 } else {
                     repository.replaceAllRecurringExpenses(emptyList())
                 }
@@ -1807,9 +1817,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                     firestoreSyncRepo.observeUserSavingsGoals(userId).collect { remoteGoals ->
                         if (remoteGoals.isNotEmpty()) {
                             val domain = remoteGoals.map { rg ->
-                                val hashId = Math.abs(rg.id.hashCode().toLong()).coerceAtLeast(1L)
+                                val resolvedId = RecurringExpenseAutoProcessor.resolveCloudEntityId(rg.id)
                                 SavingsGoal(
-                                    id = hashId,
+                                    id = resolvedId,
                                     title = rg.title,
                                     targetAmount = rg.targetAmount,
                                     currentAmount = rg.currentAmount,
@@ -1834,30 +1844,37 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             while (isActive) {
                 try {
                     firestoreSyncRepo.observeUserRecurringExpenses(userId).collect { remoteRecurring ->
-                        if (remoteRecurring.isNotEmpty()) {
-                            val domain = remoteRecurring.map { rr ->
-                                val hashId = Math.abs(rr.id.hashCode().toLong()).coerceAtLeast(1L)
-                                RecurringExpense(
-                                    id = hashId,
-                                    title = rr.title,
-                                    amount = rr.amount,
-                                    categoryId = rr.categoryId,
-                                    categoryName = rr.categoryName,
-                                    frequency = rr.frequency,
-                                    dayOfMonth = rr.dayOfMonth,
-                                    splitType = rr.splitType,
-                                    memberIdsCsv = rr.memberIdsCsv,
-                                    memberNamesDisplay = rr.memberNamesDisplay,
-                                    note = rr.note,
-                                    isActive = rr.isActive,
-                                    lastGeneratedMonth = rr.lastGeneratedMonth,
-                                    payerMemberId = rr.payerMemberId,
-                                    payerMemberName = rr.payerMemberName,
-                                    payerMemberIdsCsv = rr.payerMemberIdsCsv,
-                                    payerAmountsCsv = rr.payerAmountsCsv
-                                )
+                        if (_currentHousehold.value?.id.isNullOrBlank() && remoteRecurring.isNotEmpty()) {
+                            val domain = RecurringExpenseAutoProcessor.deduplicateRecurringExpenses(
+                                remoteRecurring.map { rr ->
+                                    val resolvedId = RecurringExpenseAutoProcessor.resolveCloudEntityId(rr.id)
+                                    RecurringExpense(
+                                        id = resolvedId,
+                                        title = rr.title,
+                                        amount = rr.amount,
+                                        categoryId = rr.categoryId,
+                                        categoryName = rr.categoryName,
+                                        frequency = rr.frequency,
+                                        dayOfMonth = rr.dayOfMonth,
+                                        reminderHour = rr.reminderHour,
+                                        reminderMinute = rr.reminderMinute,
+                                        splitType = rr.splitType,
+                                        memberIdsCsv = rr.memberIdsCsv,
+                                        memberNamesDisplay = rr.memberNamesDisplay,
+                                        note = rr.note,
+                                        isActive = rr.isActive,
+                                        lastGeneratedMonth = rr.lastGeneratedMonth,
+                                        payerMemberId = rr.payerMemberId,
+                                        payerMemberName = rr.payerMemberName,
+                                        payerMemberIdsCsv = rr.payerMemberIdsCsv,
+                                        payerAmountsCsv = rr.payerAmountsCsv
+                                    )
+                                }
+                            )
+                            repository.replaceAllRecurringExpenses(domain)
+                            domain.filter { it.isActive }.forEach { rec ->
+                                com.example.reminder.BillReminderManager.scheduleReminder(getApplication(), rec)
                             }
-                            repository.insertRecurringExpenses(domain)
                             checkAndProcessDueRecurringExpenses()
                         }
                     }
@@ -2023,7 +2040,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 try {
                     firestoreSyncRepo.observeSavingsGoals(householdId).collect { remoteGoals ->
                         val domain = remoteGoals.map { rg ->
-                            val resolvedId = rg.id.toLongOrNull() ?: Math.abs(rg.id.hashCode().toLong()).coerceAtLeast(1L)
+                            val resolvedId = RecurringExpenseAutoProcessor.resolveCloudEntityId(rg.id)
                             SavingsGoal(
                                 id = resolvedId,
                                 title = rg.title,
@@ -2049,32 +2066,36 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             while (isActive) {
                 try {
                     firestoreSyncRepo.observeRecurringExpenses(householdId).collect { remoteRecurring ->
-                        val deduplicated = remoteRecurring.distinctBy {
-                            GreekVoiceParser.normalizeGreek(it.title.trim().lowercase())
-                        }
-                        val domain = deduplicated.map { rr ->
-                            val resolvedId = rr.id.toLongOrNull() ?: Math.abs(rr.id.hashCode().toLong()).coerceAtLeast(1L)
-                            RecurringExpense(
-                                id = resolvedId,
-                                title = rr.title,
-                                amount = rr.amount,
-                                categoryId = rr.categoryId,
-                                categoryName = rr.categoryName,
-                                frequency = rr.frequency,
-                                dayOfMonth = rr.dayOfMonth,
-                                splitType = rr.splitType,
-                                memberIdsCsv = rr.memberIdsCsv,
-                                memberNamesDisplay = rr.memberNamesDisplay,
-                                note = rr.note,
-                                isActive = rr.isActive,
-                                lastGeneratedMonth = rr.lastGeneratedMonth,
-                                payerMemberId = rr.payerMemberId,
-                                payerMemberName = rr.payerMemberName,
-                                payerMemberIdsCsv = rr.payerMemberIdsCsv,
-                                payerAmountsCsv = rr.payerAmountsCsv
-                            )
-                        }
+                        val domain = RecurringExpenseAutoProcessor.deduplicateRecurringExpenses(
+                            remoteRecurring.map { rr ->
+                                val resolvedId = RecurringExpenseAutoProcessor.resolveCloudEntityId(rr.id)
+                                RecurringExpense(
+                                    id = resolvedId,
+                                    title = rr.title,
+                                    amount = rr.amount,
+                                    categoryId = rr.categoryId,
+                                    categoryName = rr.categoryName,
+                                    frequency = rr.frequency,
+                                    dayOfMonth = rr.dayOfMonth,
+                                    reminderHour = rr.reminderHour,
+                                    reminderMinute = rr.reminderMinute,
+                                    splitType = rr.splitType,
+                                    memberIdsCsv = rr.memberIdsCsv,
+                                    memberNamesDisplay = rr.memberNamesDisplay,
+                                    note = rr.note,
+                                    isActive = rr.isActive,
+                                    lastGeneratedMonth = rr.lastGeneratedMonth,
+                                    payerMemberId = rr.payerMemberId,
+                                    payerMemberName = rr.payerMemberName,
+                                    payerMemberIdsCsv = rr.payerMemberIdsCsv,
+                                    payerAmountsCsv = rr.payerAmountsCsv
+                                )
+                            }
+                        )
                         repository.replaceAllRecurringExpenses(domain)
+                        domain.filter { it.isActive }.forEach { rec ->
+                            com.example.reminder.BillReminderManager.scheduleReminder(getApplication(), rec)
+                        }
                     }
                 } catch (e: Exception) {
                     Log.w("OikoNomosVM", "Recurring listener reconnecting: ${e.message}")
@@ -2605,7 +2626,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 try {
                     DailyReminderManager.showNotification(
                         context = getApplication(),
-                        title = "📱 Fintel - 6ψήφιος Κωδικός SMS",
+                        title = "📱 Finsay - 6ψήφιος Κωδικός SMS",
                         message = "Ο κωδικός επαλήθευσής σας είναι: $code. Χρησιμοποιήστε τον στην εφαρμογή."
                     )
                 } catch (_: Exception) {}
@@ -2931,6 +2952,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
 
     val allRecurringExpenses: StateFlow<List<RecurringExpense>> = repository.allRecurringExpenses
+        .map { RecurringExpenseAutoProcessor.deduplicateRecurringExpenses(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val allSavingsGoals: StateFlow<List<SavingsGoal>> = repository.allSavingsGoals
@@ -3107,6 +3129,85 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _editingRecurringExpense = MutableStateFlow<RecurringExpense?>(null)
     val editingRecurringExpense = _editingRecurringExpense.asStateFlow()
+
+    private val _showRemindersManagerDialog = MutableStateFlow(false)
+    val showRemindersManagerDialog = _showRemindersManagerDialog.asStateFlow()
+
+    private val _dismissedReminderIds = MutableStateFlow<Set<Long>>(emptySet())
+    private val _manualTriggeredReminderIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    val activeDueReminders: StateFlow<List<RecurringExpense>> = combine(
+        allRecurringExpenses,
+        _dismissedReminderIds,
+        _manualTriggeredReminderIds
+    ) { allRecurring, dismissed, manualTriggered ->
+        val cal = Calendar.getInstance()
+        val currentDay = cal.get(Calendar.DAY_OF_MONTH)
+        val currentHour = cal.get(Calendar.HOUR_OF_DAY)
+        val currentMinute = cal.get(Calendar.MINUTE)
+        val currentMonthKey = SimpleDateFormat("yyyy-MM", Locale.US).format(cal.time)
+
+        allRecurring.filter { rec ->
+            if (!rec.isActive) return@filter false
+            if (dismissed.contains(rec.id)) return@filter false
+            if (manualTriggered.contains(rec.id)) return@filter true
+
+            if (rec.lastGeneratedMonth == currentMonthKey) return@filter false
+
+            val diff = rec.dayOfMonth - currentDay
+            val isTodayPastScheduledTime = currentDay == rec.dayOfMonth &&
+                (currentHour * 60 + currentMinute) >= (rec.reminderHour * 60 + rec.reminderMinute)
+            (diff in 1..3) || isTodayPastScheduledTime || (currentDay > rec.dayOfMonth)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun openRemindersManagerDialog() {
+        _showRemindersManagerDialog.value = true
+    }
+
+    fun dismissRemindersManagerDialog() {
+        _showRemindersManagerDialog.value = false
+    }
+
+    fun triggerReminderById(reminderId: Long) {
+        if (reminderId <= 0L) return
+        _dismissedReminderIds.value = _dismissedReminderIds.value - reminderId
+        _manualTriggeredReminderIds.value = _manualTriggeredReminderIds.value + reminderId
+    }
+
+    fun dismissDueReminder(reminder: RecurringExpense) {
+        _dismissedReminderIds.value = _dismissedReminderIds.value + reminder.id
+        _manualTriggeredReminderIds.value = _manualTriggeredReminderIds.value - reminder.id
+    }
+
+    fun logExpenseFromReminder(reminder: RecurringExpense) {
+        dismissDueReminder(reminder)
+        val defaultMember = allMembers.value.find { it.id == reminder.payerMemberId }
+            ?: allMembers.value.firstOrNull()
+        val resolvedPayerId = if (reminder.payerMemberId != 0L) reminder.payerMemberId else (defaultMember?.id ?: 0L)
+        val resolvedPayerName = reminder.payerMemberName.ifBlank { defaultMember?.name ?: "" }
+        val resolvedPayerIdsCsv = reminder.payerMemberIdsCsv.ifBlank {
+            if (resolvedPayerId != 0L) "$resolvedPayerId" else ""
+        }
+
+        val prefilledExpense = Expense(
+            id = 0L,
+            title = reminder.title,
+            amount = reminder.amount,
+            categoryId = reminder.categoryId,
+            categoryName = reminder.categoryName,
+            timestamp = System.currentTimeMillis(),
+            splitType = reminder.splitType.ifBlank { "ALL_FAMILY" },
+            memberIdsCsv = reminder.memberIdsCsv,
+            memberNamesDisplay = reminder.memberNamesDisplay.ifBlank { "Κοινό Οικογένειας" },
+            note = reminder.note.ifBlank { "Πάγιος λογαριασμός" },
+            payerMemberId = resolvedPayerId,
+            payerMemberName = resolvedPayerName,
+            payerMemberIdsCsv = resolvedPayerIdsCsv,
+            payerAmountsCsv = reminder.payerAmountsCsv
+        )
+        openManualExpenseDialog(prefilledExpense)
+    }
 
     private val _showReceiptScanDialog = MutableStateFlow(false)
     val showReceiptScanDialog = _showReceiptScanDialog.asStateFlow()
@@ -3408,7 +3509,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         val fullName = "$resolvedFirst $resolvedLast".trim().ifBlank {
-            user.displayName?.ifBlank { null } ?: "Χρήστης Fintel"
+            user.displayName?.ifBlank { null } ?: "Χρήστης Finsay"
         }
 
         // 1. Immediately update in-memory state & disk cache so user's data NEVER disappears
@@ -3597,7 +3698,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 firestoreSyncRepo.setPremiumStatus(user.uid, true)
                 _userProfile.value = _userProfile.value?.copy(isPremium = true)
                 val isEn = _appLanguage.value == "EN"
-                showSnackbar(if (isEn) "🌟 Congratulations! Fintel Pro subscription activated." else "🌟 Συγχαρητήρια! Η συνδρομή Fintel Pro ενεργοποιήθηκε.")
+                showSnackbar(if (isEn) "🌟 Congratulations! Finsay Pro subscription activated." else "🌟 Συγχαρητήρια! Η συνδρομή Finsay Pro ενεργοποιήθηκε.")
             } catch (e: Exception) {
                 Log.e("OikoNomosVM", "activateProFromBilling error: ${e.message}")
             }
@@ -3611,7 +3712,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 firestoreSyncRepo.setPremiumStatus(user.uid, true)
                 _userProfile.value = _userProfile.value?.copy(isPremium = true)
                 val isEn = _appLanguage.value == "EN"
-                showSnackbar(if (isEn) "🌟 Congratulations! Fintel Pro activated." else "🌟 Συγχαρητήρια! Το Fintel Pro ενεργοποιήθηκε.")
+                showSnackbar(if (isEn) "🌟 Congratulations! Finsay Pro activated." else "🌟 Συγχαρητήρια! Το Finsay Pro ενεργοποιήθηκε.")
             } catch (e: Exception) {
                 showSnackbar("Σφάλμα ενεργοποίησης Pro")
             }
@@ -3853,39 +3954,70 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         dayOfMonth: Int,
         note: String,
         payerMemberId: Long = 0L,
-        payerMemberName: String = ""
+        payerMemberName: String = "",
+        reminderHour: Int = 9,
+        reminderMinute: Int = 0,
+        splitType: String = "ALL_FAMILY",
+        memberIds: List<Long> = emptyList(),
+        memberNamesDisplay: String = "Κοινό Οικογένειας",
+        payerMemberIdsCsv: String = "",
+        payerAmountsCsv: String = "",
+        autoRegisterIfDue: Boolean = true
     ) {
         viewModelScope.launch {
+            val normalizedNewTitle = GreekVoiceParser.normalizeGreek(title.trim().lowercase())
+            val clampedDay = dayOfMonth.coerceIn(1, 31)
+            val clampedHour = reminderHour.coerceIn(0, 23)
+            val clampedMinute = reminderMinute.coerceIn(0, 59)
+            val allExisting = repository.getAllRecurringExpensesList()
             val existing = if (id != 0L) {
-                repository.getAllRecurringExpensesList().find { it.id == id }
-            } else null
+                allExisting.find { it.id == id }
+            } else {
+                allExisting.find {
+                    GreekVoiceParser.normalizeGreek(it.title.trim().lowercase()) == normalizedNewTitle &&
+                        it.dayOfMonth == clampedDay &&
+                        it.reminderHour == clampedHour &&
+                        it.reminderMinute == clampedMinute
+                }
+            }
+            val targetId = existing?.id ?: id
+
+            val resolvedHour = if (!autoRegisterIfDue) clampedHour else (existing?.reminderHour ?: clampedHour)
+            val resolvedMinute = if (!autoRegisterIfDue) clampedMinute else (existing?.reminderMinute ?: clampedMinute)
+            val resolvedSplitType = if (!autoRegisterIfDue) splitType else (existing?.splitType ?: splitType)
+            val resolvedMemberIdsCsv = if (!autoRegisterIfDue) memberIds.joinToString(",") else (existing?.memberIdsCsv ?: "")
+            val resolvedMemberNamesDisplay = if (!autoRegisterIfDue) memberNamesDisplay else (existing?.memberNamesDisplay ?: memberNamesDisplay)
+            val resolvedPayerIdsCsv = if (!autoRegisterIfDue) payerMemberIdsCsv else (existing?.payerMemberIdsCsv ?: "")
+            val resolvedPayerAmountsCsv = if (!autoRegisterIfDue) payerAmountsCsv else (existing?.payerAmountsCsv ?: "")
 
             var recurring = RecurringExpense(
-                id = id,
+                id = targetId,
                 title = title,
                 amount = amount,
                 categoryId = categoryId,
                 categoryName = categoryName,
                 frequency = existing?.frequency ?: "MONTHLY",
-                dayOfMonth = dayOfMonth,
-                splitType = existing?.splitType ?: "ALL_FAMILY",
-                memberIdsCsv = existing?.memberIdsCsv ?: "",
-                memberNamesDisplay = existing?.memberNamesDisplay ?: "Κοινό Οικογένειας",
+                dayOfMonth = clampedDay,
+                reminderHour = resolvedHour,
+                                reminderMinute = resolvedMinute,
+                splitType = resolvedSplitType,
+                memberIdsCsv = resolvedMemberIdsCsv,
+                memberNamesDisplay = resolvedMemberNamesDisplay,
                 note = note,
-                isActive = true,
+                isActive = existing?.isActive ?: true,
                 lastGeneratedMonth = existing?.lastGeneratedMonth ?: "",
                 payerMemberId = payerMemberId,
                 payerMemberName = payerMemberName,
-                payerMemberIdsCsv = existing?.payerMemberIdsCsv ?: "",
-                payerAmountsCsv = existing?.payerAmountsCsv ?: ""
+                payerMemberIdsCsv = resolvedPayerIdsCsv,
+                payerAmountsCsv = resolvedPayerAmountsCsv
             )
 
-            val generatedId = if (id == 0L) {
+            val generatedId = if (targetId == 0L) {
                 val newId = repository.insertRecurringExpense(recurring)
                 newId
             } else {
                 repository.updateRecurringExpense(recurring)
-                id
+                targetId
             }
 
             recurring = recurring.copy(id = generatedId)
@@ -3900,9 +4032,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             val currentMonthKey = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
 
             // If the scheduled day has already arrived or passed in the current month,
-            // automatically register the expense for this month on that date!
+            // automatically register the expense for this month on that date (for standing orders).
             var autoRegisteredThisMonth = false
-            if (currentDay >= dayOfMonth) {
+            if (autoRegisterIfDue && currentDay >= dayOfMonth) {
                 val monthStart = Calendar.getInstance().apply {
                     set(Calendar.YEAR, currentYear)
                     set(Calendar.MONTH, currentMonth)
@@ -3989,6 +4121,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
+            // Schedule local system notification alarm for active bill reminders
+            com.example.reminder.BillReminderManager.scheduleReminder(getApplication(), recurring)
+
             // Sync Recurring record to Firestore
             val fbRecurring = FirebaseRecurringExpense(
                 id = generatedId.toString(),
@@ -3999,12 +4134,14 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 categoryId = categoryId,
                 categoryName = categoryName,
                 frequency = recurring.frequency,
-                dayOfMonth = dayOfMonth,
+                dayOfMonth = recurring.dayOfMonth,
+                reminderHour = recurring.reminderHour,
+                reminderMinute = recurring.reminderMinute,
                 splitType = recurring.splitType,
                 memberIdsCsv = recurring.memberIdsCsv,
                 memberNamesDisplay = recurring.memberNamesDisplay,
                 note = note,
-                isActive = true,
+                isActive = recurring.isActive,
                 lastGeneratedMonth = recurring.lastGeneratedMonth,
                 payerMemberId = payerMemberId,
                 payerMemberName = payerMemberName,
@@ -4018,7 +4155,13 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 firestoreSyncRepo.syncUserRecurringExpense(user.uid, fbRecurring)
             }
 
-            if (autoRegisteredThisMonth) {
+            if (!autoRegisterIfDue) {
+                val timeStr = String.format(Locale.US, "%02d:%02d", recurring.reminderHour, recurring.reminderMinute)
+                showSnackbar(
+                    if (id == 0L) "Η υπενθύμιση «$title» αποθηκεύτηκε (κάθε ${recurring.dayOfMonth}η στις $timeStr)!"
+                    else "Η υπενθύμιση «$title» ενημερώθηκε (${recurring.dayOfMonth}η στις $timeStr)!"
+                )
+            } else if (autoRegisteredThisMonth) {
                 showSnackbar("Η πάγια εντολή «$title» καταχωρήθηκε αυτόματα στα έξοδα ($dayOfMonth/${currentMonth + 1})!")
             } else if (id == 0L) {
                 showSnackbar("Η πάγια εντολή «$title» αποθηκεύτηκε! Θα καταχωρείται αυτόματα στις $dayOfMonth κάθε μήνα.")
@@ -4030,7 +4173,19 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun deleteRecurringExpense(recurring: RecurringExpense) {
         viewModelScope.launch {
-            repository.deleteRecurringExpense(recurring)
+            val normTitle = GreekVoiceParser.normalizeGreek(recurring.title.trim().lowercase())
+            val matchingCopies = repository.getAllRecurringExpensesList().filter {
+                it.id == recurring.id ||
+                    (normTitle.isNotBlank() && GreekVoiceParser.normalizeGreek(it.title.trim().lowercase()) == normTitle)
+            }
+            matchingCopies.forEach { copy ->
+                com.example.reminder.BillReminderManager.cancelReminder(getApplication(), copy.id)
+                repository.deleteRecurringExpense(copy)
+            }
+            if (matchingCopies.none { it.id == recurring.id }) {
+                com.example.reminder.BillReminderManager.cancelReminder(getApplication(), recurring.id)
+                repository.deleteRecurringExpense(recurring)
+            }
             val householdId = _currentHousehold.value?.id ?: ""
             val user = _currentUser.value
             if (householdId.isNotBlank()) {
@@ -4039,7 +4194,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             if (user != null) {
                 firestoreSyncRepo.deleteUserRecurringExpense(user.uid, recurring.id.toString(), recurring.title)
             }
-            showSnackbar("Η πάγια εντολή «${recurring.title}» διαγράφηκε")
+            showSnackbar("Η υπενθύμιση «${recurring.title}» διαγράφηκε")
         }
     }
 
@@ -4047,6 +4202,11 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val updated = recurring.copy(isActive = !recurring.isActive)
             repository.updateRecurringExpense(updated)
+            if (updated.isActive) {
+                com.example.reminder.BillReminderManager.scheduleReminder(getApplication(), updated)
+            } else {
+                com.example.reminder.BillReminderManager.cancelReminder(getApplication(), updated.id)
+            }
             val householdId = _currentHousehold.value?.id ?: ""
             val user = _currentUser.value
             val fbRecurring = FirebaseRecurringExpense(
@@ -4059,6 +4219,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 categoryName = updated.categoryName,
                 frequency = updated.frequency,
                 dayOfMonth = updated.dayOfMonth,
+                reminderHour = updated.reminderHour,
+                reminderMinute = updated.reminderMinute,
                 splitType = updated.splitType,
                 memberIdsCsv = updated.memberIdsCsv,
                 memberNamesDisplay = updated.memberNamesDisplay,
@@ -4077,10 +4239,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 firestoreSyncRepo.syncUserRecurringExpense(user.uid, fbRecurring)
             }
             val status = if (updated.isActive) "ενεργοποιήθηκε" else "απενεργοποιήθηκε"
-            showSnackbar("Η πάγια εντολή «${recurring.title}» $status")
-            if (updated.isActive) {
-                checkAndProcessDueRecurringExpenses()
-            }
+            showSnackbar("Η υπενθύμιση «${recurring.title}» $status")
         }
     }
 
@@ -4156,6 +4315,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 categoryName = updatedRecurring.categoryName,
                 frequency = updatedRecurring.frequency,
                 dayOfMonth = updatedRecurring.dayOfMonth,
+                reminderHour = updatedRecurring.reminderHour,
+                reminderMinute = updatedRecurring.reminderMinute,
                 splitType = updatedRecurring.splitType,
                 memberIdsCsv = updatedRecurring.memberIdsCsv,
                 memberNamesDisplay = updatedRecurring.memberNamesDisplay,
@@ -4802,6 +4963,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun dismissOnboardingCarousel() {
         _showOnboardingCarousel.value = false
+        prefs.edit().putBoolean("onboarding_shown_v3", true).apply()
         val uid = auth.currentUser?.uid ?: _currentUser.value?.uid
         if (!uid.isNullOrBlank()) {
             prefs.edit().putBoolean("onboarding_shown_$uid", true).apply()
@@ -5614,15 +5776,6 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         } else {
             showSnackbar(if (_appLanguage.value == "EN") "Bank notification catcher enabled" else "Η ανάγνωση τραπεζικών push ενεργοποιήθηκε")
         }
-    }
-
-    fun triggerTestReminderNotification() {
-        DailyReminderManager.showNotification(
-            context = getApplication(),
-            title = "Fintel - Δοκιμή Υπενθύμισης 🌙",
-            message = "Μην ξεχάσετε να καταχωρήσετε τα έξοδα της σημερινής ημέρας!"
-        )
-        showSnackbar("Εστάλη δοκιμαστική ειδοποίηση")
     }
 
     // =========================================================================

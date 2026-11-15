@@ -21,12 +21,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
@@ -89,136 +91,136 @@ fun OnboardingCarouselDialog(
         listOf(
             OnboardingStep(
                 stepNumber = 1,
-                title = "Expense Categories",
-                subtitle = "Organize spending with custom categories and monthly budgets.",
-                icon = Icons.Default.Category,
+                title = "Receipt Scanning",
+                subtitle = "Scan store receipts using your camera or AADE QR code for instant total and vendor detection.",
+                icon = Icons.Default.CameraAlt,
                 gradientColors = listOf(Color(0xFF059669), Color(0xFF10B981)),
                 highlights = listOf(
-                    "Create & edit custom categories",
-                    "Set monthly budget limits"
+                    "Receipt scanning with QR & camera",
+                    "Auto-fills vendor name & total amount"
                 ),
-                badgeLabel = "1/5: Categories",
-                statusPill = "Category Management"
+                badgeLabel = "1/5: Receipts",
+                statusPill = "Camera & QR Scanning"
             ),
             OnboardingStep(
                 stepNumber = 2,
-                title = "Household Members",
-                subtitle = "Add members to log expenses and split shared household costs.",
-                icon = Icons.Default.Group,
+                title = "Greek Voice Logging",
+                subtitle = "Speak naturally in Greek to log any expense in seconds without tedious manual typing.",
+                icon = Icons.Default.Mic,
                 gradientColors = listOf(Color(0xFF7C3AED), Color(0xFFA78BFA)),
                 highlights = listOf(
-                    "Add members with custom roles",
-                    "Automatic expense splitting"
+                    "Voice expense logging in natural Greek",
+                    "Smart automatic category & payer match"
                 ),
-                badgeLabel = "2/5: Members",
-                statusPill = "Member Management"
+                badgeLabel = "2/5: Voice",
+                statusPill = "Instant Voice Logging"
             ),
             OnboardingStep(
                 stepNumber = 3,
-                title = "Statistics & Insights",
-                subtitle = "Track net balance, savings rates, and spending trends with charts.",
-                icon = Icons.Default.PieChart,
-                gradientColors = listOf(Color(0xFF0284C7), Color(0xFF38BDF8)),
+                title = "Bill & Expense Reminders",
+                subtitle = "Set alerts for recurring bills (rent, utilities, gym) with in-app reminder banners.",
+                icon = Icons.Default.NotificationsActive,
+                gradientColors = listOf(Color(0xFFD97706), Color(0xFFF59E0B)),
                 highlights = listOf(
-                    "Monthly balance & savings rate",
-                    "Visual breakdown by category & member"
+                    "Recurring bill alerts & notifications",
+                    "1-tap fast recording into expenses"
                 ),
-                badgeLabel = "3/5: Statistics",
-                statusPill = "Smart Insights"
+                badgeLabel = "3/5: Reminders",
+                statusPill = "Bill Reminders"
             ),
             OnboardingStep(
                 stepNumber = 4,
-                title = "Voice & Bank Push Alerts",
-                subtitle = "Log expenses instantly via voice or automated bank notification catcher.",
-                icon = Icons.Default.Mic,
-                gradientColors = listOf(Color(0xFF059669), Color(0xFF10B981)),
+                title = "Shared Household & Sync",
+                subtitle = "Share household expenses with real-time cloud sync across all your devices and family members.",
+                icon = Icons.Default.Group,
+                gradientColors = listOf(Color(0xFF0284C7), Color(0xFF38BDF8)),
                 highlights = listOf(
-                    "1-tap fast voice logging",
-                    "Automated bank push notification scanner"
+                    "Shared household & expense splitting",
+                    "Live multi-device cloud synchronization"
                 ),
-                badgeLabel = "4/5: Automation",
-                statusPill = "Automated Logging"
+                badgeLabel = "4/5: Household",
+                statusPill = "Shared Ledger & Members"
             ),
             OnboardingStep(
                 stepNumber = 5,
-                title = "Fintel Pro Features",
-                subtitle = "Unlock unlimited households, CSV/Excel export, and advanced analytics.",
-                icon = Icons.Default.Star,
-                gradientColors = listOf(Color(0xFFD97706), Color(0xFFF59E0B)),
+                title = "Budgets & Statistics",
+                subtitle = "Track category monthly budget progress bars and export full reports to PDF & Excel.",
+                icon = Icons.Default.PieChart,
+                gradientColors = listOf(Color(0xFF059669), Color(0xFF10B981)),
                 highlights = listOf(
-                    "Unlimited voice & camera receipt OCR",
-                    "Multiple households & PDF/CSV export"
+                    "Category monthly budget progress bars",
+                    "Export reports to PDF & Excel format"
                 ),
-                badgeLabel = "5/5: Pro",
-                statusPill = "Fintel Pro Exclusive"
+                badgeLabel = "5/5: Budgets",
+                statusPill = "Smart Insights & Reports"
             )
         )
     } else {
         listOf(
             OnboardingStep(
                 stepNumber = 1,
-                title = "Κατηγορίες Εξόδων",
-                subtitle = "Οργανώστε τα έξοδα με προσαρμοσμένες κατηγορίες και όρια προϋπολογισμού.",
-                icon = Icons.Default.Category,
+                title = "Σάρωση Αποδείξεων",
+                subtitle = "Σαρώστε αποδείξεις με κάμερα ή QR code ΑΑΔΕ για άμεση αναγνώριση επωνυμίας καταστήματος και ποσού.",
+                icon = Icons.Default.CameraAlt,
                 gradientColors = listOf(Color(0xFF059669), Color(0xFF10B981)),
                 highlights = listOf(
-                    "Δημιουργία & επεξεργασία κατηγοριών",
-                    "Μηνιαίος προϋπολογισμός ανά κατηγορία"
+                    "Σάρωση αποδείξεων με QR & κάμερα",
+                    "Αυτόματη συμπλήρωση ποσού & πωλητή"
                 ),
-                badgeLabel = "1/5: Κατηγορίες",
-                statusPill = "Οργάνωση Εξόδων"
+                badgeLabel = "1/5: Αποδείξεις",
+                statusPill = "Σάρωση Κάμερας & QR"
             ),
             OnboardingStep(
                 stepNumber = 2,
-                title = "Μέλη Εξοδολογίου",
-                subtitle = "Προσθέστε μέλη για καταγραφή και δίκαιο επιμερισμό των εξόδων.",
-                icon = Icons.Default.Group,
+                title = "Φωνητική Καταγραφή",
+                subtitle = "Μιλήστε φυσικά στα ελληνικά και καταγράψτε οποιοδήποτε έξοδο σε λίγα δευτερόλεπτα.",
+                icon = Icons.Default.Mic,
                 gradientColors = listOf(Color(0xFF7C3AED), Color(0xFFA78BFA)),
                 highlights = listOf(
-                    "Προσθήκη μελών με ονόματα & ρόλους",
-                    "Αυτόματος διαμοιρασμός & εκκαθάριση"
+                    "Φωνητική καταγραφή στα ελληνικά",
+                    "Αυτόματη αναγνώριση ποσού & κατηγορίας"
                 ),
-                badgeLabel = "2/5: Μέλη",
-                statusPill = "Διαχείριση Μελών"
+                badgeLabel = "2/5: Φωνή",
+                statusPill = "Άμεση Φωνητική Καταγραφή"
             ),
             OnboardingStep(
                 stepNumber = 3,
-                title = "Στατιστικά & Ανάλυση",
-                subtitle = "Πλήρης εικόνα ισολογισμού, αποταμίευσης και μηνιαίων τάσεων.",
-                icon = Icons.Default.PieChart,
-                gradientColors = listOf(Color(0xFF0284C7), Color(0xFF38BDF8)),
+                title = "Υπενθυμίσεις Λογαριασμών",
+                subtitle = "Προγραμματίστε πάγια έξοδα (ενοίκιο, ΔΕΗ, συνδρομές) με κάρτες ειδοποίησης για άμεση καταγραφή.",
+                icon = Icons.Default.NotificationsActive,
+                gradientColors = listOf(Color(0xFFD97706), Color(0xFFF59E0B)),
                 highlights = listOf(
-                    "Μηνιαίο υπόλοιπο & δείκτης αποταμίευσης",
-                    "Γραφήματα ανά κατηγορία & μέλος"
+                    "Υπενθυμίσεις πάγιων λογαριασμών",
+                    "Άμεση καταχώρηση με 1 πάτημα"
                 ),
-                badgeLabel = "3/5: Στατιστικά",
-                statusPill = "Έξυπνα Στατιστικά"
+                badgeLabel = "3/5: Υπενθυμίσεις",
+                statusPill = "Υπενθυμίσεις Εξόδων"
             ),
             OnboardingStep(
                 stepNumber = 4,
-                title = "Φωνή & Push Ειδοποιήσεις",
-                subtitle = "Άμεση καταγραφή με τη φωνή σας ή αυτόματη ανάγνωση τραπεζικών push.",
-                icon = Icons.Default.Mic,
-                gradientColors = listOf(Color(0xFF059669), Color(0xFF10B981)),
+                title = "Κοινό Ταμείο & Μέλη",
+                subtitle = "Μοιραστείτε τα έξοδα της οικογένειας με συγχρονισμό σε πραγματικό χρόνο μεταξύ συσκευών.",
+                icon = Icons.Default.Group,
+                gradientColors = listOf(Color(0xFF0284C7), Color(0xFF38BDF8)),
                 highlights = listOf(
-                    "Φωνητική καταγραφή με αναγνώριση ομιλίας",
-                    "Αυτόματη σάρωση τραπεζικών ειδοποιήσεων"
+                    "Κοινό ταμείο & διαμοιρασμός για όλους",
+                    "Αυτόματη εκκαθάριση & εξισορρόπηση"
                 ),
-                badgeLabel = "4/5: Αυτοματισμός",
-                statusPill = "Αυτοματισμός Καταγραφής"
+                badgeLabel = "4/5: Κοινό Ταμείο",
+                statusPill = "Κοινή Διαχείριση Μελών"
             ),
             OnboardingStep(
                 stepNumber = 5,
-                title = "Λειτουργία Fintel Pro",
-                subtitle = "Αποκλειστικά προνόμια Pro: απεριόριστες καταχωρήσεις, πολλαπλά πορτοφόλια & εξαγωγές.",
-                icon = Icons.Default.Star,
-                gradientColors = listOf(Color(0xFFD97706), Color(0xFFF59E0B)),
+                title = "Προϋπολογισμός & Στατιστικά",
+                subtitle = "Ορίστε μηνιαίο όριο / budget bar ανά κατηγορία και κατεβάστε αναφορές σε PDF & Excel.",
+                icon = Icons.Default.PieChart,
+                gradientColors = listOf(Color(0xFF059669), Color(0xFF10B981)),
                 highlights = listOf(
-                    "Απεριόριστη φωνή & σάρωση αποδείξεων με κάμερα",
-                    "Πολλαπλά εξοδολόγια & εξαγωγή σε PDF/CSV"
+                    "Μηνιαίο Όριο / Budget Bar ανά κατηγορία",
+                    "Εξαγωγή αναφορών σε PDF & Excel"
                 ),
-                badgeLabel = "5/5: Pro",
-                statusPill = "Αποκλειστικά Fintel Pro"
+                badgeLabel = "5/5: Στατιστικά",
+                statusPill = "Πλήρης Έλεγχος Εξόδων"
             )
         )
     }

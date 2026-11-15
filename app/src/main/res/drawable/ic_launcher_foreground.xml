@@ -3,6 +3,6 @@
     <item
         android:width="66dp"
         android:height="66dp"
-        android:drawable="@drawable/fintel_logo_white"
+        android:drawable="@drawable/finsay_logo_white"
         android:gravity="center" />
 </layer-list>

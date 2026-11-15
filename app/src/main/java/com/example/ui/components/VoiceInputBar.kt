@@ -38,9 +38,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -85,7 +85,11 @@ fun VoiceMicButton(
         Box(
             modifier = Modifier
                 .size(70.dp)
-                .scale(if (isListening) pulseScale else restingGlowScale)
+                .graphicsLayer {
+                    val s = if (isListening) pulseScale else restingGlowScale
+                    scaleX = s
+                    scaleY = s
+                }
                 .clip(CircleShape)
                 .background(
                     if (isListening) Color(0xFFEF4444).copy(alpha = 0.35f)

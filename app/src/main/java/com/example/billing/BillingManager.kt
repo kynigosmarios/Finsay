@@ -14,10 +14,10 @@ class BillingManager(
 ) : PurchasesUpdatedListener {
 
     companion object {
-        private const val TAG = "FintelBilling"
-        const val SUB_MONTHLY = "fintel_pro_monthly"
-        const val SUB_YEARLY = "fintel_pro_yearly"
-        const val INAPP_LIFETIME = "fintel_pro_lifetime"
+        private const val TAG = "FinsayBilling"
+        const val SUB_MONTHLY = "finsay_pro_monthly"
+        const val SUB_YEARLY = "finsay_pro_yearly"
+        const val INAPP_LIFETIME = "finsay_pro_lifetime"
     }
 
     private var billingClient: BillingClient = BillingClient.newBuilder(context)

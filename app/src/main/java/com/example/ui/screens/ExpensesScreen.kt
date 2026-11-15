@@ -55,6 +55,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -87,16 +88,49 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-sealed class ActivityItem(val timestamp: Long, val key: String) {
-    data class ExpenseItem(val expense: Expense) : ActivityItem(
-        expense.timestamp,
-        "exp_${expense.id}_${if (expense.cloudId.isNotBlank()) expense.cloudId else expense.timestamp.toString()}_${expense.title.hashCode()}"
-    )
-    data class IncomeItem(val income: Income) : ActivityItem(
-        income.timestamp,
-        "inc_${income.id}_${if (income.cloudId.isNotBlank()) income.cloudId else income.timestamp.toString()}_${income.title.hashCode()}"
-    )
+private fun stripParen(text: String): String {
+    val idx = text.indexOf('(')
+    return if (idx >= 0) text.substring(0, idx).trim() else text.trim()
 }
+
+@Immutable
+sealed class ActivityItem(val timestamp: Long, val key: String) {
+    @Immutable
+    data class ExpenseItem(
+        val expense: Expense,
+        val titleText: String,
+        val categoryDisplay: String,
+        val categoryColor: Color,
+        val categoryIconKey: String,
+        val formattedAmount: String,
+        val formattedDate: String,
+        val payerText: String,
+        val isPayerGroup: Boolean,
+        val beneficiaryText: String,
+        val isBeneficiaryGroup: Boolean,
+        val itemKey: String
+    ) : ActivityItem(expense.timestamp, itemKey)
+
+    @Immutable
+    data class IncomeItem(
+        val income: Income,
+        val titleText: String,
+        val categoryDisplay: String,
+        val formattedAmount: String,
+        val formattedDate: String,
+        val memberName: String,
+        val itemKey: String
+    ) : ActivityItem(income.timestamp, itemKey)
+}
+
+@Immutable
+data class DayGroup(
+    val key: String,
+    val label: String,
+    val dayExpenseTotal: Double,
+    val dayIncomeTotal: Double,
+    val items: List<ActivityItem>
+)
 
 @Composable
 fun ExpensesScreen(
@@ -217,6 +251,10 @@ fun ExpensesScreen(
         if (totalBudget > 0.0) ((totalExpensesAmount / totalBudget) * 100).toInt() else 0
     }
     val isWithinBudget = totalExpensesAmount <= totalBudget
+    val animatedBudgetProgress by animateFloatAsState(
+        targetValue = (budgetPercent.coerceIn(0, 100) / 100f),
+        label = "budget_progress"
+    )
 
     // Shared family ("Κοινά Σπιτιού") vs Individual ("Ατομικά")
     val sharedExpenses = remember(monthExpenses) {
@@ -226,13 +264,85 @@ fun ExpensesScreen(
         monthExpenses.filter { it.splitType != "ALL" && it.splitType != "ALL_FAMILY" }.sumOf { it.amount }
     }
 
-    // Filtered transaction items to display in the list below
-    val displayItems = remember(monthExpenses, monthIncomes, selectedTypeFilter) {
+    // Filtered transaction items to display in the list below with all formatting precomputed
+    val displayItems = remember(monthExpenses, monthIncomes, selectedTypeFilter, categories, members, locale, lang) {
+        val dateTimeFormat = SimpleDateFormat("dd/MM/yyyy • HH:mm", locale)
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy", locale)
+        val itemCal = Calendar.getInstance()
+
+        val catById = categories.associateBy { it.id }
+        val catByName = categories.associateBy { it.name.trim().lowercase() }
+
+        fun createExpenseItem(exp: Expense): ActivityItem.ExpenseItem {
+            val matchingCat = catById[exp.categoryId] ?: catByName[exp.categoryName.trim().lowercase()]
+            val iconKey = matchingCat?.iconKey ?: "cart"
+            val catColor = if (matchingCat != null && matchingCat.colorHex != 0L) Color(matchingCat.colorHex) else Color(0xFF059669)
+            val catDisplay = Localization.translateCategory(exp.categoryName, lang)
+            val title = exp.title.ifBlank { catDisplay }
+
+            itemCal.timeInMillis = exp.timestamp
+            val hasTime = itemCal.get(Calendar.HOUR_OF_DAY) != 0 || itemCal.get(Calendar.MINUTE) != 0
+            val dateStr = if (hasTime) dateTimeFormat.format(Date(exp.timestamp)) else dateFormat.format(Date(exp.timestamp))
+
+            val rawPayer = exp.getPayerCategoryOrNamesDisplay(members, lang)
+            val cleanPayer = stripParen(rawPayer)
+            val isPayerGroup = cleanPayer.contains("&") || cleanPayer.contains(",") ||
+                    cleanPayer.contains("Γονείς") || cleanPayer.contains("Παιδιά") ||
+                    cleanPayer.contains("Συγκάτοικοι") || cleanPayer.contains("Οικογένεια") ||
+                    cleanPayer.contains("Parents") || cleanPayer.contains("Children") ||
+                    cleanPayer.contains("Roommates") || cleanPayer.contains("Family")
+
+            val rawBeneficiary = exp.getBeneficiaryCategoryOrNamesDisplay(members, lang)
+            val cleanBeneficiary = stripParen(rawBeneficiary)
+            val isBeneficiaryGroup = cleanBeneficiary.contains("Γονείς") || cleanBeneficiary.contains("Παιδιά") ||
+                    cleanBeneficiary.contains("Συγκάτοικοι") || cleanBeneficiary.contains("Οικογένεια") ||
+                    cleanBeneficiary.contains("Parents") || cleanBeneficiary.contains("Children") ||
+                    cleanBeneficiary.contains("Roommates") || cleanBeneficiary.contains("Family") ||
+                    cleanBeneficiary.contains("&") || cleanBeneficiary.contains(",")
+
+            val key = if (exp.id > 0) "exp_${exp.id}" else "exp_c_${if (exp.cloudId.isNotBlank()) exp.cloudId else exp.timestamp.toString()}_${exp.title.hashCode()}"
+
+            return ActivityItem.ExpenseItem(
+                expense = exp,
+                titleText = title,
+                categoryDisplay = catDisplay,
+                categoryColor = catColor,
+                categoryIconKey = iconKey,
+                formattedAmount = String.format(Locale.US, "%.2f €", exp.amount),
+                formattedDate = dateStr,
+                payerText = cleanPayer,
+                isPayerGroup = isPayerGroup,
+                beneficiaryText = cleanBeneficiary,
+                isBeneficiaryGroup = isBeneficiaryGroup,
+                itemKey = key
+            )
+        }
+
+        fun createIncomeItem(inc: Income): ActivityItem.IncomeItem {
+            itemCal.timeInMillis = inc.timestamp
+            val hasTime = itemCal.get(Calendar.HOUR_OF_DAY) != 0 || itemCal.get(Calendar.MINUTE) != 0
+            val dateStr = if (hasTime) dateTimeFormat.format(Date(inc.timestamp)) else dateFormat.format(Date(inc.timestamp))
+            val key = if (inc.id > 0) "inc_${inc.id}" else "inc_c_${if (inc.cloudId.isNotBlank()) inc.cloudId else inc.timestamp.toString()}_${inc.title.hashCode()}"
+
+            return ActivityItem.IncomeItem(
+                income = inc,
+                titleText = inc.title,
+                categoryDisplay = inc.category.ifBlank { Localization.income(lang) },
+                formattedAmount = String.format(Locale.US, "+%.2f €", inc.amount),
+                formattedDate = dateStr,
+                memberName = inc.memberName,
+                itemKey = key
+            )
+        }
+
         when (selectedTypeFilter) {
-            "EXPENSE" -> monthExpenses.map { ActivityItem.ExpenseItem(it) }
-            "INCOME" -> monthIncomes.map { ActivityItem.IncomeItem(it) }
-            else -> (monthExpenses.map { ActivityItem.ExpenseItem(it) } + monthIncomes.map { ActivityItem.IncomeItem(it) })
-                .sortedByDescending { it.timestamp }
+            "EXPENSE" -> monthExpenses.map { createExpenseItem(it) }
+            "INCOME" -> monthIncomes.map { createIncomeItem(it) }
+            else -> {
+                val exps = monthExpenses.map { createExpenseItem(it) }
+                val incs = monthIncomes.map { createIncomeItem(it) }
+                (exps + incs).sortedByDescending { it.timestamp }
+            }
         }
     }
 
@@ -243,9 +353,10 @@ fun ExpensesScreen(
 
         val calToday = Calendar.getInstance()
         val calYesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+        val itemCal = Calendar.getInstance()
 
-        displayItems.groupBy { item ->
-            val itemCal = Calendar.getInstance().apply { timeInMillis = item.timestamp }
+        val rawGroups = displayItems.groupBy { item ->
+            itemCal.timeInMillis = item.timestamp
 
             val isToday = itemCal.get(Calendar.YEAR) == calToday.get(Calendar.YEAR) &&
                     itemCal.get(Calendar.DAY_OF_YEAR) == calToday.get(Calendar.DAY_OF_YEAR)
@@ -263,7 +374,20 @@ fun ExpensesScreen(
             }
             val key = dayKeyFormat.format(Date(item.timestamp))
             Pair(key, label)
-        }.entries.sortedByDescending { it.key.first }
+        }
+
+        rawGroups.entries.sortedByDescending { it.key.first }.map { entry ->
+            val itemsInDay = entry.value
+            val dayExpenseTotal = itemsInDay.filterIsInstance<ActivityItem.ExpenseItem>().sumOf { it.expense.amount }
+            val dayIncomeTotal = itemsInDay.filterIsInstance<ActivityItem.IncomeItem>().sumOf { it.income.amount }
+            DayGroup(
+                key = entry.key.first,
+                label = entry.key.second,
+                dayExpenseTotal = dayExpenseTotal,
+                dayIncomeTotal = dayIncomeTotal,
+                items = itemsInDay
+            )
+        }
     }
 
     Column(
@@ -695,12 +819,8 @@ fun ExpensesScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             // Budget Progress Bar
-                            val animatedProgress by animateFloatAsState(
-                                targetValue = (budgetPercent.coerceIn(0, 100) / 100f),
-                                label = "budget_progress"
-                            )
                             LinearProgressIndicator(
-                                progress = { animatedProgress },
+                                progress = { animatedBudgetProgress },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(8.dp)
@@ -1202,13 +1322,8 @@ fun ExpensesScreen(
                 }
             } else if (isMonthlyListExpanded) {
                 groupedItems.forEach { group ->
-                    val dayLabel = group.key.second
-                    val itemsInDay = group.value
-                    val dayTotal = itemsInDay.filterIsInstance<ActivityItem.ExpenseItem>().sumOf { it.expense.amount }
-                    val dayIncomeTotal = itemsInDay.filterIsInstance<ActivityItem.IncomeItem>().sumOf { it.income.amount }
-
                     // Day Header Row (Σήμερα - 28.00 €, Χθες - 559.20 €)
-                    item(key = "header_${group.key.first}") {
+                    item(key = "header_${group.key}") {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1217,13 +1332,13 @@ fun ExpensesScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = dayLabel,
+                                text = group.label,
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF059669)
                             )
 
-                            val displayDayTotal = if (selectedTypeFilter == "INCOME") dayIncomeTotal else dayTotal
+                            val displayDayTotal = if (selectedTypeFilter == "INCOME") group.dayIncomeTotal else group.dayExpenseTotal
                             if (displayDayTotal > 0.0) {
                                 Text(
                                     text = String.format(Locale.US, "%.2f €", displayDayTotal),
@@ -1236,382 +1351,24 @@ fun ExpensesScreen(
                     }
 
                     // Individual Cards for this Day
-                    itemsIndexed(
-                        itemsInDay,
-                        key = { index, item -> "${item.key}_${group.key.first}_$index" }
-                    ) { _, item ->
+                    items(
+                        items = group.items,
+                        key = { it.key }
+                    ) { item ->
                         when (item) {
                             is ActivityItem.ExpenseItem -> {
-                                val expense = item.expense
-                                val matchingCategory = categories.find { it.id == expense.categoryId }
-                                    ?: categories.find { it.name.trim().equals(expense.categoryName.trim(), ignoreCase = true) }
-                                val iconKey = matchingCategory?.iconKey ?: "cart"
-                                val categoryColor = if (matchingCategory != null && matchingCategory.colorHex != 0L) {
-                                    Color(matchingCategory.colorHex)
-                                } else {
-                                    Color(0xFF059669)
-                                }
-
-                                // Payer display (Chip 1: green badge e.g. "👥 Γονείς" or "👤 Μάριος")
-                                val payerText = expense.getPayerCategoryOrNamesDisplay(members, lang)
-                                    .replace(Regex("\\s*\\([^)]*\\)"), "").trim()
-
-                                // Target / Beneficiary display (Chip 2: blue badge e.g. "👥 Γονείς" or "👤 Γεωργία")
-                                val beneficiaryText = expense.getBeneficiaryCategoryOrNamesDisplay(members, lang)
-                                    .replace(Regex("\\s*\\([^)]*\\)"), "").trim()
-
-                                Surface(
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                    tonalElevation = 1.dp,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 2.dp)
-                                        .clickable { onEditExpense(expense) }
-                                        .testTag("expense_card_${expense.id}")
-                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(14.dp)
-                                    ) {
-                                        // Top Row: Icon + Title + Category + Amount
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            // Category icon in tinted rounded box matching custom category color
-                                            Surface(
-                                                shape = RoundedCornerShape(12.dp),
-                                                color = categoryColor.copy(alpha = 0.16f),
-                                                modifier = Modifier.size(46.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(
-                                                        imageVector = CategoryIconHelper.getIcon(iconKey),
-                                                        contentDescription = null,
-                                                        tint = categoryColor,
-                                                        modifier = Modifier.size(24.dp)
-                                                    )
-                                                }
-                                            }
-
-                                            Spacer(modifier = Modifier.width(12.dp))
-
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = expense.title.ifBlank { Localization.translateCategory(expense.categoryName, lang) },
-                                                    fontSize = 15.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Text(
-                                                        text = Localization.translateCategory(expense.categoryName, lang),
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = categoryColor,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    val cardCal = remember(expense.timestamp) {
-                                                        Calendar.getInstance().apply { timeInMillis = expense.timestamp }
-                                                    }
-                                                    val hasTime = cardCal.get(Calendar.HOUR_OF_DAY) != 0 || cardCal.get(Calendar.MINUTE) != 0
-                                                    val cardDateStr = remember(expense.timestamp, locale, hasTime) {
-                                                        val pattern = if (hasTime) "dd/MM/yyyy • HH:mm" else "dd/MM/yyyy"
-                                                        SimpleDateFormat(pattern, locale).format(Date(expense.timestamp))
-                                                    }
-                                                    Text(
-                                                        text = " • $cardDateStr",
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Normal,
-                                                        color = Color(0xFF64748B),
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-                                            }
-
-                                            Spacer(modifier = Modifier.width(8.dp))
-
-                                            Text(
-                                                text = String.format(Locale.US, "%.2f €", expense.amount),
-                                                fontSize = 17.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-
-                                        Spacer(modifier = Modifier.height(10.dp))
-
-                                        // Bottom Row: Member Chips + Actions (Pencil & Trash)
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.weight(1f, fill = false)
-                                            ) {
-                                                // Chip 1 (Payer): Mint background
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = Color(0xFFE6F4EA),
-                                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = if (payerText.contains("&") || payerText.contains(",") || payerText.contains("Γονείς") || payerText.contains("Παιδιά") || payerText.contains("Συγκάτοικοι") || payerText.contains("Οικογένεια") || payerText.contains("Parents") || payerText.contains("Children") || payerText.contains("Roommates") || payerText.contains("Family")) Icons.Default.Group else Icons.Default.Person,
-                                                            contentDescription = null,
-                                                            tint = Color(0xFF047857),
-                                                            modifier = Modifier.size(13.dp)
-                                                        )
-                                                        Text(
-                                                            text = payerText,
-                                                            fontSize = 11.5.sp,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = Color(0xFF047857),
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                    }
-                                                }
-
-                                                // Chip 2 (Target / Split): Soft Blue background
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = Color(0xFFEFF6FF),
-                                                    border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f))
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = if (beneficiaryText.contains("Γονείς") || beneficiaryText.contains("Παιδιά") || beneficiaryText.contains("Συγκάτοικοι") || beneficiaryText.contains("Οικογένεια") || beneficiaryText.contains("Parents") || beneficiaryText.contains("Children") || beneficiaryText.contains("Roommates") || beneficiaryText.contains("Family") || beneficiaryText.contains("&") || beneficiaryText.contains(",")) Icons.Default.Group else Icons.Default.Person,
-                                                            contentDescription = null,
-                                                            tint = Color(0xFF2563EB),
-                                                            modifier = Modifier.size(13.dp)
-                                                        )
-                                                        Text(
-                                                            text = beneficiaryText,
-                                                            fontSize = 11.5.sp,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = Color(0xFF1D4ED8),
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
-                                                        )
-                                                    }
-                                                }
-                                            }
-
-                                            // Action Buttons: Edit & Delete
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                IconButton(
-                                                    onClick = { onEditExpense(expense) },
-                                                    modifier = Modifier.size(28.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Edit,
-                                                        contentDescription = "Edit",
-                                                        tint = Color(0xFF64748B),
-                                                        modifier = Modifier.size(17.dp)
-                                                    )
-                                                }
-
-                                                IconButton(
-                                                    onClick = { expenseToDelete = expense },
-                                                    modifier = Modifier.size(28.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Delete,
-                                                        contentDescription = "Delete",
-                                                        tint = Color(0xFFEF4444).copy(alpha = 0.85f),
-                                                        modifier = Modifier.size(17.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                ExpenseCardItem(
+                                    item = item,
+                                    onEditExpense = onEditExpense,
+                                    onDeleteExpense = { expenseToDelete = it }
+                                )
                             }
-
                             is ActivityItem.IncomeItem -> {
-                                val income = item.income
-
-                                Surface(
-                                    shape = RoundedCornerShape(18.dp),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.3f)),
-                                    tonalElevation = 1.dp,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 2.dp)
-                                        .clickable { onEditIncome(income) }
-                                        .testTag("income_card_${income.id}")
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(14.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Surface(
-                                                shape = RoundedCornerShape(12.dp),
-                                                color = Color(0xFFD1FAE5),
-                                                modifier = Modifier.size(46.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.ArrowUpward,
-                                                        contentDescription = null,
-                                                        tint = Color(0xFF059669),
-                                                        modifier = Modifier.size(24.dp)
-                                                    )
-                                                }
-                                            }
-
-                                            Spacer(modifier = Modifier.width(12.dp))
-
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = income.title,
-                                                    fontSize = 15.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Spacer(modifier = Modifier.height(2.dp))
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.fillMaxWidth()
-                                                ) {
-                                                    Text(
-                                                        text = income.category.ifBlank { Localization.income(lang) },
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = Color(0xFF059669),
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                    val cardCal = remember(income.timestamp) {
-                                                        Calendar.getInstance().apply { timeInMillis = income.timestamp }
-                                                    }
-                                                    val hasTime = cardCal.get(Calendar.HOUR_OF_DAY) != 0 || cardCal.get(Calendar.MINUTE) != 0
-                                                    val cardDateStr = remember(income.timestamp, locale, hasTime) {
-                                                        val pattern = if (hasTime) "dd/MM/yyyy • HH:mm" else "dd/MM/yyyy"
-                                                        SimpleDateFormat(pattern, locale).format(Date(income.timestamp))
-                                                    }
-                                                    Text(
-                                                        text = " • $cardDateStr",
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Normal,
-                                                        color = Color(0xFF64748B),
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis
-                                                    )
-                                                }
-                                            }
-
-                                            Spacer(modifier = Modifier.width(8.dp))
-
-                                            Text(
-                                                text = String.format(Locale.US, "+%.2f €", income.amount),
-                                                fontSize = 17.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF059669)
-                                            )
-                                        }
-
-                                        Spacer(modifier = Modifier.height(10.dp))
-
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            if (income.memberName.isNotBlank()) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = Color(0xFFE6F4EA),
-                                                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Person,
-                                                            contentDescription = null,
-                                                            tint = Color(0xFF047857),
-                                                            modifier = Modifier.size(13.dp)
-                                                        )
-                                                        Text(
-                                                            text = income.memberName,
-                                                            fontSize = 11.5.sp,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = Color(0xFF047857)
-                                                        )
-                                                    }
-                                                }
-                                            } else {
-                                                Spacer(modifier = Modifier.width(1.dp))
-                                            }
-
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                IconButton(
-                                                    onClick = { onEditIncome(income) },
-                                                    modifier = Modifier.size(28.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Edit,
-                                                        contentDescription = "Edit",
-                                                        tint = Color(0xFF64748B),
-                                                        modifier = Modifier.size(17.dp)
-                                                    )
-                                                }
-
-                                                IconButton(
-                                                    onClick = { incomeToDelete = income },
-                                                    modifier = Modifier.size(28.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Delete,
-                                                        contentDescription = "Delete",
-                                                        tint = Color(0xFFEF4444).copy(alpha = 0.85f),
-                                                        modifier = Modifier.size(17.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                IncomeCardItem(
+                                    item = item,
+                                    onEditIncome = onEditIncome,
+                                    onDeleteIncome = { incomeToDelete = it }
+                                )
                             }
                         }
                     }
@@ -1668,5 +1425,354 @@ fun ExpensesScreen(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ExpenseCardItem(
+    item: ActivityItem.ExpenseItem,
+    onEditExpense: (Expense) -> Unit,
+    onDeleteExpense: (Expense) -> Unit
+) {
+    val expense = item.expense
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+            .clickable { onEditExpense(expense) }
+            .testTag("expense_card_${expense.id}")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            // Top Row: Icon + Title + Category + Amount
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Category icon in tinted rounded box matching custom category color
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = item.categoryColor.copy(alpha = 0.16f),
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = CategoryIconHelper.getIcon(item.categoryIconKey),
+                            contentDescription = null,
+                            tint = item.categoryColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.titleText,
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = item.categoryDisplay,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = item.categoryColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = " • ${item.formattedDate}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color(0xFF64748B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Text(
+                    text = item.formattedAmount,
+                    fontSize = 17.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Bottom Row: Member Chips + Actions (Pencil & Trash)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    // Chip 1 (Payer): Mint background
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFE6F4EA),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (item.isPayerGroup) Icons.Default.Group else Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color(0xFF047857),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = item.payerText,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF047857),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    // Chip 2 (Target / Split): Soft Blue background
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFEFF6FF),
+                        border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (item.isBeneficiaryGroup) Icons.Default.Group else Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color(0xFF2563EB),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = item.beneficiaryText,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF1D4ED8),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                // Action Buttons: Edit & Delete
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(
+                        onClick = { onEditExpense(expense) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { onDeleteExpense(expense) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = Color(0xFFEF4444).copy(alpha = 0.85f),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IncomeCardItem(
+    item: ActivityItem.IncomeItem,
+    onEditIncome: (Income) -> Unit,
+    onDeleteIncome: (Income) -> Unit
+) {
+    val income = item.income
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.3f)),
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+            .clickable { onEditIncome(income) }
+            .testTag("income_card_${income.id}")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFD1FAE5),
+                    modifier = Modifier.size(46.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowUpward,
+                            contentDescription = null,
+                            tint = Color(0xFF059669),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.titleText,
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = item.categoryDisplay,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF059669),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = " • ${item.formattedDate}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            color = Color(0xFF64748B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Text(
+                    text = item.formattedAmount,
+                    fontSize = 17.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF059669)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                if (item.memberName.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFE6F4EA),
+                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = Color(0xFF047857),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = item.memberName,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF047857)
+                            )
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.width(1.dp))
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(
+                        onClick = { onEditIncome(income) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit",
+                            tint = Color(0xFF64748B),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { onDeleteIncome(income) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = Color(0xFFEF4444).copy(alpha = 0.85f),
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }

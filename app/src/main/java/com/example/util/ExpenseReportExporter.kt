@@ -27,7 +27,7 @@ object ExpenseReportExporter {
     fun generateCsv(expenses: List<Expense>, periodTitle: String = "Όλα τα Έξοδα"): String {
         val totalAmount = expenses.sumOf { it.amount }
         val sb = StringBuilder()
-        sb.append("FINTEL - $periodTitle\n")
+        sb.append("FINSAY - $periodTitle\n")
         sb.append("Ημερομηνία,Τίτλος,Κατηγορία,Μέλη,Ποσό (€)\n")
         val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
         for (expense in expenses) {
@@ -44,10 +44,10 @@ object ExpenseReportExporter {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val file = File(exportDir, "Fintel_Exoda_${timeStamp}.csv")
+            val file = File(exportDir, "Finsay_Exoda_${timeStamp}.csv")
             val csvContent = generateCsv(expenses, periodTitle)
             file.writeBytes(csvContent.toByteArray(Charsets.UTF_8))
-            shareFile(context, file, "text/csv", "Αναφορά Εξόδων Fintel (CSV) - $periodTitle")
+            shareFile(context, file, "text/csv", "Αναφορά Εξόδων Finsay (CSV) - $periodTitle")
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting CSV: ${e.message}", e)
             Handler(Looper.getMainLooper()).post {
@@ -60,7 +60,7 @@ object ExpenseReportExporter {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val file = File(exportDir, "Fintel_Exoda_\${timeStamp}.xls")
+            val file = File(exportDir, "Finsay_Exoda_\${timeStamp}.xls")
             val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
             val totalAmount = expenses.sumOf { it.amount }
 
@@ -75,7 +75,7 @@ object ExpenseReportExporter {
             sb.append("td { border: 1px solid #ddd; padding: 8px; }\n")
             sb.append(".amount { text-align: right; }\n")
             sb.append("</style></head><body>\n")
-            sb.append("<h2>FINTEL - $periodTitle</h2>\n")
+            sb.append("<h2>FINSAY - $periodTitle</h2>\n")
             sb.append("<table>\n<thead><tr><th>Ημερομηνία</th><th>Τίτλος</th><th>Κατηγορία</th><th>Πληρωτής</th><th>Μέλη</th><th>Ποσό (€)</th><th>Σημείωση</th></tr></thead>\n<tbody>\n")
 
             for (expense in expenses) {
@@ -89,7 +89,7 @@ object ExpenseReportExporter {
             sb.append("</tbody></table></body></html>")
 
             file.writeBytes(sb.toString().toByteArray(Charsets.UTF_8))
-            shareFile(context, file, "application/vnd.ms-excel", "Αναφορά Εξόδων Fintel (Excel) - $periodTitle")
+            shareFile(context, file, "application/vnd.ms-excel", "Αναφορά Εξόδων Finsay (Excel) - $periodTitle")
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting Excel: \${e.message}", e)
         }
@@ -99,7 +99,7 @@ object ExpenseReportExporter {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val file = File(exportDir, "Fintel_Exoda_\${timeStamp}.pdf")
+            val file = File(exportDir, "Finsay_Exoda_\${timeStamp}.pdf")
 
             val pdfDocument = PdfDocument()
             val pageWidth = 595
@@ -121,7 +121,7 @@ object ExpenseReportExporter {
                 paint.color = Color.parseColor("#047857")
                 paint.textSize = 20f
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas.drawText("Fintel - $periodTitle", 40f, 50f, paint)
+                canvas.drawText("Finsay - $periodTitle", 40f, 50f, paint)
 
                 paint.color = Color.DKGRAY
                 paint.textSize = 10f
@@ -190,7 +190,7 @@ object ExpenseReportExporter {
             pdfDocument.close()
 
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                shareFile(context, file, "application/pdf", "Αναφορά Εξόδων Fintel (PDF) - $periodTitle")
+                shareFile(context, file, "application/pdf", "Αναφορά Εξόδων Finsay (PDF) - $periodTitle")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting PDF: ${e.message}", e)

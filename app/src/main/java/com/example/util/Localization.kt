@@ -28,9 +28,9 @@ object Localization {
         val sdf = SimpleDateFormat("d MMM", getDateLocale(lang))
         return sdf.format(Date(timestamp))
     }
-    fun appName(lang: Language): String = "Fintel"
+    fun appName(lang: Language): String = "Finsay"
     fun appTagline(lang: Language): String = if (lang == Language.ENGLISH) "Smart Expense Tracker" else "Έξυπνο Εξοδολόγιο"
-    fun tabExpenses(lang: Language): String = if (lang == Language.ENGLISH) "Expenses" else "Έξοδα"
+    fun tabExpenses(lang: Language): String = if (lang == Language.ENGLISH) "Home" else "Αρχική"
     fun tabAnalytics(lang: Language): String = if (lang == Language.ENGLISH) "Statistics" else "Στατιστικά"
     fun tabMembers(lang: Language): String = if (lang == Language.ENGLISH) "Members" else "Μέλη"
     fun tabCategories(lang: Language): String = if (lang == Language.ENGLISH) "Categories" else "Κατηγορίες"
@@ -101,7 +101,7 @@ object Localization {
     fun distributionByMember(lang: Language): String = if (lang == Language.ENGLISH) "Distribution by Member" else "Κατανομή ανά Μέλος"
     fun monthlyComparison(lang: Language): String = if (lang == Language.ENGLISH) "Monthly Comparison" else "Μηνιαία Σύγκριση"
     fun inviteMembersTitle(lang: Language): String = if (lang == Language.ENGLISH) "Invite Users to Household" else "Πρόσκληση Χρηστών στο Εξοδολόγιο"
-    fun proPaidFeature(lang: Language): String = if (lang == Language.ENGLISH) "🔒 Paid feature (Fintel Pro)" else "🔒 Λειτουργία επί πληρωμή (Fintel Pro)"
+    fun proPaidFeature(lang: Language): String = if (lang == Language.ENGLISH) "🔒 Paid feature (Finsay Pro)" else "🔒 Λειτουργία επί πληρωμή (Finsay Pro)"
     fun proActiveLiveSync(lang: Language): String = if (lang == Language.ENGLISH) "Pro Active: Real-time expense sharing" else "Pro Ενεργό: Μοιραστείτε τα έξοδα ζωντανά"
     fun inviteCardDesc(lang: Language): String = "Connect family, partner or roommates to the same household to view and log expenses in real-time."
     fun upgradeToProToInvite(lang: Language): String = if (lang == Language.ENGLISH) "Upgrade to Pro to Invite" else "Αναβάθμιση σε Pro για Πρόσκληση"
@@ -212,7 +212,7 @@ object Localization {
     fun copyCsvAction(lang: Language): String = if (lang == Language.ENGLISH) "Copy CSV text" else "Αντιγραφή κειμένου CSV"
     fun csvCopiedMessage(lang: Language): String = if (lang == Language.ENGLISH) "CSV report copied to clipboard!" else "Η αναφορά CSV αντιγράφηκε στο πρόχειρο!"
     fun myProfile(lang: Language): String = if (lang == Language.ENGLISH) "My Profile" else "Το Προφίλ μου"
-    fun fintelUser(lang: Language): String = if (lang == Language.ENGLISH) "Fintel User" else "Χρήστης Fintel"
+    fun finsayUser(lang: Language): String = if (lang == Language.ENGLISH) "Finsay User" else "Χρήστης Finsay"
     fun freePlan(lang: Language): String = if (lang == Language.ENGLISH) "Free Plan" else "Δωρεάν Πλάνο"
     fun proSubscriber(lang: Language): String = if (lang == Language.ENGLISH) "Pro Subscriber" else "Συνδρομητής Pro"
     fun upgradeToPro(lang: Language): String = if (lang == Language.ENGLISH) "Upgrade to Pro" else "Αναβάθμιση σε Pro"

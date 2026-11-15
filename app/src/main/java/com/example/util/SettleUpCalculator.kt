@@ -245,7 +245,7 @@ object SettleUpCalculator {
                 }
             }
             sb.appendLine("────────────────────────────")
-            sb.appendLine("Υπολογίστηκε αυτόματα από το Fintel")
+            sb.appendLine("Υπολογίστηκε αυτόματα από το Finsay")
         } else {
             sb.appendLine("📊 EXPENSE SETTLEMENT - $householdTitle")
             sb.appendLine("────────────────────────────")
@@ -270,7 +270,7 @@ object SettleUpCalculator {
                 }
             }
             sb.appendLine("────────────────────────────")
-            sb.appendLine("Calculated automatically via Fintel")
+            sb.appendLine("Calculated automatically via Finsay")
         }
         return sb.toString()
     }

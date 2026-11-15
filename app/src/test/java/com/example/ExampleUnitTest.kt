@@ -41,7 +41,7 @@ class ExampleUnitTest {
         )
 
         val csv = ExpenseReportExporter.generateCsv(expenses, "Οκτώβριος 2026")
-        assertTrue(csv.contains("FINTEL"))
+        assertTrue(csv.contains("FINSAY"))
         assertTrue(csv.contains("Σούπερ μάρκετ"))
         assertTrue(csv.contains("45.50"))
         assertTrue(csv.contains("Καφέδες"))
@@ -439,7 +439,7 @@ class ExampleUnitTest {
         """.trimIndent()
 
         val parsedOcr = com.example.util.ReceiptParser.parseOcrText(sampleReceiptText)
-        assertEquals("Σκλαβενιτης", parsedOcr.title)
+        assertEquals("Σκλαβενίτης", parsedOcr.title)
         assertEquals(11.45, parsedOcr.amount, 0.01)
         assertEquals("Σούπερ Μάρκετ", parsedOcr.suggestedCategoryName)
 
@@ -448,6 +448,336 @@ class ExampleUnitTest {
         val parsedQr = com.example.util.ReceiptParser.parseAadeQr(aadeQr)
         assertEquals(24.80, parsedQr.amount, 0.01)
         assertEquals("094056252", parsedQr.merchantAfm)
+
+        // Test 1: Store name at top of receipt with receipt header before it
+        val bakeryReceipt = """
+            ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ ΠΩΛΗΣΗΣ
+            ΦΟΥΡΝΟΣ ΒΕΝΕΤΗ
+            ΠΑΝΕΠΙΣΤΗΜΙΟΥ 52, ΑΘΗΝΑ
+            ΑΦΜ: 094112233  ΔΟΥ: Δ' ΑΘΗΝΩΝ
+            ΤΗΛ: 210-3612345
+            2x ΚΟΥΛΟΥΡΙ         1,40
+            1x ΕΣΠΡΕΣΣΟ         2,20
+            ΣΥΝΟΛΟ:             3,60
+            ΜΕΤΡΗΤΑ:           10,00
+            ΡΕΣΤΑ:              6,40
+        """.trimIndent()
+        val parsedBakery = com.example.util.ReceiptParser.parseOcrText(bakeryReceipt)
+        assertEquals("Φούρνος Βενέτη", parsedBakery.title)
+        assertEquals(3.60, parsedBakery.amount, 0.01) // ONLY right of ΣΥΝΟΛΟ, never 10.00 or 6.40
+
+        // Test 2: Unnamed shop with generic Greek store name at top
+        val tavernReceipt = """
+            ΨΗΤΟΠΩΛΕΙΟ Ο ΜΠΑΜΠΗΣ
+            ΠΑΠΑΔΟΠΟΥΛΟΣ ΧΑΡΑΛΑΜΠΟΣ
+            ΑΓ. ΜΑΡΙΝΑΣ 14, ΙΛΙΟΝ
+            ΑΦΜ: 123456789
+            ΣΥΝΟΛΟ 28,50 €
+        """.trimIndent()
+        val parsedTavern = com.example.util.ReceiptParser.parseOcrText(tavernReceipt)
+        assertTrue(parsedTavern.title.contains("Ψητοπωλείο", ignoreCase = true))
+        assertEquals(28.50, parsedTavern.amount, 0.01)
+
+        // Test 3: No ΣΥΝΟΛΟ keyword -> must return 0.0 (NO random fallback numbers)
+        val receiptWithoutSynolo = """
+            ΒΙΒΛΙΟΠΩΛΕΙΟ ΕΣΤΙΑ
+            ΣΟΛΩΝΟΣ 60, ΑΘΗΝΑ
+            ΑΦΜ 091234567
+            ΤΗΛ: 2103600000
+            ΒΙΒΛΙΟ                18,00
+        """.trimIndent()
+        val parsedNoSynolo = com.example.util.ReceiptParser.parseOcrText(receiptWithoutSynolo)
+        assertEquals(0.0, parsedNoSynolo.amount, 0.01) // STRICT: 0.0 because no ΣΥΝΟΛΟ
+
+        // Test 4: Real user Lidl receipt with LGDL logo OCR, ΛΙΝΤΛ name, and ΣΥΝΟΛΟ 47,98
+        val userLidlReceipt = """
+            LGDL
+            ΛΙΝΤΛ ΕΛΛΑΣ ΚΑΙ ΣΙΑ ΟΕ, ΥΠΕΡΑΓΟΡΑ
+            ΚΟΥΝΤΟΥΡΙΩΤΗ 8
+            55535, ΠΥΛΑΙΑ
+            ΑΦΜ 093683423
+
+            ΦΟΡΟΛΟΓΙΚΗ ΑΠΟΔΕΙΞΗ ΕΝΑΡΞΗ
+            ΞΥΛ.ΣΕΤ ΠΑΙΧ-0524746         7,99  24.00%
+            Π.ΞΥΛΙΝΟ ΜΠΑ-0486017       49,99  24.00%
+                   έκπτωση Lidl Plus   -10,00
+
+            ΣΥΝΟΛΟ                      47,98
+            ΚΑΡΤΑ                       47,98
+
+            ΦΠΑ%        ΚΑΘΑΡΟ   +   ΦΠΑ   =   ΜΙΚΤΟ
+            C 24.00%     38,69      9,29      47,98
+            ΣΥΝΟΛΟ       38,69      9,29      47,98
+
+            Συνολική εξοικονόμηση
+                 10,00 ευρώ
+
+            Με το Lidl Plus εξοικονομήθηκαν
+                 10,00 ευρώ
+
+            ΣΕΙΡΑ: 000482            ΑΡΙΘΜΟΣ: 32775
+        """.trimIndent()
+
+        val parsedLidl = com.example.util.ReceiptParser.parseOcrText(userLidlReceipt)
+        assertEquals("Λιντλ", parsedLidl.title) // NEVER "LGDL"
+        assertEquals(47.98, parsedLidl.amount, 0.01) // Correctly extracts 47.98 from ΣΥΝΟΛΟ
+        assertEquals("Σούπερ Μάρκετ", parsedLidl.suggestedCategoryName)
+        assertEquals("093683423", parsedLidl.merchantAfm)
+
+        // Test 5: Real user receipt when ML Kit Latin OCR reads ΣΥΝΟΛΟ as EYNOAO or ZYNOAO
+        val latinOcrLidlReceipt = """
+            LGDL
+            AINTA EAAAE KAI EIA OE, YNEPAEOPA
+            KOYNTOYPIQTH 8
+            55535, NYAAIA
+            AQM 093683423
+
+            EYNOAO                      47,98
+            KAPTA                       47,98
+        """.trimIndent()
+
+        val parsedLatinLidl = com.example.util.ReceiptParser.parseOcrText(latinOcrLidlReceipt)
+        assertEquals("Λιντλ", parsedLatinLidl.title)
+        assertEquals(47.98, parsedLatinLidl.amount, 0.01) // Robust across EYNOAO / ZYNOAO
+
+        // Test 6: Small neighborhood grocery with logo noise at top
+        val groceryReceipt = """
+            &&&
+            ΠΑΝΤΟΠΩΛΕΙΟ Η ΓΩΝΙΑ
+            ΕΜΠΟΡΙΟ ΤΡΟΦΙΜΩΝ ΚΑΙ ΠΟΤΩΝ
+            ΟΔΟΣ ΣΟΛΩΝΟΣ 20
+            ΑΦΜ: 082345678
+            ΣΥΝΟΛΟ : 16,30
+        """.trimIndent()
+        val parsedGrocery = com.example.util.ReceiptParser.parseOcrText(groceryReceipt)
+        assertTrue("Expected title to contain 'Παντοπωλείο Η Γωνία', got '${parsedGrocery.title}'",
+            parsedGrocery.title.contains("Παντοπωλείο", ignoreCase = true))
+        assertEquals(16.30, parsedGrocery.amount, 0.01)
+
+        // Test 7: Pharmacy receipt
+        val pharmacyReceipt = """
+            ΦΑΡΜΑΚΕΙΟ ΚΑΡΑΓΙΑΝΝΗ ΜΑΡΙΑ
+            ΑΧΑΡΝΩΝ 120, ΑΘΗΝΑ
+            ΑΦΜ 045678912
+            ΣΥΝΟΛΟ 8,50 €
+        """.trimIndent()
+        val parsedPharmacy = com.example.util.ReceiptParser.parseOcrText(pharmacyReceipt)
+        assertTrue(parsedPharmacy.title.contains("Φαρμακείο", ignoreCase = true))
+        assertEquals(8.50, parsedPharmacy.amount, 0.01)
+        assertEquals("Υγεία & Φαρμακείο", parsedPharmacy.suggestedCategoryName)
+
+        // Test 8: Gas station with spaced 'Σ Υ Ν Ο Λ Ο'
+        val gasReceipt = """
+            ΠΡΑΤΗΡΙΟ ΥΓΡΩΝ ΚΑΥΣΙΜΩΝ
+            ΠΑΠΑΔΟΠΟΥΛΟΣ ΓΕΩΡΓΙΟΣ ΚΑΙ ΣΙΑ Ε.Ε.
+            ΛΕΩΦ. ΒΟΥΛΙΑΓΜΕΝΗΣ 210
+            ΑΦΜ 091827364
+            ΑΜΟΛΥΒΔΗ 95 30,00
+            Σ Υ Ν Ο Λ Ο 30,00
+        """.trimIndent()
+        val parsedGas = com.example.util.ReceiptParser.parseOcrText(gasReceipt)
+        assertTrue(parsedGas.title.contains("Πρατήριο", ignoreCase = true))
+        assertEquals(30.00, parsedGas.amount, 0.01)
+        assertEquals("Μετακινήσεις", parsedGas.suggestedCategoryName)
+
+        // Test 9: Cafe with English 'TOTAL'
+        val cafeReceipt = """
+            COFFEE LAB
+            MITROPOLEOS 14
+            FREDDO ESPRESSO 2,20
+            TOTAL EUR 2.20
+        """.trimIndent()
+        val parsedCafe = com.example.util.ReceiptParser.parseOcrText(cafeReceipt)
+        assertEquals("Coffee Lab", parsedCafe.title)
+        assertEquals(2.20, parsedCafe.amount, 0.01)
+        assertEquals("Καφές & Έξω", parsedCafe.suggestedCategoryName)
+
+        // Test 10: Real Sklavenitis receipt with register metadata "ΤΑΜΕΙΟ 02 ΚΑΤ: 3624 ΧΕΙΡΙΣΤΗΣ 29900"
+        val sklavenitisReceipt = """
+            ΕΛΛΗΝΙΚΕΣ ΥΠΕΡΑΓΟΡΕΣ
+            ΣΚΛΑΒΕΝΙΤΗΣ Α.Ε.Ε.
+            SUPER MARKETS
+            Υ/Α ΤΣΑΛΔΑΡΗ & ΒΑΣΙΛΙΚΗΣ ΤΑΒΑΚΗ 25
+            ΘΕΡΜΗ ΤΗΛ:2310487590
+            ΑΦΜ 800764388
+            ΤΑΜΕΙΟ 02 ΚΑΤ: 3624       ΧΕΙΡΙΣΤΗΣ 29900
+            ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ ΠΩΛΗΣΗΣ
+            5201321933830
+            ROL ΥΓΡΟ BLACK 30ΠΛΥΣΕΙΣ      4,65 24,00%
+            ΣΥΝΟΛΟ                   28,16 ΕΥΡΩ
+            ΜΕΤΡΗΤΑ                  28,20
+            ΡΕΣΤΑ                    -0,04
+            ΠΩΛΗΘΕΝΤΑ ΕΙΔΗ :         13
+        """.trimIndent()
+        val parsedSklavenitis = com.example.util.ReceiptParser.parseOcrText(sklavenitisReceipt)
+        assertEquals("Σκλαβενίτης", parsedSklavenitis.title)
+        assertEquals(28.16, parsedSklavenitis.amount, 0.01)
+        assertEquals("Σούπερ Μάρκετ", parsedSklavenitis.suggestedCategoryName)
+
+        // Test 11: Real Sklavenitis receipt with Latin OCR artifacts
+        val sklavenitisOcrLatin = """
+            EAAHNIKEC YTEPATOPEL
+            EKAABENITHC A.E.E.
+            SUPER MARKETS
+            Y/A TSAADARH & BASIAIKHS TABAKH 25
+            AFM 800764388
+            TAMEIO 02 KAT 3624
+            XEIRISTIS 29900
+            APODEIXH AIANIKHS PWAHSHS
+            EYNOAO                   28,16 EYRW
+            METRHTA                  28,20
+            RESTA                    -0,04
+        """.trimIndent()
+        val parsedSklavenitisLatin = com.example.util.ReceiptParser.parseOcrText(sklavenitisOcrLatin)
+        assertEquals("Σκλαβενίτης", parsedSklavenitisLatin.title)
+        assertEquals(28.16, parsedSklavenitisLatin.amount, 0.01)
+
+        // Test 12: Real Dedeman / Praktiker receipt with 'ΣΥΝΟΛΟ ΤΕΜΑΧΙΩΝ 3' and 'Σύνολο 11,70 €'
+        val praktikerReceipt = """
+            DEDEMAN
+            DEDEMAN HELLAS A.E.
+            YP/MA: MARINOY ANTYPA, 551 34 OESNIKH
+            EDRA: PEIRAIWS 176 - 17778 TAYROS
+            AFM: 094317955
+            THL: 2310 489550 - WWW.PRAKTIKER.GR
+            ALLAGES ME APODEIXH ENTOS 14 HMERWN
+            Eidos Parastatikoy
+            APODEIXH TAMEIAKHS MHXANHS
+            Ar. Parastatikoy: ATM305006-00443034
+            Hmeromhnia: 07/11/26 15:28:42
+            Xeirisths: 20100950 - Termatiko: 305006
+            4048962257243          2  3,90 €   7,80 €  24,00 %
+            399918-BYSMA OYPAT 6X50MM FISCHER DUOPO
+            4048962237061          1  3,90 €   3,90 €  24,00 %
+            399916-BYSMA OYPAT 6X30MM FISCHER DUOPO
+            ΣΥΝΟΛΟ ΤΕΜΑΧΙΩΝ
+            3
+            ΦΠΑ    Καθαρή Αξία    Αξία ΦΠΑ    Συνολική Αξία
+            24        8,43 €        2,27 €       11,70 €
+            ----------------------------------------
+            Σύνολο                               11,70 €
+            ----------------------------------------
+            ΜΕΤΡΗΤΑ                              20,00 €
+            ΡΕΣΤΑ                                -8,30 €
+        """.trimIndent()
+        val parsedPraktiker = com.example.util.ReceiptParser.parseOcrText(praktikerReceipt)
+        assertTrue(parsedPraktiker.title.contains("Praktiker", ignoreCase = true) || parsedPraktiker.title.contains("Dedeman", ignoreCase = true))
+        assertEquals(11.70, parsedPraktiker.amount, 0.01)
+
+        // Test 13: Dedeman / Praktiker with OCR lowercase 'Evvolo 11,70 €' and 'EYNOAO TEMAXIWN'
+        val praktikerOcrLatin = """
+            DEDEMAN HELLAS A.E.
+            AFM: 094317955
+            WWW.PRAKTIKER.GR
+            APODEIXH TAMEIAKHS MHXANHS
+            EYNOAO TEMAXIWN
+            3
+            FPA    Ka0arh Axia    Axia FPA    Synolikh Axia
+            24        8,43 €        2,27 €       11,70 €
+            ----------------------------------------
+            Evvolo                               11,70 €
+            ----------------------------------------
+            METRHTA                              20,00 €
+            RESTA                                -8,30 €
+        """.trimIndent()
+        val parsedPraktikerLatin = com.example.util.ReceiptParser.parseOcrText(praktikerOcrLatin)
+        assertEquals(11.70, parsedPraktikerLatin.amount, 0.01)
+
+        // Test 14: Dedeman / Praktiker with 2-line separation (Evvolo on line 1, 11,70 € on line 2)
+        val praktikerTwoLines = """
+            DEDEMAN HELLAS A.E.
+            AFM: 094317955
+            WWW.PRAKTIKER.GR
+            EYNOAO TEMAXIWN
+            3
+            ----------------------------------------
+            Evvolo
+            11,70 €
+            ----------------------------------------
+            METRHTA 20,00 €
+        """.trimIndent()
+        val parsedPraktikerTwoLines = com.example.util.ReceiptParser.parseOcrText(praktikerTwoLines)
+        assertEquals(11.70, parsedPraktikerTwoLines.amount, 0.01)
+
+        // Test 15: Exact Sklavenitis receipt from user photo (disqualifies Tameio 02 Kat 3624, identifies Sklavenitis & 28.16)
+        val sklavenitisWithCashierReceipt = """
+            ΕΛΛΗΝΙΚΕΣ ΥΠΕΡΑΓΟΡΕΣ
+            ΣΚΛΑΒΕΝΙΤΗΣ Α.Ε.Ε.
+            SUPER MARKETS
+            Υ/Α ΤΣΑΛΔΑΡΗ & ΒΑΣΙΛΙΚΗΣ ΤΑΒΑΚΗ 25
+            ΘΕΡΜΗ ΤΗΛ:2310487590
+            ΑΦΜ 800764388
+
+            ΤΑΜΕΙΟ 02 ΚΑΤ: 3624          ΧΕΙΡΙΣΤΗΣ 29900
+
+            ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ ΠΩΛΗΣΗΣ
+            5201321933830
+            ROL ΥΓΡΟ BLACK 30ΠΛΥΣΕΙΣ      4,65 24,00%
+            ΕΚΠΤΩΣΗ ROL ΥΓΡΟ BLACK 30ΠΛ  -0,70 24,00%
+            ----------------------------------------
+            ΣΥΝΟΛΟ                        28,16 ΕΥΡΩ
+            ΜΕΤΡΗΤΑ                       28,20
+            ΡΕΣΤΑ                         -0,04
+            ΠΩΛΗΘΕΝΤΑ ΕΙΔΗ : 13
+        """.trimIndent()
+        val parsedSklavenitisWithCashier = com.example.util.ReceiptParser.parseOcrText(sklavenitisWithCashierReceipt)
+        assertEquals("Σκλαβενίτης", parsedSklavenitisWithCashier.title)
+        assertEquals(28.16, parsedSklavenitisWithCashier.amount, 0.01)
+        assertEquals("800764388", parsedSklavenitisWithCashier.merchantAfm)
+
+        // Test 16: Independent local bakery (generic scoring + clean title + total)
+        val localBakeryExtraReceipt = """
+            ΑΡΤΟΠΟΙΕΙΟ Ο ΦΟΥΡΝΟΣ ΤΗΣ ΓΙΑΓΙΑΣ Ο.Ε.
+            ΕΔΡΑ: ΑΓΙΟΥ ΔΗΜΗΤΡΙΟΥ 45, ΘΕΣΣΑΛΟΝΙΚΗ
+            ΑΦΜ: 123456789 - ΔΟΥ: Δ' ΘΕΣΣΑΛΟΝΙΚΗΣ
+            ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ ΠΩΛΗΣΗΣ
+            ΚΟΥΛΟΥΡΙ ΘΕΣΣΑΛΟΝΙΚΗΣ 2 X 0,80    1,60 €
+            ΤΥΡΟΠΙΤΑ ΤΑΨΙΟΥ 1 X 2,40           2,40 €
+            ΚΑΦΕΣ CAPPUCCINO 2 X 2,20          4,40 €
+            ----------------------------------------
+            ΣΥΝΟΛΟ                             8,40 €
+            ΜΕΤΡΗΤΑ                           10,00 €
+            ΡΕΣΤΑ                             -1,60 €
+        """.trimIndent()
+        val parsedBakeryExtra = com.example.util.ReceiptParser.parseOcrText(localBakeryExtraReceipt)
+        assertTrue(parsedBakeryExtra.title.contains("Φούρνος", ignoreCase = true) && parsedBakeryExtra.title.contains("Γιαγια", ignoreCase = true))
+        assertEquals(8.40, parsedBakeryExtra.amount, 0.01)
+        assertEquals("123456789", parsedBakeryExtra.merchantAfm)
+
+        // Test 17: Independent local pharmacy (generic health categorization + total)
+        val localPharmacyExtraReceipt = """
+            ΦΑΡΜΑΚΕΙΟ ΓΕΩΡΓΙΟΣ ΠΑΠΑΔΟΠΟΥΛΟΣ
+            ΤΣΙΜΙΣΚΗ 88, ΤΚ 54622
+            ΑΦΜ: 987654321
+            ΑΠΟΔΕΙΞΗ ΛΙΑΝΙΚΗΣ
+            DEPON MAXIMUM 1000MG              3,50 €
+            VITAMIN C 1000MG EFFERV           6,35 €
+            ΑΝΤΙΗΛΙΑΚΗ ΚΡΕΜΑ 50+             10,00 €
+            ----------------------------------------
+            ΣΥΝΟΛΟ                           19,85 €
+            ΠΛΗΡΩΜΗ ΜΕ ΚΑΡΤΑ                 19,85 €
+        """.trimIndent()
+        val parsedPharmacyExtra = com.example.util.ReceiptParser.parseOcrText(localPharmacyExtraReceipt)
+        assertTrue(parsedPharmacyExtra.title.contains("Φαρμακείο", ignoreCase = true) && parsedPharmacyExtra.title.contains("Παπαδοπουλος", ignoreCase = true))
+        assertEquals(19.85, parsedPharmacyExtra.amount, 0.01)
+
+        // Test 18: Independent grill house / tavern
+        val localTavernExtraReceipt = """
+            ΨΗΤΟΠΩΛΕΙΟ Ο ΜΠΑΜΠΗΣ
+            ΑΦΜ 112233445
+            ΜΕΡΙΔΑ ΓΥΡΟΣ ΧΟΙΡΙΝΟΣ             8,50 €
+            ΣΟΥΒΛΑΚΙ ΚΑΛΑΜΑΚΙ 4 X 2,20        8,80 €
+            ΠΑΤΑΤΕΣ ΤΗΓΑΝΗΤΕΣ 1 X 3,80        3,80 €
+            ΧΩΡΙΑΤΙΚΗ ΣΑΛΑΤΑ 1 X 7,50         7,50 €
+            ΑΝΑΨΥΚΤΙΚΑ 2 X 2,80               5,60 €
+            ----------------------------------------
+            Σύνολο                           34,20 €
+            ΜΕΤΡΗΤΑ                          50,00 €
+            ΡΕΣΤΑ                           -15,80 €
+        """.trimIndent()
+        val parsedTavernExtra = com.example.util.ReceiptParser.parseOcrText(localTavernExtraReceipt)
+        assertTrue(parsedTavernExtra.title.contains("Ψητοπωλείο", ignoreCase = true) && parsedTavernExtra.title.contains("Μπαμπ", ignoreCase = true))
+        assertEquals(34.20, parsedTavernExtra.amount, 0.01)
     }
 
     @Test
@@ -501,6 +831,36 @@ class ExampleUnitTest {
             text = "Λάβατε μεταφορά 120,00€ από ΓΕΩΡΓΙΟΣ"
         )
         org.junit.Assert.assertNull(incomingEurobank)
+
+        // Exact Eurobank e-commerce notification from user screenshot:
+        // Package: gr.eurobank.mobile.app
+        // Title: "Αγορά/Πληρωμή e-commerce"
+        // Text: "Κάνατε αγορά/πληρωμή ηλεκτρονικά 12,49 EUR με την κάρτα 5167 32** **** 8483 στην εταιρεία PAYPAL *NETFLIX COM DE 11/11/2026, 04:11"
+        val eurobankEcommerceTx = parser.parse(
+            packageName = "gr.eurobank.mobile.app",
+            title = "Αγορά/Πληρωμή e-commerce",
+            text = "Κάνατε αγορά/πληρωμή ηλεκτρονικά 12,49 EUR με την κάρτα 5167 32** **** 8483 στην εταιρεία PAYPAL *NETFLIX COM DE 11/11/2026, 04:11"
+        )
+        org.junit.Assert.assertNotNull(eurobankEcommerceTx)
+        assertEquals(12.49, eurobankEcommerceTx!!.amount, 0.01)
+        assertTrue(eurobankEcommerceTx.merchantName.equals("Netflix", ignoreCase = true))
+        assertEquals("Eurobank", eurobankEcommerceTx.bankName)
+
+        // Categorization for Netflix into user's categories
+        val userCategories = listOf(
+            com.example.data.entity.ExpenseCategory(id = 1, name = "Σούπερ μάρκετ"),
+            com.example.data.entity.ExpenseCategory(id = 2, name = "Φαγητό από έξω"),
+            com.example.data.entity.ExpenseCategory(id = 3, name = "Καφέδες"),
+            com.example.data.entity.ExpenseCategory(id = 4, name = "Ψιλικά"),
+            com.example.data.entity.ExpenseCategory(id = 5, name = "Μετακινήσεις & Καύσιμα"),
+            com.example.data.entity.ExpenseCategory(id = 6, name = "Γιατρός & Φαρμακείο"),
+            com.example.data.entity.ExpenseCategory(id = 7, name = "Διασκέδαση & Ψυχαγωγία"),
+            com.example.data.entity.ExpenseCategory(id = 8, name = "Στοίχημα")
+        )
+        val cat = parser.categorizeMerchant(eurobankEcommerceTx.merchantName, eurobankEcommerceTx.rawText, userCategories)
+        org.junit.Assert.assertNotNull(cat)
+        assertEquals(7L, cat!!.id)
+        assertEquals("Διασκέδαση & Ψυχαγωγία", cat.name)
     }
 
     @Test
@@ -532,5 +892,146 @@ class ExampleUnitTest {
         val parsedLidl = parser.parse("25 ευρώ lidl", categories, members)
         assertEquals(25.0, parsedLidl.amount, 0.01)
         assertTrue("Expected title to contain 'Lidl', got: '${parsedLidl.title}'", parsedLidl.title.contains("lidl", ignoreCase = true))
+    }
+
+    @Test
+    fun testGooglePayAndEurobankPosNotificationsAndDeduplication() {
+        val parser = com.example.util.BankNotificationParser
+
+        // 1. Google Wallet / Πορτοφόλι Google notifications from user screenshot
+        val shellWallet = parser.parse(
+            packageName = "com.google.android.apps.walletnfcrel",
+            title = "SHELL MYRTEA THESSALON",
+            text = "18,00 € με την κάρτα Eurobank Classic Mastercard •••• 8483",
+            timestamp = 1_700_000_000_000L
+        )
+        org.junit.Assert.assertNotNull(shellWallet)
+        assertEquals(18.00, shellWallet!!.amount, 0.01)
+        assertEquals("SHELL MYRTEA THESSALON", shellWallet.merchantName)
+        assertEquals("Google Pay", shellWallet.bankName)
+
+        val lidlGms = parser.parse(
+            packageName = "com.google.android.gms",
+            title = "LIDL HELLAS & SIA O.E.",
+            text = "79,60 € με την κάρτα Eurobank Classic Mastercard",
+            timestamp = 1_700_000_010_000L
+        )
+        org.junit.Assert.assertNotNull(lidlGms)
+        assertEquals(79.60, lidlGms!!.amount, 0.01)
+        assertEquals("LIDL HELLAS & SIA O.E.", lidlGms.merchantName)
+
+        val sklavenitisWallet = parser.parse(
+            packageName = "com.google.android.apps.walletnfcrel",
+            title = "SKLAVENITIS 3040 MAKED",
+            text = "77,78 € με την κάρτα Eurobank Classic Mastercard",
+            timestamp = 1_700_000_020_000L
+        )
+        org.junit.Assert.assertNotNull(sklavenitisWallet)
+        assertEquals(77.78, sklavenitisWallet!!.amount, 0.01)
+        assertEquals("SKLAVENITIS 3040 MAKED", sklavenitisWallet.merchantName)
+
+        // 2. Non-wallet GMS notifications must still be rejected
+        val nonWalletGms = parser.parse(
+            packageName = "com.google.android.gms",
+            title = "Google Play Services",
+            text = "Backup completed: 120 MB"
+        )
+        org.junit.Assert.assertNull(nonWalletGms)
+
+        // 3. Official Eurobank app ("com.EurobankEFG") POS notifications ("Αγορά/Πληρωμή σε POS")
+        val eurobankPosShell = parser.parse(
+            packageName = "com.EurobankEFG",
+            title = "Αγορά/Πληρωμή σε POS",
+            text = "Κάνατε αγορά/πληρωμή 18,00 EUR στην εταιρεία SHELL MYRTEA THESSALON με την κάρτα 5167 32** **** 8483 στις 14/11/2026",
+            timestamp = 1_700_000_005_000L
+        )
+        org.junit.Assert.assertNotNull(eurobankPosShell)
+        assertEquals(18.00, eurobankPosShell!!.amount, 0.01)
+        assertEquals("Eurobank", eurobankPosShell.bankName)
+        assertEquals("SHELL MYRTEA THESSALON", eurobankPosShell.merchantName)
+
+        val eurobankPosLidl = parser.parse(
+            packageName = "com.EurobankEFG",
+            title = "Αγορά/Πληρωμή σε POS",
+            text = "Κάνατε αγορά/πληρωμή 79,60 EUR στην εταιρεία LIDL HELLAS & SIA O.E. με την κάρτα 5167 32** **** 8483",
+            timestamp = 1_700_000_015_000L
+        )
+        org.junit.Assert.assertNotNull(eurobankPosLidl)
+        assertEquals(79.60, eurobankPosLidl!!.amount, 0.01)
+        assertEquals("LIDL HELLAS & SIA O.E.", eurobankPosLidl.merchantName)
+
+        // 4. Cross-app deduplication in BankNotificationHolder (Google Pay + Eurobank within 120s)
+        val holder = com.example.util.BankNotificationHolder
+        holder.clearAll()
+        val firstAdded = holder.addTransaction(shellWallet)
+        val secondAdded = holder.addTransaction(eurobankPosShell)
+        assertTrue(firstAdded)
+        org.junit.Assert.assertFalse(secondAdded)
+        assertEquals(1, holder.pendingTransactions.value.size)
+        holder.clearAll()
+    }
+
+    @Test
+    fun testBillReminderNextTriggerCalculation() {
+        val nowCal = java.util.Calendar.getInstance().apply {
+            set(2026, java.util.Calendar.NOVEMBER, 14, 10, 0, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        // Same day, later hour -> triggers today
+        val laterToday = com.example.reminder.BillReminderManager.calculateNextTriggerTimeMillis(
+            dayOfMonth = 14,
+            hour = 18,
+            minute = 30,
+            nowMillis = nowCal.timeInMillis
+        )
+        val laterCal = java.util.Calendar.getInstance().apply { timeInMillis = laterToday }
+        assertEquals(2026, laterCal.get(java.util.Calendar.YEAR))
+        assertEquals(java.util.Calendar.NOVEMBER, laterCal.get(java.util.Calendar.MONTH))
+        assertEquals(14, laterCal.get(java.util.Calendar.DAY_OF_MONTH))
+        assertEquals(18, laterCal.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(30, laterCal.get(java.util.Calendar.MINUTE))
+
+        // Same day, earlier hour -> rolls over to next month (Dec 14)
+        val nextMonth = com.example.reminder.BillReminderManager.calculateNextTriggerTimeMillis(
+            dayOfMonth = 14,
+            hour = 8,
+            minute = 0,
+            nowMillis = nowCal.timeInMillis
+        )
+        val nextCal = java.util.Calendar.getInstance().apply { timeInMillis = nextMonth }
+        assertEquals(2026, nextCal.get(java.util.Calendar.YEAR))
+        assertEquals(java.util.Calendar.DECEMBER, nextCal.get(java.util.Calendar.MONTH))
+        assertEquals(14, nextCal.get(java.util.Calendar.DAY_OF_MONTH))
+        assertEquals(8, nextCal.get(java.util.Calendar.HOUR_OF_DAY))
+    }
+
+    @Test
+    fun testRecurringIdResolutionAndDeduplication() {
+        val processor = com.example.util.RecurringExpenseAutoProcessor
+
+        // Numeric string IDs and legacy rec_ IDs must resolve back to their Room numeric ID (not hashCode)
+        assertEquals(1L, processor.resolveCloudEntityId("1"))
+        assertEquals(5L, processor.resolveCloudEntityId("5"))
+        assertEquals(5L, processor.resolveCloudEntityId("rec_5"))
+        assertTrue(processor.resolveCloudEntityId("uuid-abc-123") >= 1L)
+
+        // Duplicate reminders created from Room ID vs hashCode sync must collapse cleanly to 1
+        val dup1 = com.example.data.entity.RecurringExpense(
+            id = 5L,
+            title = "Ενοίκιο",
+            amount = 450.0,
+            categoryId = 1L,
+            categoryName = "Σπίτι",
+            dayOfMonth = 1,
+            reminderHour = 9,
+            reminderMinute = 0
+        )
+        val dup2 = dup1.copy(id = 53L, title = "ενοικιο ")
+        val other = dup1.copy(id = 6L, title = "ΔΕΗ", amount = 80.0, dayOfMonth = 15)
+
+        val deduped = processor.deduplicateRecurringExpenses(listOf(dup1, dup2, other))
+        assertEquals(2, deduped.size)
+        assertEquals(5L, deduped[0].id)
+        assertEquals(6L, deduped[1].id)
     }
 }

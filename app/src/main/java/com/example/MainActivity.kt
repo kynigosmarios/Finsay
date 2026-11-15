@@ -123,6 +123,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         try {
             viewModel.onAppResumed()
+            com.example.util.BankNotificationHolder.reloadFromPrefs(this)
+            com.example.service.BankNotificationListenerService.requestRebindIfPossible(this)
+            com.example.service.BankNotificationListenerService.scanActiveNotifications(this)
         } catch (e: Exception) {
             Log.w("MainActivity", "onResume safe fallback: ${e.message}")
         }
@@ -143,6 +146,11 @@ class MainActivity : ComponentActivity() {
                 // User opened app by tapping notification. Do not auto-confirm;
                 // Keep the pending transaction in BankNotificationHolder so the banner card stack displays it.
                 Log.d("MainActivity", "User opened app from bank transaction notification: $bankTxId")
+            }
+
+            val billReminderId = intent.getLongExtra(com.example.reminder.BillReminderManager.EXTRA_REMINDER_ID, 0L)
+            if (billReminderId > 0L) {
+                viewModel.triggerReminderById(billReminderId)
             }
         } catch (e: Exception) {
             Log.w("MainActivity", "Error parsing intent: ${e.message}")

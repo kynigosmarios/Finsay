@@ -17,7 +17,7 @@ import com.example.R
 import java.util.Calendar
 
 object DailyReminderManager {
-    const val CHANNEL_ID = "fintel_daily_reminder_channel"
+    const val CHANNEL_ID = "finsay_daily_reminder_channel"
     const val KEY_REMINDER_ENABLED = "daily_reminder_enabled"
     const val KEY_REMINDER_HOUR = "daily_reminder_hour"
     const val KEY_REMINDER_MINUTE = "daily_reminder_minute"

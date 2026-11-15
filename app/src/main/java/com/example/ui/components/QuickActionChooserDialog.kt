@@ -75,7 +75,7 @@ fun QuickActionChooserDialog(
                 ) {
                     Column {
                         Text(
-                            text = "Fintel",
+                            text = "Finsay",
                             fontFamily = ModernFontFamily,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Black,

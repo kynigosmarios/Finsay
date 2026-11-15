@@ -1,4 +1,5 @@
 <resources>
-    <string name="app_name">Fintel</string>
-    <string name="widget_description">Γρήγορη καταχώρηση εξόδου στο Fintel</string>
+    <string name="app_name">Finsay</string>
+    <string name="widget_description">Γρήγορη καταχώρηση εξόδου στο Finsay</string>
+    <string name="default_web_client_id">351790236571-093q02uts0ju5do0hp4os8el545l8oai.apps.googleusercontent.com</string>
 </resources>

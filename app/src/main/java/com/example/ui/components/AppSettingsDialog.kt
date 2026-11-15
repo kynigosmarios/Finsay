@@ -31,8 +31,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
@@ -82,6 +84,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.Household
 import com.example.data.model.UserProfile
+import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
 import com.google.firebase.auth.FirebaseUser
@@ -103,13 +106,13 @@ fun AppSettingsDialog(
     onAcceptNotificationConsent: () -> Unit = {},
     onToggleReminder: (Boolean) -> Unit = {},
     onSetReminderTime: (Int, Int) -> Unit = { _, _ -> },
-    onTestReminder: () -> Unit = {},
     onToggleBankAutoCatcher: (Boolean) -> Unit = {},
     onThemeChange: (String) -> Unit,
     onLanguageChange: (String) -> Unit = {},
     onToggleLaunchWithChooser: (Boolean) -> Unit,
     onCreateHousehold: (String) -> Unit,
     onJoinHousehold: (String) -> Unit,
+    onOpenReminders: (() -> Unit)? = null,
     onSignOut: () -> Unit,
     onClearAllDataAndSignOut: () -> Unit = {},
     onMessage: (String) -> Unit,
@@ -455,6 +458,7 @@ fun AppSettingsDialog(
                         }
                     }
 
+
                     // Section: Ανάγνωση Τραπεζικών Push (Bank Auto-Catcher)
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Surface(
@@ -752,9 +756,9 @@ fun AppSettingsDialog(
             text = {
                 Text(
                     text = if (lang == Localization.Language.ENGLISH)
-                        "This feature automatically detects purchase push notifications STRICTLY from supported banks:\n\n• Eurobank\n• Alpha Bank\n• National Bank of Greece (NBG)\n• Piraeus Bank\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nIt NEVER triggers from emails or non-banking notifications. All processing is 100% private and on-device."
+                        "This feature automatically detects purchase push notifications STRICTLY from supported banks & wallets:\n\n• Google Pay / Google Wallet\n• Eurobank\n• Alpha Bank\n• National Bank of Greece (NBG)\n• Piraeus Bank\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nIt NEVER triggers from emails or non-banking notifications. All processing is 100% private and on-device."
                     else
-                        "Η λειτουργία αυτή αναγνωρίζει αυτόματα ειδοποιήσεις αγορών (Push Notifications) ΑΥΣΤΗΡΑ και μόνο από τις υποστηριζόμενες τράπεζες:\n\n• Eurobank\n• Alpha Bank\n• Εθνική Τράπεζα (NBG)\n• Τράπεζα Πειραιώς\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nΔεν ενεργοποιείται ΠΟΤΕ από emails ή άλλες προσωπικές ειδοποιήσεις. Η επεξεργασία γίνεται 100% τοπικά στη συσκευή σας για απόλυτη ασφάλεια.",
+                        "Η λειτουργία αυτή αναγνωρίζει αυτόματα ειδοποιήσεις αγορών (Push Notifications) ΑΥΣΤΗΡΑ και μόνο από τις υποστηριζόμενες τράπεζες & πορτοφόλια:\n\n• Google Pay / Πορτοφόλι Google\n• Eurobank\n• Alpha Bank\n• Εθνική Τράπεζα (NBG)\n• Τράπεζα Πειραιώς\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nΔεν ενεργοποιείται ΠΟΤΕ από emails ή άλλες προσωπικές ειδοποιήσεις. Η επεξεργασία γίνεται 100% τοπικά στη συσκευή σας για απόλυτη ασφάλεια.",
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

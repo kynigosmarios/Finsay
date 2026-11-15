@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finsay — Smart Expense &amp; Household Budget Tracker</title>
+    <meta name="description" content="Finsay: Track personal and family expenses in 2 seconds with voice input, receipt & QR scanning, shared budgets, and bill reminders.">
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #0f172a;
+            background: linear-gradient(180deg, #ecfdf5 0%, #f8fafc 45%, #ffffff 100%);
+            line-height: 1.6;
+        }
+        .wrapper {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 28px 20px 48px;
+        }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 36px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 22px;
+            font-weight: 800;
+            color: #064e3b;
+            text-decoration: none;
+        }
+        .logo-badge {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #047857, #10b981);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 20px;
+            box-shadow: 0 6px 14px rgba(4, 120, 87, 0.25);
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 14px;
+        }
+        nav a {
+            color: #065f46;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        nav a:hover { text-decoration: underline; }
+        .lang-switch {
+            display: inline-flex;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .lang-btn {
+            border: none;
+            background: transparent;
+            padding: 5px 12px;
+            font-size: 12.5px;
+            font-weight: 700;
+            cursor: pointer;
+            color: #475569;
+        }
+        .lang-btn.active {
+            background: #047857;
+            color: #ffffff;
+        }
+        .hero {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 44px 32px;
+            box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.08);
+            border: 1px solid #d1fae5;
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .pill {
+            display: inline-block;
+            background: #ecfdf5;
+            color: #047857;
+            padding: 6px 14px;
+            border-radius: 9999px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+        .hero h1 {
+            font-size: 36px;
+            line-height: 1.2;
+            margin: 0 0 14px;
+            color: #0f172a;
+        }
+        .hero p {
+            max-width: 680px;
+            margin: 0 auto 24px;
+            color: #475569;
+            font-size: 16.5px;
+        }
+        .cta-row {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .btn-primary {
+            display: inline-block;
+            background: #047857;
+            color: #ffffff;
+            padding: 12px 24px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 15px;
+        }
+        .btn-secondary {
+            display: inline-block;
+            background: #f1f5f9;
+            color: #0f172a;
+            padding: 12px 22px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
+            margin-bottom: 36px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 18px;
+            padding: 24px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 10px -4px rgba(15, 23, 42, 0.05);
+        }
+        .card h3 {
+            margin: 0 0 8px;
+            font-size: 17px;
+            color: #047857;
+        }
+        .card p {
+            margin: 0;
+            font-size: 14.5px;
+            color: #475569;
+        }
+        footer {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 24px;
+            text-align: center;
+            color: #64748b;
+            font-size: 13.5px;
+        }
+        footer a {
+            color: #047857;
+            text-decoration: none;
+            margin: 0 8px;
+        }
+        footer a:hover { text-decoration: underline; }
+        [data-lang="en"] { display: none; }
+        body.en [data-lang="el"] { display: none; }
+        body.en [data-lang="en"] { display: block; }
+        body.en span[data-lang="en"], body.en a[data-lang="en"] { display: inline; }
+        span[data-lang="el"], a[data-lang="el"] { display: inline; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <header>
+            <a class="brand" href="/">
+                <span class="logo-badge">F</span>
+                <span>Finsay</span>
+            </a>
+            <div class="header-right">
+                <nav>
+                    <a href="/privacy-policy.html"><span data-lang="el">Πολιτική Απορρήτου</span><span data-lang="en">Privacy Policy</span></a>
+                    <a href="/terms-of-service.html"><span data-lang="el">Όροι Χρήσης</span><span data-lang="en">Terms of Service</span></a>
+                    <a href="/delete-account.html"><span data-lang="el">Διαγραφή Λογαριασμού</span><span data-lang="en">Delete Account</span></a>
+                    <a href="mailto:support@finsayapp.com"><span data-lang="el">Επικοινωνία</span><span data-lang="en">Contact</span></a>
+                </nav>
+                <div class="lang-switch" aria-label="Language switch">
+                    <button type="button" class="lang-btn active" id="btn-el" onclick="setLang('el')">ΕΛ</button>
+                    <button type="button" class="lang-btn" id="btn-en" onclick="setLang('en')">EN</button>
+                </div>
+            </div>
+        </header>
+
+        <section class="hero">
+            <span class="pill" data-lang="el">Android App • Google Play</span>
+            <span class="pill" data-lang="en">Android App • Google Play</span>
+            <h1 data-lang="el">Πες το. Καταγράφηκε.</h1>
+            <h1 data-lang="en">Say it. Tracked.</h1>
+            <p data-lang="el">Το <strong>Finsay</strong> είναι η έξυπνη εφαρμογή διαχείρισης προσωπικών και οικογενειακών εξόδων. Καταχώρησε έξοδα με τη φωνή σου σε 2 δευτερόλεπτα, σκάναρε αποδείξεις QR, μοιράσου λογαριασμούς με την οικογένεια ή την παρέα και μην ξεχνάς κανέναν πάγιο λογαριασμό.</p>
+            <p data-lang="en"><strong>Finsay</strong> is a smart personal and shared household expense tracker for Android. Log expenses in 2 seconds using voice commands, scan receipts and QR codes, split shared budgets in real time, and stay on top of recurring bills.</p>
+            <div class="cta-row">
+                <a class="btn-primary" href="mailto:support@finsayapp.com?subject=Finsay%20Support">
+                    <span data-lang="el">Επικοινωνία: support@finsayapp.com</span>
+                    <span data-lang="en">Support: support@finsayapp.com</span>
+                </a>
+                <a class="btn-secondary" href="/privacy-policy.html">
+                    <span data-lang="el">Πολιτική Απορρήτου (GDPR)</span>
+                    <span data-lang="en">Privacy Policy (GDPR)</span>
+                </a>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3 data-lang="el">🎙️ Φωνητική Καταγραφή στα Ελληνικά</h3>
+                <h3 data-lang="en">🎙️ Voice Expense Logging</h3>
+                <p data-lang="el">Απλά πες «15 ευρώ σούπερ μάρκετ» ή «καφές 3,50 με κάρτα» και το Finsay συμπληρώνει αυτόματα ποσό, κατηγορία και τρόπο πληρωμής.</p>
+                <p data-lang="en">Simply speak your expense naturally and Finsay automatically fills in the amount, category, and payment method.</p>
+            </div>
+            <div class="card">
+                <h3 data-lang="el">🧾 Σάρωση Αποδείξεων (QR &amp; Κάμερα)</h3>
+                <h3 data-lang="en">🧾 Receipt &amp; QR Scanner</h3>
+                <p data-lang="el">Διάβασε αυτόματα τα στοιχεία από αποδείξεις QR ή φωτογράφισε οποιαδήποτε απόδειξη για άμεση καταχώρηση.</p>
+                <p data-lang="en">Scan receipt QR codes or snap a photo of any paper receipt for fast, accurate expense capture.</p>
+            </div>
+            <div class="card">
+                <h3 data-lang="el">👨‍👩‍👧‍👦 Κοινά Εξοδολόγια &amp; Επιμερισμός</h3>
+                <h3 data-lang="en">👨‍👩‍👧‍👦 Shared Households &amp; Split</h3>
+                <p data-lang="el">Συγχρονισμός σε πραγματικό χρόνο για ζευγάρια, οικογένειες ή συγκατοίκους με αυτόματο υπολογισμό «ποιος χρωστάει σε ποιον».</p>
+                <p data-lang="en">Real-time sync for couples, families, or roommates with automatic balance &amp; settle-up calculations.</p>
+            </div>
+            <div class="card">
+                <h3 data-lang="el">🔔 Υπενθυμίσεις Πάγιων Λογαριασμών</h3>
+                <h3 data-lang="en">🔔 Recurring Bill Reminders</h3>
+                <p data-lang="el">Όρισε επαναλαμβανόμενες υπενθυμίσεις για ενοίκιο, ρεύμα, τηλέφωνο ή συνδρομές και κατέγραψέ τες με ένα πάτημα.</p>
+                <p data-lang="en">Schedule recurring alerts for rent, utilities, or subscriptions and record them with a single tap.</p>
+            </div>
+            <div class="card">
+                <h3 data-lang="el">📊 Προϋπολογισμός &amp; Εξαγωγή Excel/PDF</h3>
+                <h3 data-lang="en">📊 Category Budgets &amp; PDF/CSV Export</h3>
+                <p data-lang="el">Μηνιαία όρια ανά κατηγορία με έγχρωμη πρόοδο, διαγράμματα στατιστικών και εξαγωγή αναφορών για το αρχείο ή τον λογιστή σου.</p>
+                <p data-lang="en">Track monthly category limits with visual progress bars, charts, and clean Excel/CSV or PDF exports.</p>
+            </div>
+            <div class="card">
+                <h3 data-lang="el">🔒 Ιδιωτικότητα &amp; Ασφάλεια</h3>
+                <h3 data-lang="en">🔒 Privacy &amp; Security</h3>
+                <p data-lang="el">Ασφαλής αποθήκευση στο Google Cloud / Firebase χωρίς διαφημίσεις και χωρίς πώληση ή κοινοποίηση δεδομένων σε τρίτους.</p>
+                <p data-lang="en">Zero ads, zero data brokerage. Protected by Firebase Authentication and Zero-Trust Firestore security rules.</p>
+            </div>
+        </section>
+
+        <footer>
+            <p>
+                <a href="/privacy-policy.html"><span data-lang="el">Πολιτική Απορρήτου</span><span data-lang="en">Privacy Policy</span></a> •
+                <a href="/terms-of-service.html"><span data-lang="el">Όροι Χρήσης</span><span data-lang="en">Terms of Service</span></a> •
+                <a href="/delete-account.html"><span data-lang="el">Διαγραφή Λογαριασμού</span><span data-lang="en">Delete Account</span></a> •
+                <a href="mailto:support@finsayapp.com">support@finsayapp.com</a>
+            </p>
+            <p>&copy; 2026 Finsay (finsayapp.com). All rights reserved.</p>
+        </footer>
+    </div>
+    <script>
+        function setLang(l) {
+            document.body.classList.toggle('en', l === 'en');
+            document.getElementById('btn-el').classList.toggle('active', l === 'el');
+            document.getElementById('btn-en').classList.toggle('active', l === 'en');
+            document.documentElement.lang = l;
+        }
+    </script>
+</body>
+</html>

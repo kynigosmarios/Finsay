@@ -305,6 +305,8 @@ fun DocumentSnapshot.toSafeRecurringExpense(): FirebaseRecurringExpense {
     val amt = getDouble("amount") ?: (get("amount") as? Number)?.toDouble() ?: existing?.amount ?: 0.0
     val catId = getLong("categoryId") ?: (get("categoryId") as? Number)?.toLong() ?: existing?.categoryId ?: 0L
     val day = getLong("dayOfMonth")?.toInt() ?: (get("dayOfMonth") as? Number)?.toInt() ?: existing?.dayOfMonth ?: 1
+    val rHour = (getLong("reminderHour")?.toInt() ?: (get("reminderHour") as? Number)?.toInt() ?: existing?.reminderHour ?: 9).coerceIn(0, 23)
+    val rMinute = (getLong("reminderMinute")?.toInt() ?: (get("reminderMinute") as? Number)?.toInt() ?: existing?.reminderMinute ?: 0).coerceIn(0, 59)
     val rawAct = get("isActive") ?: get("active")
     val isAct = when (rawAct) {
         is Boolean -> rawAct
@@ -330,6 +332,8 @@ fun DocumentSnapshot.toSafeRecurringExpense(): FirebaseRecurringExpense {
         categoryName = getString("categoryName") ?: existing?.categoryName ?: "",
         frequency = getString("frequency") ?: existing?.frequency ?: "MONTHLY",
         dayOfMonth = day,
+        reminderHour = rHour,
+        reminderMinute = rMinute,
         splitType = getString("splitType") ?: existing?.splitType ?: "ALL_FAMILY",
         memberIdsCsv = getString("memberIdsCsv") ?: existing?.memberIdsCsv ?: "",
         memberNamesDisplay = getString("memberNamesDisplay") ?: existing?.memberNamesDisplay ?: "Κοινό Οικογένειας",

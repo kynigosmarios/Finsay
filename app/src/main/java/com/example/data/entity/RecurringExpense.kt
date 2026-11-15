@@ -13,6 +13,8 @@ data class RecurringExpense(
     val categoryName: String,
     val frequency: String = "MONTHLY", // "MONTHLY", "WEEKLY", "YEARLY"
     val dayOfMonth: Int = 1, // 1 to 31
+    val reminderHour: Int = 9,
+    val reminderMinute: Int = 0,
     val splitType: String = "ALL_FAMILY", // "ALL_FAMILY" or "SPECIFIC_MEMBERS"
     val memberIdsCsv: String = "",
     val memberNamesDisplay: String = "Κοινό Οικογένειας",

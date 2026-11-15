@@ -16,7 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 
 /**
- * Custom Fintel Logo component:
+ * Custom Finsay Logo component:
  * - Light theme: Exact green mark on transparent background.
  * - Dark theme: Exact white mark on transparent background.
  */
@@ -32,9 +32,9 @@ fun OikoNomosLogo(
     ) {
         Image(
             painter = painterResource(
-                id = if (isDarkTheme) R.drawable.fintel_logo_white else R.drawable.fintel_logo
+                id = if (isDarkTheme) R.drawable.finsay_logo_white else R.drawable.finsay_logo
             ),
-            contentDescription = "Fintel Logo",
+            contentDescription = "Finsay Logo",
             modifier = Modifier.fillMaxSize()
         )
     }

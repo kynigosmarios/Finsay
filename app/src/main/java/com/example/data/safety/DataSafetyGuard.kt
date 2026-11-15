@@ -183,6 +183,8 @@ object DataSafetyGuard {
                         categoryName = rec.categoryName,
                         frequency = rec.frequency,
                         dayOfMonth = rec.dayOfMonth,
+                        reminderHour = rec.reminderHour,
+                        reminderMinute = rec.reminderMinute,
                         splitType = rec.splitType,
                         memberIdsCsv = rec.memberIdsCsv,
                         memberNamesDisplay = rec.memberNamesDisplay,

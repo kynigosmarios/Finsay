@@ -82,10 +82,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
@@ -133,7 +141,30 @@ fun ManualExpenseDialog(
         payerMemberName: String,
         payerMemberIdsCsv: String,
         payerAmountsCsv: String
-    ) -> Unit
+    ) -> Unit = { _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+    isReminderMode: Boolean = false,
+    isEditingExistingReminder: Boolean = false,
+    initialReminderDayOfMonth: Int = 1,
+    initialReminderHour: Int = 9,
+    initialReminderMinute: Int = 0,
+    onSaveReminder: ((
+        id: Long,
+        title: String,
+        amount: Double,
+        categoryId: Long,
+        categoryName: String,
+        dayOfMonth: Int,
+        reminderHour: Int,
+        reminderMinute: Int,
+        splitType: String,
+        memberIds: List<Long>,
+        memberNamesDisplay: String,
+        note: String,
+        payerMemberId: Long,
+        payerMemberName: String,
+        payerMemberIdsCsv: String,
+        payerAmountsCsv: String
+    ) -> Unit)? = null
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
 
@@ -209,7 +240,13 @@ fun ManualExpenseDialog(
 
     var title by remember(expenseToEdit) { mutableStateOf(expenseToEdit?.title ?: "") }
     var amountText by remember(expenseToEdit) {
-        mutableStateOf(expenseToEdit?.let { String.format(Locale.US, "%.2f", it.amount) } ?: "")
+        mutableStateOf(
+            if (expenseToEdit != null && expenseToEdit.amount > 0.0) {
+                String.format(Locale.US, "%.2f", expenseToEdit.amount)
+            } else {
+                ""
+            }
+        )
     }
     var selectedCategoryId by remember(expenseToEdit, categories) {
         val initialId = if (expenseToEdit != null) {
@@ -226,6 +263,17 @@ fun ManualExpenseDialog(
     }
     var showDatePicker by remember { mutableStateOf(false) }
 
+    var reminderDayOfMonth by remember(expenseToEdit, initialReminderDayOfMonth) {
+        mutableIntStateOf(initialReminderDayOfMonth.coerceIn(1, 31))
+    }
+    var reminderHour by remember(expenseToEdit, initialReminderHour) {
+        mutableIntStateOf(initialReminderHour.coerceIn(0, 23))
+    }
+    var reminderMinute by remember(expenseToEdit, initialReminderMinute) {
+        mutableIntStateOf(initialReminderMinute.coerceIn(0, 59))
+    }
+    var showReminderDayDropdown by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var showCameraChooserDialog by remember { mutableStateOf(false) }
@@ -236,7 +284,8 @@ fun ManualExpenseDialog(
         coroutineScope.launch {
             try {
                 val inputImage = InputImage.fromBitmap(bitmap, 0)
-                // 1. Try QR first for AADE
+
+                // 1. Scan QR for AADE metadata
                 val barcodeScanner = BarcodeScanning.getClient()
                 val barcodes = withContext(Dispatchers.IO) {
                     try {
@@ -245,28 +294,41 @@ fun ManualExpenseDialog(
                         emptyList()
                     }
                 }
-                val aadeQr = barcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-                if (!aadeQr.isNullOrBlank()) {
-                    val result = ReceiptParser.parseAadeQr(aadeQr, categories)
-                    if (result.amount > 0.0) {
-                        if (result.title.isNotBlank()) title = result.title
-                        amountText = String.format(Locale.US, "%.2f", result.amount)
-                        if (result.timestamp > 0) selectedTimestamp = result.timestamp
-                        val matched = categories.find { it.name.equals(result.suggestedCategoryName, ignoreCase = true) }
-                        if (matched != null) selectedCategoryId = matched.id
-                        Toast.makeText(context, if (lang == Localization.Language.ENGLISH) "Receipt scanned: ${result.title}" else "Αναγνωρίστηκε: ${result.title} (${String.format(Locale.US, "%.2f€", result.amount)})", Toast.LENGTH_SHORT).show()
-                        isScanningReceipt = false
-                        return@launch
-                    }
+                var aadeQr = barcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
+
+                // Fallback: If no QR found in full image, crop bottom 45% (where Greek AADE QR codes are printed)
+                if (aadeQr.isNullOrBlank() && bitmap.height > 600) {
+                    try {
+                        val cropY = (bitmap.height * 0.55).toInt()
+                        val cropH = bitmap.height - cropY
+                        val bottomCrop = Bitmap.createBitmap(bitmap, 0, cropY, bitmap.width, cropH)
+                        val bottomImage = InputImage.fromBitmap(bottomCrop, 0)
+                        val bottomBarcodes = withContext(Dispatchers.IO) {
+                            try {
+                                barcodeScanner.process(bottomImage).await()
+                            } catch (e: Exception) {
+                                emptyList()
+                            }
+                        }
+                        aadeQr = bottomBarcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
+                    } catch (_: Exception) {}
                 }
 
-                // 2. OCR Text Recognition
+                // 2. OCR Text Recognition (always runs to extract store name & total)
                 val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
                 val visionText = withContext(Dispatchers.IO) {
                     textRecognizer.process(inputImage).await()
                 }
-                val result = ReceiptParser.parseOcrText(visionText.text, categories)
-                if (result.title.isNotBlank()) title = result.title
+
+                // 3. Parse receipt with store name from top and strict amount from right of ΣΥΝΟΛΟ
+                val result = ReceiptParser.parseReceipt(
+                    visionText = visionText,
+                    rawText = visionText.text,
+                    aadeQr = aadeQr,
+                    availableCategories = categories
+                )
+
+                if (result.title.isNotBlank() && result.title != "Απόδειξη") title = result.title
                 if (result.amount > 0.0) amountText = String.format(Locale.US, "%.2f", result.amount)
                 if (result.timestamp > 0) selectedTimestamp = result.timestamp
                 val matched = categories.find { it.name.equals(result.suggestedCategoryName, ignoreCase = true) }
@@ -551,8 +613,16 @@ fun ManualExpenseDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val dialogTitle = when {
+                        isReminderMode && isEditingExistingReminder ->
+                            if (lang == Localization.Language.ENGLISH) "Edit Bill Reminder" else "Επεξεργασία Υπενθύμισης"
+                        isReminderMode ->
+                            if (lang == Localization.Language.ENGLISH) "New Bill Reminder" else "Νέα Υπενθύμιση Εξόδου"
+                        expenseToEdit == null -> Localization.recordExpenseTitle(lang)
+                        else -> Localization.editExpenseTitle(lang)
+                    }
                     Text(
-                        text = if (expenseToEdit == null) Localization.recordExpenseTitle(lang) else Localization.editExpenseTitle(lang),
+                        text = dialogTitle,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = Emerald700
@@ -612,6 +682,190 @@ fun ManualExpenseDialog(
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
+                    // Reminder Day & Time Section (shown at the TOP when in Reminder Mode)
+                    if (isReminderMode) {
+                        val isGreek = lang != Localization.Language.ENGLISH
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Amber700.copy(alpha = 0.08f)
+                            ),
+                            border = BorderStroke(1.dp, Amber700.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("reminder_schedule_section")
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.NotificationsActive,
+                                        contentDescription = null,
+                                        tint = Amber700,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isGreek) "Ημέρα & Ώρα Υπενθύμισης" else "Reminder Day & Time",
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Day of Month selector (1..31)
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                        modifier = Modifier.weight(1.25f)
+                                    ) {
+                                        Box {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                IconButton(
+                                                    onClick = {
+                                                        reminderDayOfMonth = if (reminderDayOfMonth <= 1) 31 else reminderDayOfMonth - 1
+                                                    },
+                                                    modifier = Modifier
+                                                        .size(48.dp)
+                                                        .testTag("reminder_day_minus")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Remove,
+                                                        contentDescription = if (isGreek) "Μείωση ημέρας" else "Decrease day",
+                                                        tint = Amber700,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clickable { showReminderDayDropdown = true }
+                                                        .padding(vertical = 4.dp)
+                                                        .testTag("reminder_day_value")
+                                                ) {
+                                                    Text(
+                                                        text = if (isGreek) "Ημέρα" else "Day",
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                    Text(
+                                                        text = if (isGreek) "${reminderDayOfMonth}η" else "${reminderDayOfMonth}",
+                                                        fontSize = 15.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Amber700
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        reminderDayOfMonth = if (reminderDayOfMonth >= 31) 1 else reminderDayOfMonth + 1
+                                                    },
+                                                    modifier = Modifier
+                                                        .size(48.dp)
+                                                        .testTag("reminder_day_plus")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Add,
+                                                        contentDescription = if (isGreek) "Αύξηση ημέρας" else "Increase day",
+                                                        tint = Amber700,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                            DropdownMenu(
+                                                expanded = showReminderDayDropdown,
+                                                onDismissRequest = { showReminderDayDropdown = false }
+                                            ) {
+                                                (1..31).forEach { day ->
+                                                    DropdownMenuItem(
+                                                        text = {
+                                                            Text(
+                                                                text = if (isGreek) "Κάθε ${day}η του μήνα" else "Day $day of month",
+                                                                fontWeight = if (day == reminderDayOfMonth) FontWeight.Bold else FontWeight.Normal,
+                                                                color = if (day == reminderDayOfMonth) Amber700 else MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            reminderDayOfMonth = day
+                                                            showReminderDayDropdown = false
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Reminder Time Picker (HH:mm)
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                                        modifier = Modifier
+                                            .weight(0.95f)
+                                            .clickable {
+                                                android.app.TimePickerDialog(
+                                                    context,
+                                                    { _, selectedH, selectedM ->
+                                                        reminderHour = selectedH
+                                                        reminderMinute = selectedM
+                                                    },
+                                                    reminderHour,
+                                                    reminderMinute,
+                                                    true
+                                                ).show()
+                                            }
+                                            .testTag("reminder_time_picker_button")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.AccessTime,
+                                                contentDescription = if (isGreek) "Ώρα υπενθύμισης" else "Reminder time",
+                                                tint = Emerald700,
+                                                modifier = Modifier.size(19.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Column {
+                                                Text(
+                                                    text = if (isGreek) "Ώρα" else "Time",
+                                                    fontSize = 10.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = String.format(Locale.US, "%02d:%02d", reminderHour, reminderMinute),
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Emerald700
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                    }
+
                     // Title Input
                     OutlinedTextField(
                         value = title,
@@ -651,66 +905,68 @@ fun ManualExpenseDialog(
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Emerald700)
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    if (!isReminderMode) {
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                    // Date Picker Selector
-                    Text(
-                        text = Localization.dateLabel(lang),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
+                        // Date Picker Selector
+                        Text(
+                            text = Localization.dateLabel(lang),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showDatePicker = true }
-                            .testTag("expense_date_picker_button")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showDatePicker = true }
+                                .testTag("expense_date_picker_button")
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.CalendarToday,
-                                    contentDescription = null,
-                                    tint = Emerald700,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = if (isSelectedDateToday) Localization.today(lang) else Localization.date(lang),
-                                        fontSize = 11.sp,
-                                        color = Emerald700,
-                                        fontWeight = FontWeight.Bold
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarToday,
+                                        contentDescription = null,
+                                        tint = Emerald700,
+                                        modifier = Modifier.size(20.dp)
                                     )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = if (isSelectedDateToday) Localization.today(lang) else Localization.date(lang),
+                                            fontSize = 11.sp,
+                                            color = Emerald700,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = displayDateFormat.format(Date(selectedTimestamp)).replaceFirstChar { it.uppercase() },
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Emerald100
+                                ) {
                                     Text(
-                                        text = displayDateFormat.format(Date(selectedTimestamp)).replaceFirstChar { it.uppercase() },
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        text = Localization.changeAction(lang),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Emerald700,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                     )
                                 }
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Emerald100
-                            ) {
-                                Text(
-                                    text = Localization.changeAction(lang),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Emerald700,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
                             }
                         }
                     }
@@ -1393,22 +1649,43 @@ fun ManualExpenseDialog(
                                 }
                             }
 
-                            onSave(
-                                expenseToEdit?.id ?: 0L,
-                                title.trim(),
-                                parsedAmount,
-                                catId,
-                                catName,
-                                finalTimestamp,
-                                splitType,
-                                finalMemberIds,
-                                memberDisplay,
-                                note.trim(),
-                                finalPayerId,
-                                finalPayerName,
-                                finalPayerMemberIdsCsv,
-                                finalPayerAmountsCsv
-                            )
+                            if (isReminderMode && onSaveReminder != null) {
+                                onSaveReminder(
+                                    expenseToEdit?.id ?: 0L,
+                                    title.trim(),
+                                    parsedAmount,
+                                    catId,
+                                    catName,
+                                    reminderDayOfMonth,
+                                    reminderHour,
+                                    reminderMinute,
+                                    splitType,
+                                    finalMemberIds,
+                                    memberDisplay,
+                                    note.trim(),
+                                    finalPayerId,
+                                    finalPayerName,
+                                    finalPayerMemberIdsCsv,
+                                    finalPayerAmountsCsv
+                                )
+                            } else {
+                                onSave(
+                                    expenseToEdit?.id ?: 0L,
+                                    title.trim(),
+                                    parsedAmount,
+                                    catId,
+                                    catName,
+                                    finalTimestamp,
+                                    splitType,
+                                    finalMemberIds,
+                                    memberDisplay,
+                                    note.trim(),
+                                    finalPayerId,
+                                    finalPayerName,
+                                    finalPayerMemberIdsCsv,
+                                    finalPayerAmountsCsv
+                                )
+                            }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Emerald700, contentColor = Color.White),
                         shape = RoundedCornerShape(14.dp),

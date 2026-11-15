@@ -93,6 +93,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -120,6 +121,8 @@ import com.example.ui.components.MemberDialog
 import com.example.ui.components.OnboardingCarouselDialog
 import com.example.ui.components.PrivacyConsentDialog
 import com.example.ui.components.ReceiptScanDialog
+import com.example.ui.components.ReminderNotificationBanner
+import com.example.ui.components.RemindersManagerDialog
 import com.example.ui.components.UserAvatar
 import com.example.ui.components.PremiumPaywallDialog
 import com.example.ui.components.QuickActionChooserDialog
@@ -147,7 +150,7 @@ import com.example.util.SpeechRecognitionHelper
 import kotlinx.coroutines.launch
 
 enum class AppTab(val title: String) {
-    EXPENSES("Έξοδα"),
+    EXPENSES("Αρχική"),
     ANALYTICS("Στατιστικά"),
     MEMBERS("Μέλη"),
     CATEGORIES("Κατηγορίες")
@@ -224,6 +227,8 @@ fun MainScreen(
     val editingSavingsGoal by viewModel.editingSavingsGoal.collectAsStateWithLifecycle()
     val showRecurringExpenseDialog by viewModel.showRecurringExpenseDialog.collectAsStateWithLifecycle()
     val editingRecurringExpense by viewModel.editingRecurringExpense.collectAsStateWithLifecycle()
+    val showRemindersManagerDialog by viewModel.showRemindersManagerDialog.collectAsStateWithLifecycle()
+    val activeDueReminders by viewModel.activeDueReminders.collectAsStateWithLifecycle()
     val recurringExpenses by viewModel.allRecurringExpenses.collectAsStateWithLifecycle()
     val savingsGoals by viewModel.allSavingsGoals.collectAsStateWithLifecycle()
     val launchWithChooser by viewModel.launchWithChooser.collectAsStateWithLifecycle()
@@ -347,7 +352,7 @@ fun MainScreen(
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Fintel",
+                            text = "Finsay",
                             fontFamily = ModernFontFamily,
                             fontWeight = FontWeight.Black,
                             fontSize = 25.sp,
@@ -486,20 +491,17 @@ fun MainScreen(
                     )
                 }
             }
-        },
-        floatingActionButton = {
-            VoiceMicButton(
-                isListening = isListening,
-                onMicClick = { viewModel.openVoiceInputDialog() }
-            )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Active Household Bar (Visible across all tabs so user can always see and switch active exodologio)
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Active Household Bar (Visible across all tabs so user can always see and switch active exodologio)
             HouseholdActiveBar(
                 currentHousehold = currentHousehold,
                 households = userHouseholds,
@@ -519,6 +521,16 @@ fun MainScreen(
                     appLanguage = appLanguage,
                     onConfirmTransaction = { viewModel.confirmBankTransaction(it) },
                     onDismissTransaction = { viewModel.dismissBankTransaction(it) }
+                )
+            }
+
+            // Bill / Expense Reminders Due Banner
+            if (activeDueReminders.isNotEmpty()) {
+                ReminderNotificationBanner(
+                    reminders = activeDueReminders,
+                    appLanguage = appLanguage,
+                    onRecordReminder = { viewModel.logExpenseFromReminder(it) },
+                    onDismissReminder = { viewModel.dismissDueReminder(it) }
                 )
             }
 
@@ -607,8 +619,19 @@ fun MainScreen(
                     )
                 }
             }
+            }
+            }
 
-            // Burger Menu Drawer (Requirement 4: Contained between top header and bottom footer)
+            // Floating Voice Mic Button positioned identically to Scaffold's FAB, underneath BurgerMenuDrawer
+            VoiceMicButton(
+                isListening = isListening,
+                onMicClick = { viewModel.openVoiceInputDialog() },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+            )
+
+            // Burger Menu Drawer: slides right-to-left over ALL height between TopBar and BottomBar (covering HouseholdActiveBar & Mic)
             BurgerMenuDrawer(
                 isOpen = showBurgerMenu,
                 currentUser = currentUser,
@@ -622,12 +645,15 @@ fun MainScreen(
                 onOpenExodologio = { viewModel.openExodologioDetailsDialog() },
                 onOpenSettings = { viewModel.openSettingsDialog() },
                 onOpenGuide = { viewModel.openOnboardingGuide() },
+                onOpenReminders = { viewModel.openRemindersManagerDialog() },
                 onSignOut = { viewModel.signOutUser() },
-                onDismiss = { viewModel.dismissBurgerMenu() }
+                onDismiss = { viewModel.dismissBurgerMenu() },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(10f)
             )
         }
     }
-}
 
     // Voice Confirmation Dialog with editable Amount, Category, Members, Date (Requirement 2)
     VoiceConfirmationDialog(
@@ -913,6 +939,41 @@ fun MainScreen(
         )
     }
 
+    // Reminders Management Dialog
+    if (showRemindersManagerDialog) {
+        RemindersManagerDialog(
+            reminders = recurringExpenses,
+            categories = categories,
+            members = members,
+            appLanguage = appLanguage,
+            onDismiss = { viewModel.dismissRemindersManagerDialog() },
+            onSaveReminder = { id, title, amount, categoryId, categoryName, dayOfMonth, reminderHour, reminderMinute, splitType, memberIds, memberNamesDisplay, note, payerId, payerName, payerIdsCsv, payerAmountsCsv ->
+                viewModel.saveRecurringExpense(
+                    id = id,
+                    title = title,
+                    amount = amount,
+                    categoryId = categoryId,
+                    categoryName = categoryName,
+                    dayOfMonth = dayOfMonth,
+                    note = note,
+                    payerMemberId = payerId,
+                    payerMemberName = payerName,
+                    reminderHour = reminderHour,
+                    reminderMinute = reminderMinute,
+                    splitType = splitType,
+                    memberIds = memberIds,
+                    memberNamesDisplay = memberNamesDisplay,
+                    payerMemberIdsCsv = payerIdsCsv,
+                    payerAmountsCsv = payerAmountsCsv,
+                    autoRegisterIfDue = false
+                )
+            },
+            onToggleActive = { viewModel.toggleRecurringActive(it) },
+            onDeleteReminder = { viewModel.deleteRecurringExpense(it) },
+            onLogExpenseNow = { viewModel.logExpenseFromReminder(it) }
+        )
+    }
+
     // App Settings Dialog (Profile, Desktop Tile / Widget, Theme, Family Cloud Sync, Evening Reminders)
     if (showSettingsDialog) {
         AppSettingsDialog(
@@ -931,7 +992,6 @@ fun MainScreen(
             onAcceptNotificationConsent = { viewModel.acceptNotificationConsent() },
             onToggleReminder = { viewModel.toggleDailyReminder(it) },
             onSetReminderTime = { h, m -> viewModel.setDailyReminderTime(h, m) },
-            onTestReminder = { viewModel.triggerTestReminderNotification() },
             onToggleBankAutoCatcher = { viewModel.toggleBankAutoCatcher(it) },
             onThemeChange = { viewModel.setThemeMode(it) },
             onLanguageChange = { viewModel.setAppLanguage(it) },

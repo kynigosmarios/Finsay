@@ -142,7 +142,7 @@ fun ReceiptScanDialog(
             try {
                 val inputImage = InputImage.fromBitmap(bitmap, 0)
 
-                // 1. Try QR / Barcode first for AADE receipts
+                // 1. Scan QR / Barcode for AADE verification & AFM metadata
                 val barcodeScanner = BarcodeScanning.getClient()
                 val barcodes = withContext(Dispatchers.IO) {
                     try {
@@ -151,31 +151,40 @@ fun ReceiptScanDialog(
                         emptyList()
                     }
                 }
+                var aadeQr = barcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
 
-                val aadeQr = barcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-                if (!aadeQr.isNullOrBlank()) {
-                    val result = ReceiptParser.parseAadeQr(aadeQr, categories)
-                    if (result.amount > 0.0) {
-                        parsedData = result
-                        titleInput = result.title
-                        amountInput = String.format(Locale.US, "%.2f", result.amount)
-                        selectedTimestamp = result.timestamp
-                        val matchedCat = categories.find { it.name.equals(result.suggestedCategoryName, ignoreCase = true) }
-                            ?: categories.firstOrNull()
-                        selectedCategory = matchedCat
-                        isProcessing = false
-                        scanStatusMessage = null
-                        return@launch
-                    }
+                // If no QR found in full-resolution image, crop bottom 45% (where Greek AADE QR codes are located)
+                if (aadeQr.isNullOrBlank() && bitmap.height > 600) {
+                    try {
+                        val cropY = (bitmap.height * 0.55).toInt()
+                        val cropH = bitmap.height - cropY
+                        val bottomCrop = Bitmap.createBitmap(bitmap, 0, cropY, bitmap.width, cropH)
+                        val bottomImage = InputImage.fromBitmap(bottomCrop, 0)
+                        val bottomBarcodes = withContext(Dispatchers.IO) {
+                            try {
+                                barcodeScanner.process(bottomImage).await()
+                            } catch (e: Exception) {
+                                emptyList()
+                            }
+                        }
+                        aadeQr = bottomBarcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
+                    } catch (_: Exception) {}
                 }
 
-                // 2. OCR Text Recognition
+                // 2. OCR Text Recognition (always runs to extract store name & total)
                 val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
                 val visionText = withContext(Dispatchers.IO) {
                     textRecognizer.process(inputImage).await()
                 }
 
-                val result = ReceiptParser.parseOcrText(visionText.text, categories)
+                // 3. Parse receipt with full text + spatial bounding boxes + QR metadata
+                val result = ReceiptParser.parseReceipt(
+                    visionText = visionText,
+                    rawText = visionText.text,
+                    aadeQr = aadeQr,
+                    availableCategories = categories
+                )
+
                 parsedData = result
                 titleInput = result.title
                 amountInput = if (result.amount > 0.0) String.format(Locale.US, "%.2f", result.amount) else ""

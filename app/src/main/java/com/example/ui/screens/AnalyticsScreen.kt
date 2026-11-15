@@ -109,6 +109,15 @@ data class PieChartSlice(
     val color: Color
 )
 
+private data class SpendCalculationResult(
+    val individualSpendMap: Map<FamilyMember, Double>,
+    val commonHouseholdSpend: Double,
+    val directParentsSpend: Double,
+    val kidsSpend: Double,
+    val payerSpendMap: Map<FamilyMember, Double>,
+    val memberSpendMap: Map<FamilyMember, Double>
+)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PieChartView(
@@ -420,26 +429,91 @@ fun AnalyticsScreen(
     }
 
     // Income breakdown by Member
-    val memberIncomeMap = members.associateWith { member ->
-        periodIncomes.filter { it.memberId == member.id }.sumOf { it.amount }
+    val memberIncomeMap = remember(members, periodIncomes) {
+        members.associateWith { member ->
+            periodIncomes.filter { it.memberId == member.id }.sumOf { it.amount }
+        }
     }
-    val unassignedMemberIncomes = periodIncomes.filter { inc ->
-        members.none { it.id == inc.memberId }
-    }.sumOf { it.amount }
+    val unassignedMemberIncomes = remember(members, periodIncomes) {
+        periodIncomes.filter { inc ->
+            members.none { it.id == inc.memberId }
+        }.sumOf { it.amount }
+    }
 
     // Income breakdown by Category
-    val categoryIncomeMap = periodIncomes.groupBy { it.category }
-        .mapValues { entry -> entry.value.sumOf { it.amount } }
-        .toList()
-        .sortedByDescending { it.second }
+    val categoryIncomeMap = remember(periodIncomes) {
+        periodIncomes.groupBy { it.category }
+            .mapValues { entry -> entry.value.sumOf { it.amount } }
+            .toList()
+            .sortedByDescending { it.second }
+    }
 
-    // Helper to identify which family members an expense belongs to
-    fun getMembersForExpense(exp: Expense): List<FamilyMember> {
-        val isExplicitAllFamily = exp.splitType == "ALL_FAMILY" &&
-            (exp.memberNamesDisplay.isBlank() || exp.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true))
+    val parentsList = remember(members) { members.filter { it.role.equals("Γονέας", ignoreCase = true) } }
+    val kidsMembers = remember(members) { members.filter { it.role.equals("Παιδί", ignoreCase = true) } }
+    val hasFamilyWithKids = remember(parentsList, kidsMembers) { parentsList.isNotEmpty() && kidsMembers.isNotEmpty() }
 
-        if (isExplicitAllFamily) {
-            // Check if title or note specifically mentions a member before declaring 100% common
+    // Available split modes:
+    // If hasFamilyWithKids: 0 = Individual, 1 = Parents, 2 = Kids, 3 = Who Paid
+    // If NOT hasFamilyWithKids: 0 = Individual, 3 = Who Paid
+    val displayedMembers = remember(splitMode, hasFamilyWithKids, members, parentsList, kidsMembers) {
+        when {
+            splitMode == 3 -> members // Ποιος Πλήρωσε
+            splitMode == 1 && hasFamilyWithKids -> parentsList // Γονείς
+            splitMode == 2 && hasFamilyWithKids -> kidsMembers // Παιδιά
+            else -> members // Ατομικά
+        }
+    }
+
+    // Spend calculations (Individual, Parents, Kids, and Payer)
+    val (individualSpendMap, commonHouseholdSpend, directParentsSpend, kidsSpend, payerSpendMap, memberSpendMap) = remember(
+        periodExpenses, members, displayedMembers, splitMode, hasFamilyWithKids, parentsList
+    ) {
+        // Helper to identify which family members an expense belongs to
+        fun getMembersForExpense(exp: Expense): List<FamilyMember> {
+            val isExplicitAllFamily = exp.splitType == "ALL_FAMILY" &&
+                (exp.memberNamesDisplay.isBlank() || exp.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true))
+
+            if (isExplicitAllFamily) {
+                val combinedText = "${exp.title} ${exp.note}"
+                val normCombined = GreekVoiceParser.normalizeGreek(combinedText)
+                val byMention = members.filter { m ->
+                    val nameNorm = GreekVoiceParser.normalizeGreek(m.name)
+                    val keywords = m.voiceKeywords.split(",").map { GreekVoiceParser.normalizeGreek(it.trim()) }.filter { it.isNotBlank() }
+                    (keywords + nameNorm).any { kw -> GreekVoiceParser.containsWord(normCombined, kw) }
+                }
+                if (byMention.isNotEmpty()) return byMention
+
+                val catNorm = GreekVoiceParser.normalizeGreek(exp.categoryName)
+                if (catNorm.contains("παιδ") || catNorm.contains("σχολ") || catNorm.contains("φροντιστηρ")) {
+                    val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
+                    if (kids.isNotEmpty()) return kids
+                }
+                return emptyList()
+            }
+
+            val ids = exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
+            val byId = members.filter { ids.contains(it.id) }
+            if (byId.isNotEmpty()) return byId
+
+            if (exp.memberNamesDisplay.isNotBlank() && !exp.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) && !exp.memberNamesDisplay.equals("Family Shared", ignoreCase = true)) {
+                val raw = exp.memberNamesDisplay.trim()
+                if (raw.equals("Γονείς", ignoreCase = true) || raw.equals("Parents", ignoreCase = true)) {
+                    val parents = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
+                    if (parents.isNotEmpty()) return parents
+                } else if (raw.equals("Παιδιά", ignoreCase = true) || raw.equals("Children", ignoreCase = true)) {
+                    val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
+                    if (kids.isNotEmpty()) return kids
+                } else if (raw.equals("Συγκάτοικοι", ignoreCase = true) || raw.equals("Roommates", ignoreCase = true)) {
+                    val roommates = members.filter { it.role.equals("Συγκάτοικος", ignoreCase = true) || it.role.equals("Συγκάτοικοι", ignoreCase = true) }
+                    if (roommates.isNotEmpty()) return roommates
+                }
+                val byName = members.filter { m ->
+                    GreekVoiceParser.containsWord(GreekVoiceParser.normalizeGreek(exp.memberNamesDisplay), GreekVoiceParser.normalizeGreek(m.name)) ||
+                    exp.memberNamesDisplay.contains(m.name, ignoreCase = true)
+                }
+                if (byName.isNotEmpty()) return byName
+            }
+
             val combinedText = "${exp.title} ${exp.note}"
             val normCombined = GreekVoiceParser.normalizeGreek(combinedText)
             val byMention = members.filter { m ->
@@ -449,153 +523,95 @@ fun AnalyticsScreen(
             }
             if (byMention.isNotEmpty()) return byMention
 
-            // Check if category specifically targets kids
             val catNorm = GreekVoiceParser.normalizeGreek(exp.categoryName)
             if (catNorm.contains("παιδ") || catNorm.contains("σχολ") || catNorm.contains("φροντιστηρ")) {
                 val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
                 if (kids.isNotEmpty()) return kids
             }
+
             return emptyList()
         }
 
-        // 1. By ID in memberIdsCsv
-        val ids = exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-        val byId = members.filter { ids.contains(it.id) }
-        if (byId.isNotEmpty()) return byId
+        val indSpendMap = members.associateWith { 0.0 }.toMutableMap()
+        var commonSpend = 0.0
 
-        // 2. By name or collective role in memberNamesDisplay
-        if (exp.memberNamesDisplay.isNotBlank() && !exp.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) && !exp.memberNamesDisplay.equals("Family Shared", ignoreCase = true)) {
-            val raw = exp.memberNamesDisplay.trim()
-            if (raw.equals("Γονείς", ignoreCase = true) || raw.equals("Parents", ignoreCase = true)) {
-                val parents = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
-                if (parents.isNotEmpty()) return parents
-            } else if (raw.equals("Παιδιά", ignoreCase = true) || raw.equals("Children", ignoreCase = true)) {
-                val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-                if (kids.isNotEmpty()) return kids
-            } else if (raw.equals("Συγκάτοικοι", ignoreCase = true) || raw.equals("Roommates", ignoreCase = true)) {
-                val roommates = members.filter { it.role.equals("Συγκάτοικος", ignoreCase = true) || it.role.equals("Συγκάτοικοι", ignoreCase = true) }
-                if (roommates.isNotEmpty()) return roommates
-            }
-            val byName = members.filter { m ->
-                GreekVoiceParser.containsWord(GreekVoiceParser.normalizeGreek(exp.memberNamesDisplay), GreekVoiceParser.normalizeGreek(m.name)) ||
-                exp.memberNamesDisplay.contains(m.name, ignoreCase = true)
-            }
-            if (byName.isNotEmpty()) return byName
-        }
-
-        // 3. By title or note mention
-        val combinedText = "${exp.title} ${exp.note}"
-        val normCombined = GreekVoiceParser.normalizeGreek(combinedText)
-        val byMention = members.filter { m ->
-            val nameNorm = GreekVoiceParser.normalizeGreek(m.name)
-            val keywords = m.voiceKeywords.split(",").map { GreekVoiceParser.normalizeGreek(it.trim()) }.filter { it.isNotBlank() }
-            (keywords + nameNorm).any { kw -> GreekVoiceParser.containsWord(normCombined, kw) }
-        }
-        if (byMention.isNotEmpty()) return byMention
-
-        // 4. By category if specifically for kids
-        val catNorm = GreekVoiceParser.normalizeGreek(exp.categoryName)
-        if (catNorm.contains("παιδ") || catNorm.contains("σχολ") || catNorm.contains("φροντιστηρ")) {
-            val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-            if (kids.isNotEmpty()) return kids
-        }
-
-        return emptyList()
-    }
-
-    // 1. Calculate Individual vs Common Household Spend
-    val individualSpendMap = members.associateWith { 0.0 }.toMutableMap()
-    var commonHouseholdSpend = 0.0
-
-    periodExpenses.forEach { exp ->
-        val assigned = getMembersForExpense(exp)
-        if (assigned.isEmpty()) {
-            commonHouseholdSpend += exp.amount
-        } else {
-            val perPerson = exp.amount / assigned.size
-            assigned.forEach { m ->
-                individualSpendMap[m] = (individualSpendMap[m] ?: 0.0) + perPerson
+        periodExpenses.forEach { exp ->
+            val assigned = getMembersForExpense(exp)
+            if (assigned.isEmpty()) {
+                commonSpend += exp.amount
+            } else {
+                val perPerson = exp.amount / assigned.size
+                assigned.forEach { m ->
+                    indSpendMap[m] = (indSpendMap[m] ?: 0.0) + perPerson
+                }
             }
         }
-    }
 
-    // 2. Parents vs Kids calculations (Parents bear direct expenses + common household expenses)
-    var directParentsSpend = 0.0
-    var kidsSpend = 0.0
+        var dirParents = 0.0
+        var kSpend = 0.0
 
-    members.forEach { m ->
-        val spend = individualSpendMap[m] ?: 0.0
-        if (m.role.equals("Παιδί", ignoreCase = true)) {
-            kidsSpend += spend
-        } else {
-            directParentsSpend += spend
+        members.forEach { m ->
+            val spend = indSpendMap[m] ?: 0.0
+            if (m.role.equals("Παιδί", ignoreCase = true)) {
+                kSpend += spend
+            } else {
+                dirParents += spend
+            }
         }
+
+        val pSpendMap = members.associateWith { 0.0 }.toMutableMap()
+        periodExpenses.forEach { exp ->
+            val shares = exp.getPayerShares(members)
+            shares.forEach { share ->
+                val payer = members.find { it.id == share.memberId }
+                    ?: members.find { it.name.equals(share.memberName, ignoreCase = true) }
+                    ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                    ?: members.firstOrNull()
+
+                if (payer != null) {
+                    pSpendMap[payer] = (pSpendMap[payer] ?: 0.0) + share.amount
+                }
+            }
+        }
+
+        val mSpendMap = displayedMembers.associateWith { member ->
+            if (splitMode == 3) {
+                pSpendMap[member] ?: 0.0
+            } else {
+                val ind = indSpendMap[member] ?: 0.0
+                val comShare = when {
+                    splitMode == 2 -> 0.0
+                    hasFamilyWithKids -> {
+                        if (member.role.equals("Γονέας", ignoreCase = true) && parentsList.isNotEmpty()) {
+                            commonSpend / parentsList.size
+                        } else if (parentsList.isEmpty() && members.isNotEmpty()) {
+                            commonSpend / members.size
+                        } else {
+                            0.0
+                        }
+                    }
+                    else -> {
+                        if (members.isNotEmpty()) commonSpend / members.size else 0.0
+                    }
+                }
+                ind + comShare
+            }
+        }
+
+        SpendCalculationResult(indSpendMap, commonSpend, dirParents, kSpend, pSpendMap, mSpendMap)
     }
 
     val parentsTotalSpend = directParentsSpend + commonHouseholdSpend
-    val parentsList = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
-    val kidsMembers = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-    val hasFamilyWithKids = parentsList.isNotEmpty() && kidsMembers.isNotEmpty()
-
-    // 2b. Calculate Who Actually Paid (Payer spending, supporting multiple payers and custom splits)
-    val payerSpendMap = members.associateWith { 0.0 }.toMutableMap()
-    periodExpenses.forEach { exp ->
-        val shares = exp.getPayerShares(members)
-        shares.forEach { share ->
-            val payer = members.find { it.id == share.memberId }
-                ?: members.find { it.name.equals(share.memberName, ignoreCase = true) }
-                ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
-                ?: members.firstOrNull()
-
-            if (payer != null) {
-                payerSpendMap[payer] = (payerSpendMap[payer] ?: 0.0) + share.amount
-            }
-        }
-    }
-
-    // Available split modes:
-    // If hasFamilyWithKids: 0 = Individual, 1 = Parents, 2 = Kids, 3 = Who Paid
-    // If NOT hasFamilyWithKids: 0 = Individual, 3 = Who Paid
-    val displayedMembers = when {
-        splitMode == 3 -> members // Ποιος Πλήρωσε
-        splitMode == 1 && hasFamilyWithKids -> parentsList // Γονείς
-        splitMode == 2 && hasFamilyWithKids -> kidsMembers // Παιδιά
-        else -> members // Ατομικά
-    }
-
-    val memberSpendMap = displayedMembers.associateWith { member ->
-        if (splitMode == 3) {
-            payerSpendMap[member] ?: 0.0
-        } else {
-            val ind = individualSpendMap[member] ?: 0.0
-            val comShare = when {
-                splitMode == 2 -> 0.0 // Kids mode: direct child expenses
-                hasFamilyWithKids -> {
-                    // In a family with kids, parents share the common household expenses
-                    if (member.role.equals("Γονέας", ignoreCase = true) && parentsList.isNotEmpty()) {
-                        commonHouseholdSpend / parentsList.size
-                    } else if (parentsList.isEmpty() && members.isNotEmpty()) {
-                        commonHouseholdSpend / members.size
-                    } else {
-                        0.0
-                    }
-                }
-                else -> {
-                    // In other households, all members participate in common household expenses
-                    if (members.isNotEmpty()) commonHouseholdSpend / members.size else 0.0
-                }
-            }
-            ind + comShare
-        }
-    }
 
     // 4. Category budget analysis (matched by ID or normalized Greek name)
-    val categorySpendMap = categories.associateWith { cat ->
-        val catNorm = GreekVoiceParser.normalizeGreek(cat.name.trim().lowercase())
-        periodExpenses.filter { exp ->
-            exp.categoryId == cat.id ||
-            (exp.categoryName.isNotBlank() && GreekVoiceParser.normalizeGreek(exp.categoryName.trim().lowercase()) == catNorm)
-        }.sumOf { it.amount }
+    val categorySpendMap = remember(categories, periodExpenses) {
+        categories.associateWith { cat ->
+            val catNorm = GreekVoiceParser.normalizeGreek(cat.name.trim().lowercase())
+            periodExpenses.filter { exp ->
+                exp.categoryId == cat.id ||
+                (exp.categoryName.isNotBlank() && GreekVoiceParser.normalizeGreek(exp.categoryName.trim().lowercase()) == catNorm)
+            }.sumOf { it.amount }
+        }
     }
 
     LazyColumn(

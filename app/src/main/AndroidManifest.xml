@@ -55,6 +55,14 @@
         </receiver>
 
         <receiver
+            android:name="com.example.reminder.BillReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.example.reminder.ACTION_BILL_REMINDER" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name="com.example.reminder.BootReceiver"
             android:exported="true">
             <intent-filter>
@@ -81,7 +89,7 @@
         <service
             android:name="com.example.service.QuickExpenseTileService"
             android:exported="true"
-            android:icon="@drawable/fintel_logo"
+            android:icon="@drawable/finsay_logo"
             android:label="Γρήγορη καταχώρηση"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
@@ -92,7 +100,7 @@
         <!-- Android Bank Notification Auto-Catcher Service -->
         <service
             android:name="com.example.service.BankNotificationListenerService"
-            android:label="Fintel Auto-Catcher"
+            android:label="Finsay Auto-Catcher"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>

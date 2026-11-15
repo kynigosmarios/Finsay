@@ -338,7 +338,7 @@ fun UserProfileDialog(
                                     val displayedName = if (editedFirstName.isNotBlank() || editedLastName.isNotBlank()) {
                                         "$editedFirstName $editedLastName".trim()
                                     } else {
-                                        userProfile?.displayName?.ifBlank { null } ?: Localization.fintelUser(lang)
+                                        userProfile?.displayName?.ifBlank { null } ?: Localization.finsayUser(lang)
                                     }
 
                                     Text(
@@ -351,7 +351,7 @@ fun UserProfileDialog(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (userProfile?.isPremium == true) "Fintel Pro Member ★" else "Fintel Free Account",
+                                        text = if (userProfile?.isPremium == true) "Finsay Pro Member ★" else "Finsay Free Account",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = if (userProfile?.isPremium == true) Amber700 else Emerald700
@@ -934,7 +934,7 @@ fun UserProfileDialog(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = if (userProfile?.isPremium == true) "Fintel Pro" else Localization.freePlan(lang),
+                                            text = if (userProfile?.isPremium == true) "Finsay Pro" else Localization.freePlan(lang),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
                                             color = MaterialTheme.colorScheme.onSurface

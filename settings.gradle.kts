@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Fintel"
+rootProject.name = "Finsay"
 include(":app")

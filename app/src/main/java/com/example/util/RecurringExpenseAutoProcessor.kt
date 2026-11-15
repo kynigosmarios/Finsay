@@ -14,6 +14,23 @@ import java.util.Locale
 object RecurringExpenseAutoProcessor {
     private const val TAG = "RecurringAutoProcessor"
 
+    fun resolveCloudEntityId(rawId: String): Long {
+        val cleaned = rawId.trim().removePrefix("rec_")
+        return cleaned.toLongOrNull()?.takeIf { it > 0L }
+            ?: Math.abs(rawId.hashCode().toLong()).coerceAtLeast(1L)
+    }
+
+    fun deduplicateRecurringExpenses(list: List<RecurringExpense>): List<RecurringExpense> {
+        return list.distinctBy { rec ->
+            val normTitle = GreekVoiceParser.normalizeGreek(rec.title.trim().lowercase())
+            if (normTitle.isNotBlank()) {
+                "$normTitle|${rec.dayOfMonth}|${rec.reminderHour}:${rec.reminderMinute}"
+            } else {
+                "id_${rec.id}"
+            }
+        }
+    }
+
     fun calculateTargetTimestamp(year: Int, monthZeroIndexed: Int, dayOfMonth: Int): Long {
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.YEAR, year)
@@ -101,7 +118,7 @@ object RecurringExpenseAutoProcessor {
                             repository.updateRecurringExpense(updatedRecurring)
                             if (householdId.isNotBlank() && firestoreSyncRepo != null) {
                                 val fbRec = com.example.data.model.FirebaseRecurringExpense(
-                                    id = if (recurring.id > 0) "rec_${recurring.id}" else recurring.title,
+                                    id = if (recurring.id > 0) recurring.id.toString() else recurring.title,
                                     householdId = householdId,
                                     userId = user?.uid.orEmpty(),
                                     title = recurring.title,
@@ -110,6 +127,8 @@ object RecurringExpenseAutoProcessor {
                                     categoryName = recurring.categoryName,
                                     frequency = recurring.frequency,
                                     dayOfMonth = recurring.dayOfMonth,
+                                    reminderHour = recurring.reminderHour,
+                                    reminderMinute = recurring.reminderMinute,
                                     splitType = recurring.splitType,
                                     memberIdsCsv = recurring.memberIdsCsv,
                                     memberNamesDisplay = recurring.memberNamesDisplay,

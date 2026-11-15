@@ -561,7 +561,7 @@ fun PremiumPaywallDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Fintel Pro",
+                        text = "Finsay Pro",
                         fontSize = 19.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -734,7 +734,7 @@ fun PremiumPaywallDialog(
                         verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "What Pro includes:" else "Τι περιλαμβάνει το Fintel Pro:",
+                            text = if (lang == Localization.Language.ENGLISH) "What Pro includes:" else "Τι περιλαμβάνει το Finsay Pro:",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

@@ -360,7 +360,7 @@ class FirestoreSyncRepository(
                 ?: UserProfile(uid = uid, email = email, displayName = displayName)
 
             // Respect whatever name was saved in Firestore first; only fallback to Auth displayName if blank
-            val profileDisplayName = if (existing.displayName.isNotBlank()) existing.displayName else displayName.ifBlank { "Χρήστης Fintel" }
+            val profileDisplayName = if (existing.displayName.isNotBlank()) existing.displayName else displayName.ifBlank { "Χρήστης Finsay" }
             val derivedFirst = if (existing.firstName.isNotBlank()) {
                 existing.firstName
             } else if (firstName.isNotBlank()) {
@@ -449,7 +449,7 @@ class FirestoreSyncRepository(
             }
 
             val profileDisplayName = displayName.ifBlank {
-                if (firstName.isNotBlank() || lastName.isNotBlank()) "$firstName $lastName".trim() else "Χρήστης Fintel"
+                if (firstName.isNotBlank() || lastName.isNotBlank()) "$firstName $lastName".trim() else "Χρήστης Finsay"
             }
             val derivedFirst = if (firstName.isNotBlank()) firstName else profileDisplayName.split(" ").firstOrNull().orEmpty()
             val derivedLast = if (lastName.isNotBlank()) lastName else {
@@ -667,7 +667,7 @@ class FirestoreSyncRepository(
         city: String
     ): Result<UserProfile> {
         if (uid.isBlank()) return Result.failure(Exception("Μη έγκυρο αναγνωριστικό χρήστη"))
-        val fullName = "$firstName $lastName".trim().ifBlank { "Χρήστης Fintel" }
+        val fullName = "$firstName $lastName".trim().ifBlank { "Χρήστης Finsay" }
         val updates = mapOf(
             "displayName" to fullName,
             "firstName" to firstName.trim(),

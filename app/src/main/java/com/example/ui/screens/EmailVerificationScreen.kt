@@ -95,7 +95,7 @@ fun EmailVerificationScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             Text(
-                text = "Fintel",
+                text = "Finsay",
                 fontFamily = ModernFontFamily,
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Black,

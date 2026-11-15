@@ -1,6 +1,9 @@
 package com.example.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -8,6 +11,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +37,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
@@ -77,18 +82,25 @@ fun BurgerMenuDrawer(
     onOpenExodologio: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenGuide: (() -> Unit)? = null,
+    onOpenReminders: (() -> Unit)? = null,
     onSignOut: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     var showLegalDialog by remember { mutableStateOf(false) }
     var selectedLegalTab by remember { mutableStateOf("PRIVACY") }
 
+    BackHandler(enabled = isOpen) {
+        onDismiss()
+    }
+
     AnimatedVisibility(
         visible = isOpen,
-        enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(150)),
-        exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(120))
+        enter = fadeIn(animationSpec = tween(durationMillis = 260)),
+        exit = fadeOut(animationSpec = tween(durationMillis = 220)),
+        modifier = modifier
     ) {
         Box(
             modifier = Modifier
@@ -100,22 +112,35 @@ fun BurgerMenuDrawer(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable { onDismiss() }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss
+                    )
             )
 
-            // Slide-in drawer from right
-            AnimatedVisibility(
-                visible = isOpen,
-                enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
+            // Smooth slide-in drawer from right to left covering full available height
             Surface(
                 modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .animateEnterExit(
+                        enter = slideInHorizontally(
+                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                            initialOffsetX = { fullWidth -> fullWidth }
+                        ),
+                        exit = slideOutHorizontally(
+                            animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                            targetOffsetX = { fullWidth -> fullWidth }
+                        )
+                    )
                     .fillMaxHeight()
                     .widthIn(min = 300.dp, max = 360.dp)
                     .fillMaxWidth(0.85f)
-                    .clickable(enabled = false) {}, // absorb clicks
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    ),
                 color = MaterialTheme.colorScheme.surface,
                 shape = RoundedCornerShape(topStart = 24.dp, bottomStart = 24.dp),
                 tonalElevation = 8.dp,
@@ -192,7 +217,7 @@ fun BurgerMenuDrawer(
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = userProfile?.displayName?.ifBlank { null } ?: currentUser?.displayName?.ifBlank { null } ?: Localization.fintelUser(lang),
+                                        text = userProfile?.displayName?.ifBlank { null } ?: currentUser?.displayName?.ifBlank { null } ?: Localization.finsayUser(lang),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -306,7 +331,22 @@ fun BurgerMenuDrawer(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    // 3. Το Προφίλ μου
+                    // 3. Υπενθυμίσεις
+                    BurgerNavigationItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Reminders" else "Υπενθυμίσεις",
+                        icon = Icons.Default.NotificationsActive,
+                        iconTint = if (isDark) Color(0xFFFBBF24) else Amber700,
+                        iconBg = (if (isDark) Color(0xFFFBBF24) else Amber700).copy(alpha = if (isDark) 0.20f else 0.12f),
+                        testTag = "burger_item_reminders",
+                        onClick = {
+                            onDismiss()
+                            onOpenReminders?.invoke()
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // 4. Το Προφίλ μου
                     BurgerNavigationItem(
                         title = Localization.myProfile(lang),
                         icon = Icons.Default.Person,
@@ -421,7 +461,6 @@ fun BurgerMenuDrawer(
             }
         }
     }
-}
 
     if (showLegalDialog) {
         LegalDocumentsDialog(

@@ -72,8 +72,8 @@ fun LegalDocumentsDialog(
     val context = LocalContext.current
     var selectedTab by remember { mutableStateOf(if (initialTab == "PRIVACY") 1 else 0) }
 
-    val privacyCloudUrl = "https://oikonomos-af58b.web.app/privacy-policy.html"
-    val termsCloudUrl = "https://oikonomos-af58b.web.app/terms-of-service.html"
+    val privacyCloudUrl = "https://finsayapp.com/privacy-policy.html"
+    val termsCloudUrl = "https://finsayapp.com/terms-of-service.html"
     val currentCloudUrl = if (selectedTab == 0) termsCloudUrl else privacyCloudUrl
 
     Dialog(
@@ -256,7 +256,7 @@ private fun PrivacyPolicyText(lang: Localization.Language) {
     if (lang == Localization.Language.ENGLISH) {
         LegalSection(
             title = "1. Introduction",
-            body = "This Privacy Policy describes how the Fintel (OikoNomos) application collects, uses, stores, and protects your personal and financial tracking data in compliance with the General Data Protection Regulation (EU) 2016/679 (GDPR), the Greek Law 4624/2019, and Google Play Developer Policies. By using Fintel, you agree to the data collection and practices described herein."
+            body = "This Privacy Policy describes how the Finsay (OikoNomos) application collects, uses, stores, and protects your personal and financial tracking data in compliance with the General Data Protection Regulation (EU) 2016/679 (GDPR), the Greek Law 4624/2019, and Google Play Developer Policies. By using Finsay, you agree to the data collection and practices described herein."
         )
         LegalSection(
             title = "2. Data We Collect",
@@ -276,12 +276,12 @@ private fun PrivacyPolicyText(lang: Localization.Language) {
         )
         LegalSection(
             title = "6. Subscriptions & Third-Party Services",
-            body = "• Google Play Billing: Premium Pro subscriptions are processed securely through Google Play. We do not store or process credit card numbers.\n• Contact & Inquiries: For questions regarding privacy or data rights, contact us at privacy@fintel-app.com."
+            body = "• Google Play Billing: Premium Pro subscriptions are processed securely through Google Play. We do not store or process credit card numbers.\n• Contact & Inquiries: For questions regarding privacy or data rights, contact us at support@finsayapp.com."
         )
     } else {
         LegalSection(
             title = "1. Εισαγωγή & Υπεύθυνος Επεξεργασίας",
-            body = "Η παρούσα Πολιτική Απορρήτου καθορίζει τον τρόπο με τον οποίο η εφαρμογή Fintel (OikoNomos) συλλέγει, αποθηκεύει και προστατεύει τα προσωπικά και οικονομικά σας δεδομένα σύμφωνα με τον Γενικό Κανονισμό Προστασίας Δεδομένων (ΕΕ) 2016/679 (GDPR), τον ελληνικό Νόμο 4624/2019 και τις πολιτικές της Google Play Console. Με τη χρήση της εφαρμογής, αποδέχεστε τις πρακτικές που περιγράφονται στο παρόν."
+            body = "Η παρούσα Πολιτική Απορρήτου καθορίζει τον τρόπο με τον οποίο η εφαρμογή Finsay (OikoNomos) συλλέγει, αποθηκεύει και προστατεύει τα προσωπικά και οικονομικά σας δεδομένα σύμφωνα με τον Γενικό Κανονισμό Προστασίας Δεδομένων (ΕΕ) 2016/679 (GDPR), τον ελληνικό Νόμο 4624/2019 και τις πολιτικές της Google Play Console. Με τη χρήση της εφαρμογής, αποδέχεστε τις πρακτικές που περιγράφονται στο παρόν."
         )
         LegalSection(
             title = "2. Δεδομένα που Συλλέγουμε",
@@ -301,7 +301,7 @@ private fun PrivacyPolicyText(lang: Localization.Language) {
         )
         LegalSection(
             title = "6. Συνδρομές & Επικοινωνία",
-            body = "• Google Play Billing: Οι Pro συνδρομές διαχειρίζονται με ασφάλεια αποκλειστικά από την Google Play. Η εφαρμογή δεν αποθηκεύει αριθμούς τραπεζικών καρτών.\n• Επικοινωνία: Για οποιοδήποτε ερώτημα σχετικά με τα δεδομένα σας, επικοινωνήστε στο support@fintel-app.com."
+            body = "• Google Play Billing: Οι Pro συνδρομές διαχειρίζονται με ασφάλεια αποκλειστικά από την Google Play. Η εφαρμογή δεν αποθηκεύει αριθμούς τραπεζικών καρτών.\n• Επικοινωνία: Για οποιοδήποτε ερώτημα σχετικά με τα δεδομένα σας, επικοινωνήστε στο support@finsayapp.com."
         )
     }
 }
@@ -311,11 +311,11 @@ private fun TermsOfServiceText(lang: Localization.Language) {
     if (lang == Localization.Language.ENGLISH) {
         LegalSection(
             title = "1. Acceptance of Terms",
-            body = "By downloading, installing, or using Fintel (OikoNomos), you agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, you must not use the application."
+            body = "By downloading, installing, or using Finsay (OikoNomos), you agree to be bound by these Terms and Conditions. If you do not agree with any part of these terms, you must not use the application."
         )
         LegalSection(
             title = "2. Financial Disclaimer",
-            body = "Fintel is an informative tracking and organizational tool designed for personal and household financial budgeting. Fintel DOES NOT provide certified financial, investment, accounting, or tax advice. You are solely responsible for reviewing and verifying the accuracy of your financial records."
+            body = "Finsay is an informative tracking and organizational tool designed for personal and household financial budgeting. Finsay DOES NOT provide certified financial, investment, accounting, or tax advice. You are solely responsible for reviewing and verifying the accuracy of your financial records."
         )
         LegalSection(
             title = "3. User Account and Responsibilities",
@@ -323,11 +323,11 @@ private fun TermsOfServiceText(lang: Localization.Language) {
         )
         LegalSection(
             title = "4. Pro Subscriptions & In-App Purchases",
-            body = "• Certain features, such as multiple households and unlimited members, require a Fintel Pro subscription.\n• Subscriptions are billed through Google Play according to the terms stated at the time of purchase.\n• You can manage or cancel your subscription at any time via your Google Play account settings."
+            body = "• Certain features, such as multiple households and unlimited members, require a Finsay Pro subscription.\n• Subscriptions are billed through Google Play according to the terms stated at the time of purchase.\n• You can manage or cancel your subscription at any time via your Google Play account settings."
         )
         LegalSection(
             title = "5. Limitation of Liability",
-            body = "To the maximum extent permitted by applicable law, Fintel and its developers shall not be liable for any indirect, incidental, or consequential damages resulting from the use or inability to use the application or any data loss."
+            body = "To the maximum extent permitted by applicable law, Finsay and its developers shall not be liable for any indirect, incidental, or consequential damages resulting from the use or inability to use the application or any data loss."
         )
         LegalSection(
             title = "6. Governing Law & Jurisdiction",
@@ -336,11 +336,11 @@ private fun TermsOfServiceText(lang: Localization.Language) {
     } else {
         LegalSection(
             title = "1. Αποδοχή των Όρων",
-            body = "Με τη λήψη, εγκατάσταση και χρήση της εφαρμογής Fintel (OikoNomos), συμφωνείτε ρητά με τους παρόντες Όρους και Προϋποθέσεις. Εάν δεν συμφωνείτε με οποιοδήποτε μέρος των όρων, παρακαλείστε να μην χρησιμοποιήσετε την εφαρμογή."
+            body = "Με τη λήψη, εγκατάσταση και χρήση της εφαρμογής Finsay (OikoNomos), συμφωνείτε ρητά με τους παρόντες Όρους και Προϋποθέσεις. Εάν δεν συμφωνείτε με οποιοδήποτε μέρος των όρων, παρακαλείστε να μην χρησιμοποιήσετε την εφαρμογή."
         )
         LegalSection(
             title = "2. Αποποίηση Οικονομικής & Φορολογικής Ευθύνης",
-            body = "Το Fintel αποτελεί αποκλειστικά εργαλείο προσωπικής καταγραφής, οργάνωσης και παρακολούθησης οικιακού προϋπολογισμού. Το Fintel ΔΕΝ παρέχει πιστοποιημένες οικονομικές, επενδυτικές ή φορολογικές συμβουλές. Ο χρήστης φέρει την αποκλειστική ευθύνη για την ορθότητα των στοιχείων που καταχωρεί."
+            body = "Το Finsay αποτελεί αποκλειστικά εργαλείο προσωπικής καταγραφής, οργάνωσης και παρακολούθησης οικιακού προϋπολογισμού. Το Finsay ΔΕΝ παρέχει πιστοποιημένες οικονομικές, επενδυτικές ή φορολογικές συμβουλές. Ο χρήστης φέρει την αποκλειστική ευθύνη για την ορθότητα των στοιχείων που καταχωρεί."
         )
         LegalSection(
             title = "3. Λογαριασμός Χρήστη & Υποχρεώσεις",
@@ -348,11 +348,11 @@ private fun TermsOfServiceText(lang: Localization.Language) {
         )
         LegalSection(
             title = "4. Συνδρομή Pro & Αγορές μέσω Google Play",
-            body = "• Ορισμένες προηγμένες λειτουργίες (π.χ. πολλαπλά εξοδολόγια, απεριόριστα μέλη) απαιτούν συνδρομή Fintel Pro.\n• Οι συνδρομές τιμολογούνται μέσω της Google Play σύμφωνα με τους όρους αγοράς.\n• Μπορείτε να διαχειριστείτε ή να ακυρώσετε τη συνδρομή σας οποτεδήποτε μέσω των ρυθμίσεων του λογαριασμού σας στο Google Play."
+            body = "• Ορισμένες προηγμένες λειτουργίες (π.χ. πολλαπλά εξοδολόγια, απεριόριστα μέλη) απαιτούν συνδρομή Finsay Pro.\n• Οι συνδρομές τιμολογούνται μέσω της Google Play σύμφωνα με τους όρους αγοράς.\n• Μπορείτε να διαχειριστείτε ή να ακυρώσετε τη συνδρομή σας οποτεδήποτε μέσω των ρυθμίσεων του λογαριασμού σας στο Google Play."
         )
         LegalSection(
             title = "5. Περιορισμός Ευθύνης",
-            body = "Στο μέγιστο βαθμό που επιτρέπεται από την ισχύουσα νομοθεσία, το Fintel και οι δημιουργοί του δεν φέρουν ευθύνη για τυχόν έμμεσες ή αποθετικές ζημίες ή απώλεια δεδομένων που προκύπτουν από τη χρήση της εφαρμογής."
+            body = "Στο μέγιστο βαθμό που επιτρέπεται από την ισχύουσα νομοθεσία, το Finsay και οι δημιουργοί του δεν φέρουν ευθύνη για τυχόν έμμεσες ή αποθετικές ζημίες ή απώλεια δεδομένων που προκύπτουν από τη χρήση της εφαρμογής."
         )
         LegalSection(
             title = "6. Εφαρμοστέο Δίκαιο & Δικαιοδοσία",
