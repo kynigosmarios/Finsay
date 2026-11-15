@@ -99,14 +99,18 @@ import com.example.ui.components.CategoryIconHelper
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
+import com.example.util.AnalyticsExpenseFilterHelper
+import com.example.util.AnalyticsSpecialFilter
 import com.example.util.GreekVoiceParser
+import com.example.util.HomeDrillDownRequest
 import com.example.util.SettleUpCalculator
 import java.util.Locale
 
 data class PieChartSlice(
     val label: String,
     val value: Double,
-    val color: Color
+    val color: Color,
+    val onClick: (() -> Unit)? = null
 )
 
 private data class SpendCalculationResult(
@@ -227,7 +231,16 @@ fun PieChartView(
                 val pct = ((slice.value / total) * 100).toInt()
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .then(
+                            if (slice.onClick != null) {
+                                Modifier.clickable { slice.onClick.invoke() }
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -260,18 +273,24 @@ fun AnalyticsScreen(
     onShowPremiumPaywall: (String) -> Unit = {},
     onExportReport: () -> Unit = {},
     onManageCategories: () -> Unit = {},
+    onDrillDownToHome: (HomeDrillDownRequest) -> Unit = {},
+    initialFilterScope: String = "MONTH",
+    initialPeriodKey: String = "CURRENT_MONTH",
+    initialYearKey: String? = null,
+    initialSplitMode: Int = 0,
+    onAnalyticsStateChange: (filterScope: String, periodKey: String, yearKey: String, splitMode: Int) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
     val isGreek = lang != Localization.Language.ENGLISH
     val context = LocalContext.current
-    var splitMode by remember { mutableIntStateOf(0) } // 0 = Ατομικά, 1 = Γονείς + Κοινά, 2 = Ισόποσα σε όλους
+    var splitMode by remember { mutableIntStateOf(initialSplitMode) } // 0 = Ατομικά, 1 = Γονείς + Κοινά, 2 = Ισόποσα σε όλους, 3 = Ποιος Πλήρωσε
     var chartTypeFamily by remember { mutableIntStateOf(0) } // 0 = Μπάρες, 1 = Πίτα (Requirement 6)
     var chartTypeMembers by remember { mutableIntStateOf(0) } // 0 = Μπάρες, 1 = Πίτα (Requirement 6)
     var chartTypeIncome by remember { mutableIntStateOf(0) } // 0 = Μπάρες, 1 = Πίτα
 
     // 3 Period Modes: Month, Year, Total (Requirement 1)
-    var filterScope by remember { mutableStateOf("MONTH") } // "MONTH", "YEAR", "ALL"
+    var filterScope by remember { mutableStateOf(initialFilterScope) } // "MONTH", "YEAR", "ALL"
 
     // Month Selection State
     val currentMonthKey = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date()) }
@@ -300,10 +319,20 @@ fun AnalyticsScreen(
         set.toList().sortedDescending()
     }
 
-    var selectedPeriodKey by remember { mutableStateOf("CURRENT_MONTH") }
-    var selectedYearKey by remember { mutableStateOf(currentYearKey) }
+    var selectedPeriodKey by remember { mutableStateOf(initialPeriodKey) }
+    var selectedYearKey by remember { mutableStateOf(initialYearKey ?: currentYearKey) }
     var showPeriodDropdown by remember { mutableStateOf(false) }
     var showYearDropdown by remember { mutableStateOf(false) }
+
+    val activeDrillDownPeriodKey = when (filterScope) {
+        "ALL" -> "ALL"
+        "YEAR" -> "YEAR:$selectedYearKey"
+        else -> if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
+    }
+
+    androidx.compose.runtime.LaunchedEffect(filterScope, selectedPeriodKey, selectedYearKey, splitMode) {
+        onAnalyticsStateChange(filterScope, selectedPeriodKey, selectedYearKey, splitMode)
+    }
 
     fun getMonthLabel(key: String): String {
         return try {
@@ -423,7 +452,7 @@ fun AnalyticsScreen(
                 val daySum = entry.value.sumOf { it.amount }
                 val parsedDate = try { fmtKey.parse(entry.key) ?: Date() } catch (e: Exception) { Date() }
                 val disp = SimpleDateFormat("dd MMM", Localization.getDateLocale(lang)).format(parsedDate)
-                Pair(disp, daySum)
+                Triple(entry.key, disp, daySum)
             }
         }
     }
@@ -468,75 +497,11 @@ fun AnalyticsScreen(
     val (individualSpendMap, commonHouseholdSpend, directParentsSpend, kidsSpend, payerSpendMap, memberSpendMap) = remember(
         periodExpenses, members, displayedMembers, splitMode, hasFamilyWithKids, parentsList
     ) {
-        // Helper to identify which family members an expense belongs to
-        fun getMembersForExpense(exp: Expense): List<FamilyMember> {
-            val isExplicitAllFamily = exp.splitType == "ALL_FAMILY" &&
-                (exp.memberNamesDisplay.isBlank() || exp.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true))
-
-            if (isExplicitAllFamily) {
-                val combinedText = "${exp.title} ${exp.note}"
-                val normCombined = GreekVoiceParser.normalizeGreek(combinedText)
-                val byMention = members.filter { m ->
-                    val nameNorm = GreekVoiceParser.normalizeGreek(m.name)
-                    val keywords = m.voiceKeywords.split(",").map { GreekVoiceParser.normalizeGreek(it.trim()) }.filter { it.isNotBlank() }
-                    (keywords + nameNorm).any { kw -> GreekVoiceParser.containsWord(normCombined, kw) }
-                }
-                if (byMention.isNotEmpty()) return byMention
-
-                val catNorm = GreekVoiceParser.normalizeGreek(exp.categoryName)
-                if (catNorm.contains("παιδ") || catNorm.contains("σχολ") || catNorm.contains("φροντιστηρ")) {
-                    val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-                    if (kids.isNotEmpty()) return kids
-                }
-                return emptyList()
-            }
-
-            val ids = exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-            val byId = members.filter { ids.contains(it.id) }
-            if (byId.isNotEmpty()) return byId
-
-            if (exp.memberNamesDisplay.isNotBlank() && !exp.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) && !exp.memberNamesDisplay.equals("Family Shared", ignoreCase = true)) {
-                val raw = exp.memberNamesDisplay.trim()
-                if (raw.equals("Γονείς", ignoreCase = true) || raw.equals("Parents", ignoreCase = true)) {
-                    val parents = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
-                    if (parents.isNotEmpty()) return parents
-                } else if (raw.equals("Παιδιά", ignoreCase = true) || raw.equals("Children", ignoreCase = true)) {
-                    val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-                    if (kids.isNotEmpty()) return kids
-                } else if (raw.equals("Συγκάτοικοι", ignoreCase = true) || raw.equals("Roommates", ignoreCase = true)) {
-                    val roommates = members.filter { it.role.equals("Συγκάτοικος", ignoreCase = true) || it.role.equals("Συγκάτοικοι", ignoreCase = true) }
-                    if (roommates.isNotEmpty()) return roommates
-                }
-                val byName = members.filter { m ->
-                    GreekVoiceParser.containsWord(GreekVoiceParser.normalizeGreek(exp.memberNamesDisplay), GreekVoiceParser.normalizeGreek(m.name)) ||
-                    exp.memberNamesDisplay.contains(m.name, ignoreCase = true)
-                }
-                if (byName.isNotEmpty()) return byName
-            }
-
-            val combinedText = "${exp.title} ${exp.note}"
-            val normCombined = GreekVoiceParser.normalizeGreek(combinedText)
-            val byMention = members.filter { m ->
-                val nameNorm = GreekVoiceParser.normalizeGreek(m.name)
-                val keywords = m.voiceKeywords.split(",").map { GreekVoiceParser.normalizeGreek(it.trim()) }.filter { it.isNotBlank() }
-                (keywords + nameNorm).any { kw -> GreekVoiceParser.containsWord(normCombined, kw) }
-            }
-            if (byMention.isNotEmpty()) return byMention
-
-            val catNorm = GreekVoiceParser.normalizeGreek(exp.categoryName)
-            if (catNorm.contains("παιδ") || catNorm.contains("σχολ") || catNorm.contains("φροντιστηρ")) {
-                val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-                if (kids.isNotEmpty()) return kids
-            }
-
-            return emptyList()
-        }
-
         val indSpendMap = members.associateWith { 0.0 }.toMutableMap()
         var commonSpend = 0.0
 
         periodExpenses.forEach { exp ->
-            val assigned = getMembersForExpense(exp)
+            val assigned = AnalyticsExpenseFilterHelper.resolveMembersForExpense(exp, members)
             if (assigned.isEmpty()) {
                 commonSpend += exp.amount
             } else {
@@ -953,7 +918,16 @@ fun AnalyticsScreen(
                 expenses = periodExpenses,
                 categories = categories,
                 appLanguage = appLanguage,
-                onManageBudgets = onManageCategories
+                onManageBudgets = onManageCategories,
+                onCategoryClick = { cat ->
+                    onDrillDownToHome(
+                        HomeDrillDownRequest(
+                            periodKey = currentMonthKey,
+                            typeFilter = "EXPENSE",
+                            categoryId = cat.id
+                        )
+                    )
+                }
             )
         }
 
@@ -1011,7 +985,17 @@ fun AnalyticsScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Surface(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    onDrillDownToHome(
+                                        HomeDrillDownRequest(
+                                            periodKey = activeDrillDownPeriodKey,
+                                            typeFilter = "INCOME"
+                                        )
+                                    )
+                                },
                             shape = RoundedCornerShape(14.dp),
                             color = Color(0xFF10B981).copy(alpha = 0.12f),
                             border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.28f))
@@ -1037,7 +1021,17 @@ fun AnalyticsScreen(
                         }
 
                         Surface(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable {
+                                    onDrillDownToHome(
+                                        HomeDrillDownRequest(
+                                            periodKey = activeDrillDownPeriodKey,
+                                            typeFilter = "EXPENSE"
+                                        )
+                                    )
+                                },
                             shape = RoundedCornerShape(14.dp),
                             color = Color(0xFFEF4444).copy(alpha = 0.08f),
                             border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.22f))
@@ -1206,7 +1200,27 @@ fun AnalyticsScreen(
 
                         // Metric 3: Peak Day
                         Surface(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(14.dp))
+                                .then(
+                                    if (peakSpendingDayInfo != null) {
+                                        Modifier.clickable {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "EXPENSE",
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = "${Localization.peakDayTitle(lang)}: ${peakSpendingDayInfo.second}",
+                                                        exactDayKey = peakSpendingDayInfo.first
+                                                    )
+                                                )
+                                            )
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
                             shape = RoundedCornerShape(14.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
@@ -1240,14 +1254,14 @@ fun AnalyticsScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = peakSpendingDayInfo?.let { String.format(Locale.US, "%.0f €", it.second) } ?: "-",
+                                    text = peakSpendingDayInfo?.let { String.format(Locale.US, "%.0f €", it.third) } ?: "-",
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     maxLines = 1
                                 )
                                 Text(
-                                    text = peakSpendingDayInfo?.first ?: Localization.noPeakDay(lang),
+                                    text = peakSpendingDayInfo?.second ?: Localization.noPeakDay(lang),
                                     fontSize = 9.5.sp,
                                     color = MaterialTheme.colorScheme.outline,
                                     maxLines = 1,
@@ -1348,11 +1362,43 @@ fun AnalyticsScreen(
                                     PieChartSlice(
                                         label = m.name,
                                         value = inc,
-                                        color = Color(m.avatarColorHex)
+                                        color = Color(m.avatarColorHex),
+                                        onClick = {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "INCOME",
+                                                    memberId = m.id,
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = "${Localization.income(lang)}: ${m.name}",
+                                                        exactMemberId = m.id
+                                                    )
+                                                )
+                                            )
+                                        }
                                     )
                                 } else null
                             } + if (unassignedMemberIncomes > 0.001) {
-                                listOf(PieChartSlice(Localization.commonOther(lang), unassignedMemberIncomes, Color(0xFF10B981)))
+                                listOf(
+                                    PieChartSlice(
+                                        label = Localization.commonOther(lang),
+                                        value = unassignedMemberIncomes,
+                                        color = Color(0xFF10B981),
+                                        onClick = {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "INCOME",
+                                                    memberId = -1L,
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = Localization.commonOtherIncome(lang),
+                                                        exactMemberId = -1L
+                                                    )
+                                                )
+                                            )
+                                        }
+                                    )
+                                )
                             } else emptyList()
 
                             PieChartView(
@@ -1370,7 +1416,25 @@ fun AnalyticsScreen(
                                 val progress = (inc / maxIncome).toFloat().coerceIn(0f, 1f)
                                 val avatarColor = Color(member.avatarColorHex)
 
-                                Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "INCOME",
+                                                    memberId = member.id,
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = "${Localization.income(lang)}: ${member.name}",
+                                                        exactMemberId = member.id
+                                                    )
+                                                )
+                                            )
+                                        }
+                                        .padding(vertical = 6.dp, horizontal = 2.dp)
+                                ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1431,7 +1495,25 @@ fun AnalyticsScreen(
                             if (unassignedMemberIncomes > 0.01) {
                                 val unassignedPct = ((unassignedMemberIncomes / safeTotalIncome) * 100).toInt()
                                 val unassignedProgress = (unassignedMemberIncomes / maxIncome).toFloat().coerceIn(0f, 1f)
-                                Column(modifier = Modifier.padding(vertical = 6.dp)) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "INCOME",
+                                                    memberId = -1L,
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = Localization.commonOtherIncome(lang),
+                                                        exactMemberId = -1L
+                                                    )
+                                                )
+                                            )
+                                        }
+                                        .padding(vertical = 6.dp, horizontal = 2.dp)
+                                ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1515,7 +1597,21 @@ fun AnalyticsScreen(
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
                                         color = Color(0xFF059669).copy(alpha = 0.10f),
-                                        border = BorderStroke(1.dp, Color(0xFF059669).copy(alpha = 0.25f))
+                                        border = BorderStroke(1.dp, Color(0xFF059669).copy(alpha = 0.25f)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable {
+                                                onDrillDownToHome(
+                                                    HomeDrillDownRequest(
+                                                        periodKey = activeDrillDownPeriodKey,
+                                                        typeFilter = "INCOME",
+                                                        specialFilter = AnalyticsSpecialFilter(
+                                                            badgeLabel = "${Localization.income(lang)}: ${Localization.translateCategory(catName, lang)}",
+                                                            incomeCategory = catName
+                                                        )
+                                                    )
+                                                )
+                                            }
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -1723,8 +1819,40 @@ fun AnalyticsScreen(
                             // Pie Chart View
                             PieChartView(
                                 slices = listOf(
-                                    PieChartSlice(Localization.parents(lang), parentsTotalSpend, Color(0xFF0284C7)),
-                                    PieChartSlice(Localization.children(lang), kidsSpend, Color(0xFF10B981))
+                                    PieChartSlice(
+                                        label = Localization.parents(lang),
+                                        value = parentsTotalSpend,
+                                        color = Color(0xFF0284C7),
+                                        onClick = {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "EXPENSE",
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = Localization.parents(lang),
+                                                        roleGroupFilter = "PARENTS"
+                                                    )
+                                                )
+                                            )
+                                        }
+                                    ),
+                                    PieChartSlice(
+                                        label = Localization.children(lang),
+                                        value = kidsSpend,
+                                        color = Color(0xFF10B981),
+                                        onClick = {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "EXPENSE",
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = Localization.children(lang),
+                                                        roleGroupFilter = "KIDS"
+                                                    )
+                                                )
+                                            )
+                                        }
+                                    )
                                 ),
                                 totalAmount = totalSpend,
                                 appLanguage = appLanguage
@@ -1743,6 +1871,18 @@ fun AnalyticsScreen(
                                             .weight(parentsTotalSpend.toFloat().coerceAtLeast(0.001f))
                                             .fillMaxSize()
                                             .background(Color(0xFF0284C7))
+                                            .clickable {
+                                                onDrillDownToHome(
+                                                    HomeDrillDownRequest(
+                                                        periodKey = activeDrillDownPeriodKey,
+                                                        typeFilter = "EXPENSE",
+                                                        specialFilter = AnalyticsSpecialFilter(
+                                                            badgeLabel = Localization.parents(lang),
+                                                            roleGroupFilter = "PARENTS"
+                                                        )
+                                                    )
+                                                )
+                                            }
                                     )
                                 }
                                 if (kidsSpend > 0) {
@@ -1751,6 +1891,18 @@ fun AnalyticsScreen(
                                             .weight(kidsSpend.toFloat().coerceAtLeast(0.001f))
                                             .fillMaxSize()
                                             .background(Color(0xFF10B981))
+                                            .clickable {
+                                                onDrillDownToHome(
+                                                    HomeDrillDownRequest(
+                                                        periodKey = activeDrillDownPeriodKey,
+                                                        typeFilter = "EXPENSE",
+                                                        specialFilter = AnalyticsSpecialFilter(
+                                                            badgeLabel = Localization.children(lang),
+                                                            roleGroupFilter = "KIDS"
+                                                        )
+                                                    )
+                                                )
+                                            }
                                     )
                                 }
                             }
@@ -1763,7 +1915,23 @@ fun AnalyticsScreen(
                                 horizontalArrangement = Arrangement.SpaceAround
                             ) {
                                 // Parents
-                                Column {
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "EXPENSE",
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = Localization.parents(lang),
+                                                        roleGroupFilter = "PARENTS"
+                                                    )
+                                                )
+                                            )
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF0284C7)))
                                         Spacer(modifier = Modifier.width(5.dp))
@@ -1779,7 +1947,23 @@ fun AnalyticsScreen(
                                 }
 
                                 // Kids
-                                Column {
+                                Column(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            onDrillDownToHome(
+                                                HomeDrillDownRequest(
+                                                    periodKey = activeDrillDownPeriodKey,
+                                                    typeFilter = "EXPENSE",
+                                                    specialFilter = AnalyticsSpecialFilter(
+                                                        badgeLabel = Localization.children(lang),
+                                                        roleGroupFilter = "KIDS"
+                                                    )
+                                                )
+                                            )
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
                                         Spacer(modifier = Modifier.width(5.dp))
@@ -1882,7 +2066,22 @@ fun AnalyticsScreen(
                                         shape = RoundedCornerShape(14.dp),
                                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .clickable {
+                                                onDrillDownToHome(
+                                                    HomeDrillDownRequest(
+                                                        periodKey = activeDrillDownPeriodKey,
+                                                        typeFilter = "EXPENSE",
+                                                        memberId = kid.id,
+                                                        specialFilter = AnalyticsSpecialFilter(
+                                                            badgeLabel = kid.name,
+                                                            exactMemberId = kid.id
+                                                        )
+                                                    )
+                                                )
+                                            }
                                     ) {
                                         Column(modifier = Modifier.padding(12.dp)) {
                                             Row(
@@ -2046,6 +2245,34 @@ fun AnalyticsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    val triggerMemberBreakdownDrillDown: (com.example.data.entity.FamilyMember) -> Unit = { member ->
+                        val req = when (splitMode) {
+                            3 -> HomeDrillDownRequest(
+                                periodKey = activeDrillDownPeriodKey,
+                                typeFilter = "EXPENSE",
+                                specialFilter = AnalyticsSpecialFilter(
+                                    badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${member.name}",
+                                    payerMemberId = member.id
+                                )
+                            )
+                            2 -> HomeDrillDownRequest(
+                                periodKey = activeDrillDownPeriodKey,
+                                typeFilter = "EXPENSE",
+                                memberId = member.id,
+                                specialFilter = AnalyticsSpecialFilter(
+                                    badgeLabel = member.name,
+                                    exactMemberId = member.id
+                                )
+                            )
+                            else -> HomeDrillDownRequest(
+                                periodKey = activeDrillDownPeriodKey,
+                                typeFilter = "EXPENSE",
+                                memberId = member.id
+                            )
+                        }
+                        onDrillDownToHome(req)
+                    }
+
                     if (displayedMembers.isEmpty()) {
                         Text(
                             text = if (splitMode == 2) Localization.noKidsRegisteredHint(lang) else Localization.noMembersInCategoryHint(lang),
@@ -2059,7 +2286,8 @@ fun AnalyticsScreen(
                             PieChartSlice(
                                 label = m.name,
                                 value = memberSpendMap[m] ?: 0.0,
-                                color = Color(m.avatarColorHex)
+                                color = Color(m.avatarColorHex),
+                                onClick = { triggerMemberBreakdownDrillDown(m) }
                             )
                         }
 
@@ -2080,7 +2308,13 @@ fun AnalyticsScreen(
                             val progress = (spend / safeMax).toFloat().coerceIn(0f, 1f)
                             val avatarColor = Color(member.avatarColorHex)
 
-                            Column(modifier = Modifier.padding(vertical = 7.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable { triggerMemberBreakdownDrillDown(member) }
+                                    .padding(vertical = 7.dp, horizontal = 2.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -2285,7 +2519,21 @@ fun AnalyticsScreen(
                                 else -> Emerald700
                             }
 
-                            Column(modifier = Modifier.padding(vertical = 5.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        onDrillDownToHome(
+                                            HomeDrillDownRequest(
+                                                periodKey = activeDrillDownPeriodKey,
+                                                typeFilter = "EXPENSE",
+                                                categoryId = cat.id
+                                            )
+                                        )
+                                    }
+                                    .padding(vertical = 5.dp, horizontal = 2.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -2465,7 +2713,34 @@ fun AnalyticsScreen(
                                         shape = RoundedCornerShape(10.dp),
                                         color = Amber700.copy(alpha = 0.08f),
                                         border = BorderStroke(1.dp, Amber700.copy(alpha = 0.25f)),
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable {
+                                                val hasDirectPairExpenses = periodExpenses.any { exp ->
+                                                    AnalyticsExpenseFilterHelper.matchesPayer(exp, t.toMember.id, members) &&
+                                                        AnalyticsExpenseFilterHelper.resolveSettleUpBeneficiaries(exp, members)
+                                                            .any { it.id == t.fromMember.id }
+                                                }
+                                                onDrillDownToHome(
+                                                    HomeDrillDownRequest(
+                                                        periodKey = activeDrillDownPeriodKey,
+                                                        typeFilter = "EXPENSE",
+                                                        specialFilter = if (hasDirectPairExpenses) {
+                                                            AnalyticsSpecialFilter(
+                                                                badgeLabel = "${t.toMember.name} ➔ ${t.fromMember.name}",
+                                                                payerMemberId = t.toMember.id,
+                                                                debtorMemberId = t.fromMember.id
+                                                            )
+                                                        } else {
+                                                            AnalyticsSpecialFilter(
+                                                                badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${t.toMember.name}",
+                                                                payerMemberId = t.toMember.id
+                                                            )
+                                                        }
+                                                    )
+                                                )
+                                            }
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -2506,7 +2781,20 @@ fun AnalyticsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 3.dp),
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        onDrillDownToHome(
+                                            HomeDrillDownRequest(
+                                                periodKey = activeDrillDownPeriodKey,
+                                                typeFilter = "EXPENSE",
+                                                specialFilter = AnalyticsSpecialFilter(
+                                                    badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${s.member.name}",
+                                                    payerMemberId = s.member.id
+                                                )
+                                            )
+                                        )
+                                    }
+                                    .padding(vertical = 4.dp, horizontal = 2.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {

@@ -60,6 +60,7 @@ fun BudgetAlertsCard(
     categories: List<ExpenseCategory>,
     appLanguage: String = "EL",
     onManageBudgets: () -> Unit = {},
+    onCategoryClick: ((ExpenseCategory) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
@@ -199,7 +200,19 @@ fun BudgetAlertsCard(
                     else -> Emerald700
                 }
 
-                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .then(
+                            if (onCategoryClick != null) {
+                                Modifier.clickable { onCategoryClick(status.category) }
+                            } else {
+                                Modifier
+                            }
+                        )
+                        .padding(vertical = 4.dp, horizontal = 2.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,

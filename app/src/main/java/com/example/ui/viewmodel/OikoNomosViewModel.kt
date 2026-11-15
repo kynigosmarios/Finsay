@@ -30,9 +30,12 @@ import com.example.data.repository.ExpenseRepository
 import com.example.data.repository.FirestoreSyncRepository
 import com.example.data.safety.DataSafetyGuard
 import com.example.data.seed.FirestoreDataSeed
+import com.example.util.AnalyticsExpenseFilterHelper
+import com.example.util.AnalyticsSpecialFilter
 import com.example.util.BankNotificationHolder
 import com.example.util.BankNotificationSystemManager
 import com.example.util.GreekVoiceParser
+import com.example.util.HomeDrillDownRequest
 import com.example.util.Localization
 import com.example.util.ParsedVoiceExpense
 import com.example.util.PendingBankTransaction
@@ -2959,6 +2962,13 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Filters
+    private data class ExpenseFilterCriteria(
+        val memberId: Long?,
+        val catId: Long?,
+        val query: String,
+        val special: AnalyticsSpecialFilter?
+    )
+
     private val _selectedMemberFilter = MutableStateFlow<Long?>(null) // null = all, -1 = common family, id = specific
     val selectedMemberFilter = _selectedMemberFilter.asStateFlow()
 
@@ -2968,24 +2978,56 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
+    private val _homeSelectedMonthKey = MutableStateFlow<String?>(null) // null = auto most-recent month
+    val homeSelectedMonthKey = _homeSelectedMonthKey.asStateFlow()
+
+    private val _homeSelectedTypeFilter = MutableStateFlow("EXPENSE") // "EXPENSE" or "INCOME"
+    val homeSelectedTypeFilter = _homeSelectedTypeFilter.asStateFlow()
+
+    private val _activeSpecialFilter = MutableStateFlow<AnalyticsSpecialFilter?>(null)
+    val activeSpecialFilter = _activeSpecialFilter.asStateFlow()
+
+    private val _homeDrillDownScrollTrigger = MutableStateFlow(0)
+    val homeDrillDownScrollTrigger = _homeDrillDownScrollTrigger.asStateFlow()
+
+    private val _homeScrollToTopTrigger = MutableStateFlow(0)
+    val homeScrollToTopTrigger = _homeScrollToTopTrigger.asStateFlow()
+
     // Filtered Expenses
     val filteredExpenses: StateFlow<List<Expense>> = combine(
         allExpenses,
-        _selectedMemberFilter,
-        _selectedCategoryFilter,
-        _searchQuery
-    ) { expenses, memberId, catId, query ->
+        allMembers,
+        allCategories,
+        combine(_selectedMemberFilter, _selectedCategoryFilter, _searchQuery, _activeSpecialFilter) { memberId, catId, query, special ->
+            ExpenseFilterCriteria(memberId, catId, query, special)
+        }
+    ) { expenses, members, categories, criteria ->
+        val memberId = criteria.memberId
+        val catId = criteria.catId
+        val query = criteria.query
+        val special = criteria.special
+
         expenses.filter { exp ->
-            val matchMember = when (memberId) {
-                null -> true
-                -1L -> exp.splitType == "ALL_FAMILY"
+            val matchMember = when {
+                special?.exactMemberId != null -> true // Handled accurately by special filter below
+                memberId == null -> true
+                memberId == -1L -> {
+                    exp.splitType == "ALL_FAMILY" &&
+                        AnalyticsExpenseFilterHelper.resolveMembersForExpense(exp, members).isEmpty()
+                }
                 else -> {
                     val ids = exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-                    ids.contains(memberId) || (exp.splitType == "ALL_FAMILY")
+                    val assigned = AnalyticsExpenseFilterHelper.resolveMembersForExpense(exp, members)
+                    ids.contains(memberId) ||
+                        assigned.any { it.id == memberId } ||
+                        (exp.splitType == "ALL_FAMILY" && assigned.isEmpty())
                 }
             }
 
-            val matchCat = catId == null || exp.categoryId == catId
+            val matchCat = catId == null || AnalyticsExpenseFilterHelper.matchesCategory(exp, catId, categories)
+
+            val matchSpecial = special == null ||
+                AnalyticsExpenseFilterHelper.matchesSpecialExpenseFilter(exp, special, members)
 
             val matchQuery = if (query.isBlank()) {
                 true
@@ -2998,22 +3040,27 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 titleNorm.contains(q) || catNorm.contains(q) || membersNorm.contains(q) || noteNorm.contains(q)
             }
 
-            matchMember && matchCat && matchQuery
+            matchMember && matchCat && matchSpecial && matchQuery
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     // Filtered Incomes
     val filteredIncomes: StateFlow<List<Income>> = combine(
         allIncomes,
+        allMembers,
         _selectedMemberFilter,
-        _searchQuery
-    ) { incomes, memberId, query ->
+        _searchQuery,
+        _activeSpecialFilter
+    ) { incomes, members, memberId, query, special ->
         incomes.filter { inc ->
-            val matchMember = when (memberId) {
-                null -> true
-                -1L -> inc.memberId == 0L
+            val matchMember = when {
+                special?.exactMemberId != null -> true // Handled accurately by special filter below
+                memberId == null -> true
+                memberId == -1L -> inc.memberId == 0L || members.none { it.id == inc.memberId }
                 else -> inc.memberId == memberId || inc.memberId == 0L
             }
+            val matchSpecial = special == null ||
+                AnalyticsExpenseFilterHelper.matchesSpecialIncomeFilter(inc, special, members)
             val matchQuery = if (query.isBlank()) {
                 true
             } else {
@@ -3024,7 +3071,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 val noteNorm = GreekVoiceParser.normalizeGreek(inc.note)
                 titleNorm.contains(q) || catNorm.contains(q) || memberNorm.contains(q) || noteNorm.contains(q)
             }
-            matchMember && matchQuery
+            matchMember && matchSpecial && matchQuery
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -3794,6 +3841,12 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 _allIncomes.value = emptyList()
                 _allMembers.value = emptyList()
                 _allCategories.value = emptyList()
+                _homeSelectedMonthKey.value = null
+                _homeSelectedTypeFilter.value = "EXPENSE"
+                _selectedMemberFilter.value = null
+                _selectedCategoryFilter.value = null
+                _searchQuery.value = ""
+                _activeSpecialFilter.value = null
                 repository.deleteAllExpenses()
                 repository.deleteAllIncomes()
                 repository.replaceAllMembers(emptyList())
@@ -4441,14 +4494,75 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setMemberFilter(memberId: Long?) {
         _selectedMemberFilter.value = memberId
+        val curSpecial = _activeSpecialFilter.value
+        if (curSpecial != null && (
+                curSpecial.exactMemberId != null ||
+                    curSpecial.payerMemberId != null ||
+                    curSpecial.debtorMemberId != null ||
+                    curSpecial.roleGroupFilter != null
+            )
+        ) {
+            val remaining = curSpecial.copy(
+                exactMemberId = null,
+                payerMemberId = null,
+                debtorMemberId = null,
+                roleGroupFilter = null
+            )
+            _activeSpecialFilter.value = if (remaining.exactDayKey != null || remaining.incomeCategory != null) {
+                remaining
+            } else {
+                null
+            }
+        }
     }
 
     fun setCategoryFilter(categoryId: Long?) {
         _selectedCategoryFilter.value = categoryId
+        val curSpecial = _activeSpecialFilter.value
+        if (curSpecial?.incomeCategory != null) {
+            val remaining = curSpecial.copy(incomeCategory = null)
+            _activeSpecialFilter.value = if (
+                remaining.exactMemberId != null ||
+                remaining.payerMemberId != null ||
+                remaining.debtorMemberId != null ||
+                remaining.roleGroupFilter != null ||
+                remaining.exactDayKey != null
+            ) remaining else null
+        }
     }
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+    }
+
+    fun setHomeSelectedMonthKey(monthKey: String?) {
+        _homeSelectedMonthKey.value = monthKey
+    }
+
+    fun setHomeSelectedTypeFilter(typeFilter: String) {
+        _homeSelectedTypeFilter.value = typeFilter
+    }
+
+    fun clearSpecialDrillDownFilter() {
+        val curSpecial = _activeSpecialFilter.value
+        if (curSpecial?.exactMemberId != null) {
+            _selectedMemberFilter.value = null
+        }
+        _activeSpecialFilter.value = null
+    }
+
+    fun applyHomeDrillDown(request: HomeDrillDownRequest) {
+        _homeSelectedMonthKey.value = request.periodKey
+        _homeSelectedTypeFilter.value = request.typeFilter
+        _selectedMemberFilter.value = request.memberId
+        _selectedCategoryFilter.value = request.categoryId
+        _searchQuery.value = request.searchQuery
+        _activeSpecialFilter.value = request.specialFilter
+        _homeDrillDownScrollTrigger.value += 1
+    }
+
+    fun requestHomeScrollToTop() {
+        _homeScrollToTopTrigger.value += 1
     }
 
     fun setListening(listening: Boolean) {

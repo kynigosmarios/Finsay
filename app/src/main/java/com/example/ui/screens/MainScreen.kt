@@ -167,6 +167,10 @@ fun MainScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var currentTab by remember { mutableIntStateOf(0) }
+    var analyticsFilterScope by remember { mutableStateOf("MONTH") }
+    var analyticsPeriodKey by remember { mutableStateOf("CURRENT_MONTH") }
+    var analyticsYearKey by remember { mutableStateOf<String?>(null) }
+    var analyticsSplitMode by remember { mutableIntStateOf(0) }
 
     // State collected from ViewModel
     val expenses by viewModel.filteredExpenses.collectAsStateWithLifecycle()
@@ -178,6 +182,11 @@ fun MainScreen(
     val selectedMemberFilter by viewModel.selectedMemberFilter.collectAsStateWithLifecycle()
     val selectedCategoryFilter by viewModel.selectedCategoryFilter.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val homeSelectedMonthKey by viewModel.homeSelectedMonthKey.collectAsStateWithLifecycle()
+    val homeSelectedTypeFilter by viewModel.homeSelectedTypeFilter.collectAsStateWithLifecycle()
+    val activeSpecialFilter by viewModel.activeSpecialFilter.collectAsStateWithLifecycle()
+    val homeDrillDownScrollTrigger by viewModel.homeDrillDownScrollTrigger.collectAsStateWithLifecycle()
+    val homeScrollToTopTrigger by viewModel.homeScrollToTopTrigger.collectAsStateWithLifecycle()
 
     val pendingParsedExpense by viewModel.pendingParsedExpense.collectAsStateWithLifecycle()
     val countdownState by viewModel.countdownState.collectAsStateWithLifecycle()
@@ -342,6 +351,8 @@ fun MainScreen(
                             .clickable {
                                 currentTab = 0
                                 viewModel.setSearchQuery("")
+                                viewModel.clearSpecialDrillDownFilter()
+                                viewModel.requestHomeScrollToTop()
                             }
                             .padding(vertical = 4.dp, horizontal = 2.dp)
                             .testTag("app_brand_home_button")
@@ -548,15 +559,25 @@ fun MainScreen(
                     0 -> ExpensesScreen(
                         expenses = expenses,
                         incomes = filteredIncomes,
+                        allExpenses = allExpenses,
+                        allIncomes = allIncomes,
                         categories = categories,
                         members = members,
                         selectedMemberFilter = selectedMemberFilter,
                         selectedCategoryFilter = selectedCategoryFilter,
                         searchQuery = searchQuery,
+                        selectedMonthKey = homeSelectedMonthKey,
+                        selectedTypeFilter = homeSelectedTypeFilter,
+                        activeSpecialFilter = activeSpecialFilter,
+                        drillDownScrollTrigger = homeDrillDownScrollTrigger,
+                        scrollToTopTrigger = homeScrollToTopTrigger,
                         appLanguage = appLanguage,
                         onMemberFilterChange = { viewModel.setMemberFilter(it) },
                         onCategoryFilterChange = { viewModel.setCategoryFilter(it) },
                         onSearchQueryChange = { viewModel.setSearchQuery(it) },
+                        onMonthKeyChange = { viewModel.setHomeSelectedMonthKey(it) },
+                        onTypeFilterChange = { viewModel.setHomeSelectedTypeFilter(it) },
+                        onClearSpecialFilter = { viewModel.clearSpecialDrillDownFilter() },
                         onAddManualExpense = { viewModel.openManualExpenseDialog() },
                         onAddManualIncome = { viewModel.openManualIncomeDialog() },
                         onVoiceExpense = { viewModel.openVoiceInputDialog() },
@@ -581,7 +602,21 @@ fun MainScreen(
                         isPro = isUserPro,
                         onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
                         onExportReport = { viewModel.openExportReportDialog() },
-                        onManageCategories = { currentTab = 3 }
+                        onManageCategories = { currentTab = 3 },
+                        onDrillDownToHome = { request ->
+                            viewModel.applyHomeDrillDown(request)
+                            currentTab = 0
+                        },
+                        initialFilterScope = analyticsFilterScope,
+                        initialPeriodKey = analyticsPeriodKey,
+                        initialYearKey = analyticsYearKey,
+                        initialSplitMode = analyticsSplitMode,
+                        onAnalyticsStateChange = { scope, period, year, split ->
+                            analyticsFilterScope = scope
+                            analyticsPeriodKey = period
+                            analyticsYearKey = year
+                            analyticsSplitMode = split
+                        }
                     )
                     2 -> MembersScreen(
                         members = members,

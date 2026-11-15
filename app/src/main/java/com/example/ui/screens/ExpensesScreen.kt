@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -82,6 +83,7 @@ import com.example.data.entity.getBeneficiaryCategoryOrNamesDisplay
 import com.example.data.entity.getPayerCategoryOrNamesDisplay
 import com.example.ui.components.CategoryIconHelper
 import com.example.ui.theme.Emerald700
+import com.example.util.AnalyticsSpecialFilter
 import com.example.util.Localization
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -136,15 +138,25 @@ data class DayGroup(
 fun ExpensesScreen(
     expenses: List<Expense>,
     incomes: List<Income>,
+    allExpenses: List<Expense> = expenses,
+    allIncomes: List<Income> = incomes,
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
     selectedMemberFilter: Long?,
     selectedCategoryFilter: Long?,
     searchQuery: String,
+    selectedMonthKey: String? = null,
+    selectedTypeFilter: String = "EXPENSE",
+    activeSpecialFilter: AnalyticsSpecialFilter? = null,
+    drillDownScrollTrigger: Int = 0,
+    scrollToTopTrigger: Int = 0,
     appLanguage: String,
     onMemberFilterChange: (Long?) -> Unit,
     onCategoryFilterChange: (Long?) -> Unit,
     onSearchQueryChange: (String) -> Unit,
+    onMonthKeyChange: (String) -> Unit = {},
+    onTypeFilterChange: (String) -> Unit = {},
+    onClearSpecialFilter: () -> Unit = {},
     onAddManualExpense: () -> Unit,
     onAddManualIncome: () -> Unit,
     onVoiceExpense: () -> Unit,
@@ -166,12 +178,10 @@ fun ExpensesScreen(
 
     val monthYearFormat = remember(locale) { SimpleDateFormat("LLLL yyyy", locale) }
     val monthYearKeyFormat = remember { SimpleDateFormat("yyyy-MM", Locale.US) }
+    val yearKeyFormat = remember { SimpleDateFormat("yyyy", Locale.US) }
 
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var incomeToDelete by remember { mutableStateOf<Income?>(null) }
-
-    // Segmented tab inside hero card: "EXPENSE" or "INCOME"
-    var selectedTypeFilter by remember { mutableStateOf("EXPENSE") }
 
     // Dropdown toggles
     var showMonthDropdown by remember { mutableStateOf(false) }
@@ -179,9 +189,24 @@ fun ExpensesScreen(
     var showCategoryDropdown by remember { mutableStateOf(false) }
     var isMonthlyListExpanded by remember { mutableStateOf(true) }
 
-    // Extract available months from dataset
-    val availableMonths = remember(expenses, incomes, locale) {
-        val allTimestamps = (expenses.map { it.timestamp } + incomes.map { it.timestamp })
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(drillDownScrollTrigger) {
+        if (drillDownScrollTrigger > 0) {
+            isMonthlyListExpanded = true
+            listState.animateScrollToItem(1)
+        }
+    }
+
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    // Extract available months from unfiltered dataset so months never vanish during filtering
+    val availableMonths = remember(allExpenses, allIncomes, locale) {
+        val allTimestamps = (allExpenses.map { it.timestamp } + allIncomes.map { it.timestamp })
             .filter { it > 0 }
             .distinct()
 
@@ -201,47 +226,94 @@ fun ExpensesScreen(
         } else list
     }
 
-    // Default to the first (most recent) month e.g. "Οκτώβριος 2026", and smoothly update when dataset loads
-    var selectedMonthKey by remember {
-        mutableStateOf(availableMonths.firstOrNull()?.first ?: "")
-    }
-
-    LaunchedEffect(availableMonths) {
-        if (selectedMonthKey.isBlank() || (selectedMonthKey != "ALL" && availableMonths.none { it.first == selectedMonthKey })) {
-            selectedMonthKey = availableMonths.firstOrNull()?.first ?: ""
+    val effectiveMonthKey = remember(selectedMonthKey, availableMonths) {
+        when {
+            selectedMonthKey == "ALL" -> "ALL"
+            selectedMonthKey != null && selectedMonthKey.startsWith("YEAR:") -> selectedMonthKey
+            selectedMonthKey != null && selectedMonthKey.isNotBlank() -> selectedMonthKey
+            else -> availableMonths.firstOrNull()?.first ?: ""
         }
     }
 
-    val currentMonthDisplay = remember(selectedMonthKey, availableMonths, lang) {
-        if (selectedMonthKey == "ALL") {
-            if (lang == Localization.Language.ENGLISH) "All Months" else "Όλοι οι μήνες"
-        } else {
-            availableMonths.find { it.first == selectedMonthKey }?.second ?: "Οκτώβριος 2026"
+    val currentMonthDisplay = remember(effectiveMonthKey, availableMonths, lang, locale) {
+        when {
+            effectiveMonthKey == "ALL" -> if (lang == Localization.Language.ENGLISH) "All Months" else "Όλοι οι μήνες"
+            effectiveMonthKey.startsWith("YEAR:") -> {
+                val y = effectiveMonthKey.removePrefix("YEAR:")
+                if (lang == Localization.Language.ENGLISH) "Year $y" else "Έτος $y"
+            }
+            else -> {
+                availableMonths.find { it.first == effectiveMonthKey }?.second ?: try {
+                    val parsed = monthYearKeyFormat.parse(effectiveMonthKey)
+                    if (parsed != null) {
+                        val raw = monthYearFormat.format(parsed)
+                        raw.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
+                    } else effectiveMonthKey
+                } catch (_: Exception) {
+                    effectiveMonthKey
+                }
+            }
         }
     }
 
-    // Month-filtered datasets for the Hero Card metrics
-    val monthExpenses = remember(expenses, selectedMonthKey) {
-        if (selectedMonthKey.isBlank() || selectedMonthKey == "ALL") expenses
-        else expenses.filter { monthYearKeyFormat.format(Date(it.timestamp)) == selectedMonthKey }
+    // Unfiltered period datasets so the green Hero Card ALWAYS reflects total period figures
+    val heroMonthExpenses = remember(allExpenses, effectiveMonthKey) {
+        when {
+            effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> allExpenses
+            effectiveMonthKey.startsWith("YEAR:") -> {
+                val targetYear = effectiveMonthKey.removePrefix("YEAR:")
+                allExpenses.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+            }
+            else -> allExpenses.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+        }
     }
-    val monthIncomes = remember(incomes, selectedMonthKey) {
-        if (selectedMonthKey.isBlank() || selectedMonthKey == "ALL") incomes
-        else incomes.filter { monthYearKeyFormat.format(Date(it.timestamp)) == selectedMonthKey }
+    val heroMonthIncomes = remember(allIncomes, effectiveMonthKey) {
+        when {
+            effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> allIncomes
+            effectiveMonthKey.startsWith("YEAR:") -> {
+                val targetYear = effectiveMonthKey.removePrefix("YEAR:")
+                allIncomes.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+            }
+            else -> allIncomes.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+        }
     }
 
-    val totalExpensesAmount = remember(monthExpenses) { monthExpenses.sumOf { it.amount } }
-    val totalIncomesAmount = remember(monthIncomes) { monthIncomes.sumOf { it.amount } }
+    // Month-filtered datasets for the filtered transactions list below
+    val monthExpenses = remember(expenses, effectiveMonthKey) {
+        when {
+            effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> expenses
+            effectiveMonthKey.startsWith("YEAR:") -> {
+                val targetYear = effectiveMonthKey.removePrefix("YEAR:")
+                expenses.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+            }
+            else -> expenses.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+        }
+    }
+    val monthIncomes = remember(incomes, effectiveMonthKey) {
+        when {
+            effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> incomes
+            effectiveMonthKey.startsWith("YEAR:") -> {
+                val targetYear = effectiveMonthKey.removePrefix("YEAR:")
+                incomes.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+            }
+            else -> incomes.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+        }
+    }
+
+    val totalExpensesAmount = remember(heroMonthExpenses) { heroMonthExpenses.sumOf { it.amount } }
+    val totalIncomesAmount = remember(heroMonthIncomes) { heroMonthIncomes.sumOf { it.amount } }
+    val filteredExpensesAmount = remember(monthExpenses) { monthExpenses.sumOf { it.amount } }
+    val filteredIncomesAmount = remember(monthIncomes) { monthIncomes.sumOf { it.amount } }
     val netBalance = totalIncomesAmount - totalExpensesAmount
 
     // Dynamic budget calculation: exact sum of monthly budgets of categories.
-    // When "ALL" months are selected, scale budget by active months count so total expenses are fairly compared
-    val totalBudget = remember(categories, selectedMonthKey, availableMonths) {
+    // When "ALL" months or "YEAR:" are selected, scale budget by active months count so total expenses are fairly compared
+    val totalBudget = remember(categories, effectiveMonthKey, availableMonths) {
         val baseMonthlyBudget = categories.sumOf { it.monthlyBudget }
-        if (selectedMonthKey == "ALL") {
-            baseMonthlyBudget * availableMonths.size.coerceAtLeast(1)
-        } else {
-            baseMonthlyBudget
+        when {
+            effectiveMonthKey == "ALL" -> baseMonthlyBudget * availableMonths.size.coerceAtLeast(1)
+            effectiveMonthKey.startsWith("YEAR:") -> baseMonthlyBudget * 12
+            else -> baseMonthlyBudget
         }
     }
     val remainingBudget = remember(totalBudget, totalExpensesAmount) {
@@ -257,11 +329,11 @@ fun ExpensesScreen(
     )
 
     // Shared family ("Κοινά Σπιτιού") vs Individual ("Ατομικά")
-    val sharedExpenses = remember(monthExpenses) {
-        monthExpenses.filter { it.splitType == "ALL" || it.splitType == "ALL_FAMILY" }.sumOf { it.amount }
+    val sharedExpenses = remember(heroMonthExpenses) {
+        heroMonthExpenses.filter { it.splitType == "ALL" || it.splitType == "ALL_FAMILY" }.sumOf { it.amount }
     }
-    val individualExpenses = remember(monthExpenses) {
-        monthExpenses.filter { it.splitType != "ALL" && it.splitType != "ALL_FAMILY" }.sumOf { it.amount }
+    val individualExpenses = remember(heroMonthExpenses) {
+        heroMonthExpenses.filter { it.splitType != "ALL" && it.splitType != "ALL_FAMILY" }.sumOf { it.amount }
     }
 
     // Filtered transaction items to display in the list below with all formatting precomputed
@@ -396,6 +468,7 @@ fun ExpensesScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         LazyColumn(
+            state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -492,12 +565,12 @@ fun ExpensesScreen(
                                                 text = {
                                                     Text(
                                                         text = if (lang == Localization.Language.ENGLISH) "All Months" else "Όλοι οι μήνες",
-                                                        fontWeight = if (selectedMonthKey == "ALL") FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (selectedMonthKey == "ALL") Emerald700 else MaterialTheme.colorScheme.onSurface
+                                                        fontWeight = if (effectiveMonthKey == "ALL") FontWeight.Bold else FontWeight.Normal,
+                                                        color = if (effectiveMonthKey == "ALL") Emerald700 else MaterialTheme.colorScheme.onSurface
                                                     )
                                                 },
                                                 onClick = {
-                                                    selectedMonthKey = "ALL"
+                                                    onMonthKeyChange("ALL")
                                                     showMonthDropdown = false
                                                 }
                                             )
@@ -507,12 +580,12 @@ fun ExpensesScreen(
                                                 text = {
                                                     Text(
                                                         text = month.second,
-                                                        fontWeight = if (month.first == selectedMonthKey) FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (month.first == selectedMonthKey) Emerald700 else MaterialTheme.colorScheme.onSurface
+                                                        fontWeight = if (month.first == effectiveMonthKey) FontWeight.Bold else FontWeight.Normal,
+                                                        color = if (month.first == effectiveMonthKey) Emerald700 else MaterialTheme.colorScheme.onSurface
                                                     )
                                                 },
                                                 onClick = {
-                                                    selectedMonthKey = month.first
+                                                    onMonthKeyChange(month.first)
                                                     showMonthDropdown = false
                                                 }
                                             )
@@ -625,7 +698,7 @@ fun ExpensesScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable {
-                                            selectedTypeFilter = "INCOME"
+                                            onTypeFilterChange("INCOME")
                                         },
                                     shape = RoundedCornerShape(16.dp),
                                     color = Color(0xFF065F46).copy(alpha = 0.35f),
@@ -672,7 +745,7 @@ fun ExpensesScreen(
                                     modifier = Modifier
                                         .weight(1f)
                                         .clickable {
-                                            selectedTypeFilter = "EXPENSE"
+                                            onTypeFilterChange("EXPENSE")
                                         },
                                     shape = RoundedCornerShape(16.dp),
                                     color = Color(0xFF451A1A).copy(alpha = 0.35f),
@@ -733,7 +806,7 @@ fun ExpensesScreen(
                                     Surface(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .clickable { selectedTypeFilter = "EXPENSE" },
+                                            .clickable { onTypeFilterChange("EXPENSE") },
                                         shape = RoundedCornerShape(12.dp),
                                         color = if (selectedTypeFilter == "EXPENSE") Color(0xFF10B981) else Color.Transparent
                                     ) {
@@ -744,7 +817,7 @@ fun ExpensesScreen(
                                         ) {
                                             Text(text = "💸 ", fontSize = 14.sp)
                                             Text(
-                                                text = "${Localization.expenses(lang)} (${monthExpenses.size})",
+                                                text = "${Localization.expenses(lang)} (${heroMonthExpenses.size})",
                                                 fontSize = 13.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (selectedTypeFilter == "EXPENSE") Color.White else Color(0xFFA7F3D0)
@@ -756,7 +829,7 @@ fun ExpensesScreen(
                                     Surface(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .clickable { selectedTypeFilter = "INCOME" },
+                                            .clickable { onTypeFilterChange("INCOME") },
                                         shape = RoundedCornerShape(12.dp),
                                         color = if (selectedTypeFilter == "INCOME") Color(0xFF10B981) else Color.Transparent
                                     ) {
@@ -767,7 +840,7 @@ fun ExpensesScreen(
                                         ) {
                                             Text(text = "💰 ", fontSize = 14.sp)
                                             Text(
-                                                text = "${Localization.income(lang)} (${monthIncomes.size})",
+                                                text = "${Localization.income(lang)} (${heroMonthIncomes.size})",
                                                 fontSize = 13.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (selectedTypeFilter == "INCOME") Color.White else Color(0xFFA7F3D0)
@@ -1155,6 +1228,52 @@ fun ExpensesScreen(
                 }
             }
 
+            if (activeSpecialFilter != null && activeSpecialFilter.badgeLabel.isNotBlank()) {
+                item(key = "active_special_filter_chip") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Emerald700.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { onClearSpecialFilter() }
+                                .testTag("active_drilldown_filter_chip")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = Emerald700,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = activeSpecialFilter.badgeLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Emerald700
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = if (lang == Localization.Language.ENGLISH) "Clear filter" else "Καθαρισμός φίλτρου",
+                                    tint = Emerald700,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // 4. MONTHLY SUMMARY EXPANDABLE CARD (Matches Screenshot 1 & 2: '📅 Οκτώβριος 2026 | 71 συναλλαγές | 2062.66 € ⌃')
             item(key = "monthly_summary_card") {
                 Surface(
@@ -1212,7 +1331,7 @@ fun ExpensesScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = String.format(Locale.US, "%.2f €", if (selectedTypeFilter == "INCOME") totalIncomesAmount else totalExpensesAmount),
+                                text = String.format(Locale.US, "%.2f €", if (selectedTypeFilter == "INCOME") filteredIncomesAmount else filteredExpensesAmount),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF047857)
