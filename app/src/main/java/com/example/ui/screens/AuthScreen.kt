@@ -100,6 +100,9 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.util.Calendar
@@ -114,6 +117,7 @@ fun AuthScreen(
     val coroutineScope = rememberCoroutineScope()
     val appLanguage by viewModel.appLanguage.collectAsState()
     val lang = Localization.Language.fromCode(appLanguage)
+    val isAuthLoading by viewModel.isAuthLoading.collectAsState()
 
     var isSignUp by remember { mutableStateOf(false) }
     var isForgotPassword by remember { mutableStateOf(false) }
@@ -134,6 +138,14 @@ fun AuthScreen(
 
     // Date Picker state
     var showDatePickerDialog by remember { mutableStateOf(false) }
+    val birthDateInteractionSource = remember { MutableInteractionSource() }
+    LaunchedEffect(birthDateInteractionSource) {
+        birthDateInteractionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Release) {
+                showDatePickerDialog = true
+            }
+        }
+    }
 
     // Intercept back button when on Forgot Password screen
     BackHandler(enabled = isForgotPassword) {
@@ -349,17 +361,26 @@ fun AuthScreen(
                                     containerColor = Emerald700,
                                     contentColor = Color.White
                                 ),
+                                enabled = !isAuthLoading && !isGoogleSigningIn,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(48.dp)
                                     .testTag("reset_submit_button")
                             ) {
-                                Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Send Reset Email" else "Αποστολή Email Επαναφοράς",
-                                    fontSize = 14.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                                if (isAuthLoading) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Text(
+                                        text = if (lang == Localization.Language.ENGLISH) "Send Reset Email" else "Αποστολή Email Επαναφοράς",
+                                        fontSize = 14.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
 
@@ -400,7 +421,7 @@ fun AuthScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(40.dp)
-                                    .clickable {
+                                    .clickable(enabled = !isAuthLoading && !isGoogleSigningIn) {
                                         isSignUp = false
                                         errorMessage = null
                                     }
@@ -421,7 +442,7 @@ fun AuthScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(40.dp)
-                                    .clickable {
+                                    .clickable(enabled = !isAuthLoading && !isGoogleSigningIn) {
                                         isSignUp = true
                                         errorMessage = null
                                     }
@@ -439,29 +460,37 @@ fun AuthScreen(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Google Sign-In Button (Requirement 2: with Google G icon)
+                        // Google Sign-In / Sign-Up Button
                         OutlinedButton(
                             onClick = {
-                                isGoogleSigningIn = true
-                                errorMessage = null
-                                val credentialManager = CredentialManager.create(context)
                                 val serverClientId = try {
                                     context.getString(R.string.default_web_client_id)
                                 } catch (e: Exception) {
-                                    "351790236571-093q02uts0ju5do0hp4os8el545l8oai.apps.googleusercontent.com"
+                                    errorMessage = if (lang == Localization.Language.ENGLISH) {
+                                        "Google Sign-In configuration missing"
+                                    } else {
+                                        "Λείπει η ρύθμιση σύνδεσης Google"
+                                    }
+                                    return@OutlinedButton
                                 }
 
+                                isGoogleSigningIn = true
+                                errorMessage = null
+                                val credentialManager = CredentialManager.create(context)
                                 val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = serverClientId).build()
                                 val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
 
                                 coroutineScope.launch {
                                     try {
-                                        val result = credentialManager.getCredential(context as Activity, request)
+                                        val activity = context as? Activity
+                                            ?: throw IllegalStateException("Activity context unavailable")
+                                        val result = credentialManager.getCredential(activity, request)
                                         val credential = result.credential
                                         if (credential is CustomCredential && credential.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                                             val googleIdToken = GoogleIdTokenCredential.createFrom(credential.data).idToken
                                             viewModel.signInWithGoogleToken(
                                                 idToken = googleIdToken,
+                                                isSignUpMode = isSignUp,
                                                 onSuccess = { isGoogleSigningIn = false },
                                                 onError = { err ->
                                                     isGoogleSigningIn = false
@@ -492,7 +521,7 @@ fun AuthScreen(
                                 .fillMaxWidth()
                                 .height(50.dp)
                                 .testTag("google_auth_button"),
-                            enabled = !isGoogleSigningIn
+                            enabled = !isGoogleSigningIn && !isAuthLoading
                         ) {
                             if (isGoogleSigningIn) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -656,6 +685,7 @@ fun AuthScreen(
                                 value = birthDate,
                                 onValueChange = { birthDate = it },
                                 readOnly = true,
+                                interactionSource = birthDateInteractionSource,
                                 label = { Text(if (lang == Localization.Language.ENGLISH) "Date of Birth *" else "Ημερομηνία Γέννησης *") },
                                 placeholder = { Text("ΗΗ/ΜΜ/ΕΕΕΕ") },
                                 leadingIcon = {
@@ -670,7 +700,6 @@ fun AuthScreen(
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showDatePickerDialog = true }
                                     .testTag("auth_birthdate_field")
                             )
 
@@ -883,17 +912,26 @@ fun AuthScreen(
                                 containerColor = Emerald700,
                                 contentColor = Color.White
                             ),
+                            enabled = !isAuthLoading && !isGoogleSigningIn,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp)
                                 .testTag("auth_submit_button")
                         ) {
-                            Text(
-                                text = if (isSignUp) (if (lang == Localization.Language.ENGLISH) "Create Account" else "Δημιουργία Λογαριασμού") else (if (lang == Localization.Language.ENGLISH) "Sign In" else "Σύνδεση"),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            if (isAuthLoading) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text = if (isSignUp) (if (lang == Localization.Language.ENGLISH) "Create Account" else "Δημιουργία Λογαριασμού") else (if (lang == Localization.Language.ENGLISH) "Sign In" else "Σύνδεση"),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
                         }
 
                         // Requirement 4: Subtle "Forgot Password" link directly below main Sign In button

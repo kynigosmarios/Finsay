@@ -133,7 +133,9 @@ fun FamilyCloudSyncCard(
                         val serverClientId = try {
                             context.getString(R.string.default_web_client_id)
                         } catch (e: Exception) {
-                            "351790236571-093q02uts0ju5do0hp4os8el545l8oai.apps.googleusercontent.com"
+                            isSigningIn = false
+                            onMessage(if (lang == Localization.Language.ENGLISH) "Google configuration missing" else "Λείπει η ρύθμιση Google")
+                            return@Button
                         }
 
                         val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = serverClientId).build()

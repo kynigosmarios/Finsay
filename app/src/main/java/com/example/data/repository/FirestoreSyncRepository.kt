@@ -432,7 +432,9 @@ class FirestoreSyncRepository(
                 city = if (existing.city.isNotBlank()) existing.city else city,
                 householdId = finalHouseholdId,
                 householdIds = finalHouseholdIds,
-                authProvider = effectiveAuthProvider
+                authProvider = effectiveAuthProvider,
+                requiresEmailVerification = existing.requiresEmailVerification,
+                emailVerifiedConfirmed = existing.emailVerifiedConfirmed
             )
 
             // Save merged profile to Firestore with SetOptions.merge()
@@ -476,6 +478,30 @@ class FirestoreSyncRepository(
             userRef.set(newProfile, SetOptions.merge()).await()
             newProfile
         }
+    }
+
+    suspend fun getUserProfileOnce(uid: String): UserProfile? {
+        if (uid.isBlank()) return null
+        val snapshot = db.collection("users").document(uid).get().await()
+        if (!snapshot.exists()) return null
+        return snapshot.toObject(UserProfile::class.java, DocumentSnapshot.ServerTimestampBehavior.ESTIMATE)
+            ?: UserProfile(uid = uid)
+    }
+
+    suspend fun savePendingUserProfile(profile: UserProfile) {
+        if (profile.uid.isBlank()) return
+        db.collection("users").document(profile.uid).set(profile, SetOptions.merge()).await()
+    }
+
+    suspend fun markEmailVerifiedConfirmed(uid: String) {
+        if (uid.isBlank()) return
+        db.collection("users").document(uid).set(
+            mapOf(
+                "emailVerifiedConfirmed" to true,
+                "updatedAt" to Timestamp.now()
+            ),
+            SetOptions.merge()
+        ).await()
     }
 
     suspend fun updateUserAuthProvider(uid: String, provider: String) {

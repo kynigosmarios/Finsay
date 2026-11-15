@@ -63,6 +63,8 @@ data class UserProfile(
     var reminderHour: Int = 21,
     var reminderMinute: Int = 30,
     var notificationConsentCompleted: Boolean = false,
+    var requiresEmailVerification: Boolean = false,
+    var emailVerifiedConfirmed: Boolean = true,
     var createdAt: Timestamp? = null,
     var updatedAt: Timestamp? = null
 )

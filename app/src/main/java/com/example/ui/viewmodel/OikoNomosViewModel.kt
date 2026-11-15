@@ -40,8 +40,14 @@ import com.example.util.Localization
 import com.example.util.ParsedVoiceExpense
 import com.example.util.PendingBankTransaction
 import com.example.util.RecurringExpenseAutoProcessor
+import android.util.Patterns
+import androidx.credentials.ClearCredentialStateRequest
+import androidx.credentials.CredentialManager
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
@@ -54,6 +60,7 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -87,6 +94,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     // Firebase Auth & Cloud Sync States
     private val _isAuthInitialized = MutableStateFlow(true)
     val isAuthInitialized = _isAuthInitialized.asStateFlow()
+
+    private var suppressAuthStateListener = false
 
     private val _currentUser = MutableStateFlow<FirebaseUser?>(auth.currentUser)
     val currentUser = _currentUser.asStateFlow()
@@ -334,20 +343,38 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         _allCategories.value = emptyList()
         _isInitialExpensesLoading.value = true
 
-        // Fast pre-warm: Only load cached profile/data if user is already authenticated
+        // Fast pre-warm: Only load cached profile/data if user is already authenticated AND verified
         val existingUser = auth.currentUser
         if (existingUser != null) {
-            val isMarios = isMariosUser(existingUser)
-            val cachedProfile = loadUserProfileFromPrefs()
-            if (cachedProfile != null && (cachedProfile.uid == existingUser.uid || cachedProfile.email.equals(existingUser.email, ignoreCase = true))) {
-                _userProfile.value = cachedProfile
+            if (isUserVerified(existingUser)) {
+                val cachedProfile = loadUserProfileFromPrefs()
+                if (cachedProfile != null && (cachedProfile.uid == existingUser.uid || cachedProfile.email.equals(existingUser.email, ignoreCase = true))) {
+                    _userProfile.value = cachedProfile
+                }
+                val prewarmHid = getOrEnsureHouseholdId(existingUser)
+                if (prewarmHid.isNotBlank()) {
+                    try {
+                        observeHouseholdData(prewarmHid)
+                    } catch (e: Exception) {
+                        Log.w("OikoNomosVM", "Prewarm hid observation error: ${e.message}")
+                    }
+                }
             }
-            val prewarmHid = getOrEnsureHouseholdId(existingUser)
-            if (prewarmHid.isNotBlank()) {
+            // Refresh Firebase user record on startup to detect revoked/deleted or unverified accounts
+            viewModelScope.launch(coroutineExceptionHandler) {
                 try {
-                    observeHouseholdData(prewarmHid)
+                    existingUser.reload().await()
+                    val refreshed = auth.currentUser ?: existingUser
+                    val stillVerified = isUserVerified(refreshed)
+                    if (!stillVerified) {
+                        _isUserVerifiedState.value = false
+                        cancelAllSyncJobs()
+                    }
+                } catch (e: FirebaseAuthInvalidUserException) {
+                    Log.w("OikoNomosVM", "Startup user no longer valid: ${e.message}")
+                    signOutUser()
                 } catch (e: Exception) {
-                    Log.w("OikoNomosVM", "Prewarm hid observation error: ${e.message}")
+                    Log.w("OikoNomosVM", "Startup reload warning: ${e.message}")
                 }
             }
         }
@@ -355,6 +382,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         // Listen for Auth state
         var lastObservedUid: String? = auth.currentUser?.uid
         auth.addAuthStateListener { firebaseAuth ->
+            if (suppressAuthStateListener) return@addAuthStateListener
             val user = firebaseAuth.currentUser
             val currentUid = user?.uid
             _isAuthInitialized.value = true
@@ -403,36 +431,36 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             if (user != null) {
                 _currentUser.value = user
                 lastObservedUid = currentUid
-                val isMarios = isMariosUser(user)
-                if (isMarios) {
-                    val mariosHousehold = Household(
-                        id = "3e9a25a0-2e7",
-                        name = "Οικογένεια Μάριος",
-                        ownerId = "t5kN4RvPRugIxXUz18Fep2khSrC2",
-                        memberUids = listOf("t5kN4RvPRugIxXUz18Fep2khSrC2", "tSLWmkXZ0MTqIKGoX3wd6HdhDw63", "jllDLLQl7VgFzOQpVIHi0wo8B013", "oA6smvWcC6QYCAKMvYdWEcmVCO43"),
-                        invitedEmails = listOf("kynigosmarios@gmail.com")
-                    )
-                    val epixeirisiHousehold = Household(
-                        id = "e1d4ae67-499",
-                        name = "Επιχείρηση",
-                        ownerId = "t5kN4RvPRugIxXUz18Fep2khSrC2",
-                        memberUids = listOf("t5kN4RvPRugIxXUz18Fep2khSrC2", "tSLWmkXZ0MTqIKGoX3wd6HdhDw63", "jllDLLQl7VgFzOQpVIHi0wo8B013", "oA6smvWcC6QYCAKMvYdWEcmVCO43"),
-                        invitedEmails = listOf("kynigosmarios@gmail.com")
-                    )
-                    _currentHousehold.value = mariosHousehold
-                    _userHouseholds.value = listOf(mariosHousehold, epixeirisiHousehold)
-                } else {
-                    val safeUserHid = getOrEnsureHouseholdId(user)
-                    val defaultH = Household(
-                        id = safeUserHid,
-                        name = "Το Εξοδολόγιό μου",
-                        ownerId = user.uid,
-                        memberUids = listOf(user.uid)
-                    )
-                    _currentHousehold.value = defaultH
-                    _userHouseholds.value = listOf(defaultH)
-                }
                 if (verified) {
+                    val isMarios = isMariosUser(user)
+                    if (isMarios) {
+                        val mariosHousehold = Household(
+                            id = "3e9a25a0-2e7",
+                            name = "Οικογένεια Μάριος",
+                            ownerId = "t5kN4RvPRugIxXUz18Fep2khSrC2",
+                            memberUids = listOf("t5kN4RvPRugIxXUz18Fep2khSrC2", "tSLWmkXZ0MTqIKGoX3wd6HdhDw63", "jllDLLQl7VgFzOQpVIHi0wo8B013", "oA6smvWcC6QYCAKMvYdWEcmVCO43"),
+                            invitedEmails = listOf("kynigosmarios@gmail.com")
+                        )
+                        val epixeirisiHousehold = Household(
+                            id = "e1d4ae67-499",
+                            name = "Επιχείρηση",
+                            ownerId = "t5kN4RvPRugIxXUz18Fep2khSrC2",
+                            memberUids = listOf("t5kN4RvPRugIxXUz18Fep2khSrC2", "tSLWmkXZ0MTqIKGoX3wd6HdhDw63", "jllDLLQl7VgFzOQpVIHi0wo8B013", "oA6smvWcC6QYCAKMvYdWEcmVCO43"),
+                            invitedEmails = listOf("kynigosmarios@gmail.com")
+                        )
+                        _currentHousehold.value = mariosHousehold
+                        _userHouseholds.value = listOf(mariosHousehold, epixeirisiHousehold)
+                    } else {
+                        val safeUserHid = getOrEnsureHouseholdId(user)
+                        val defaultH = Household(
+                            id = safeUserHid,
+                            name = "Το Εξοδολόγιό μου",
+                            ownerId = user.uid,
+                            memberUids = listOf(user.uid)
+                        )
+                        _currentHousehold.value = defaultH
+                        _userHouseholds.value = listOf(defaultH)
+                    }
                     viewModelScope.launch(coroutineExceptionHandler) {
                         try {
                             loadUserProfileAndHousehold(user)
@@ -482,6 +510,25 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 user.email ?: "",
                 user.displayName ?: ""
             )
+
+            // Enforce email verification across devices/sessions before loading any app data
+            if (!isMarios && (!user.isEmailVerified || (profile.authProvider == "google" && profile.requiresEmailVerification && !profile.emailVerifiedConfirmed))) {
+                if (profile.authProvider == "google" && profile.requiresEmailVerification && !profile.emailVerifiedConfirmed) {
+                    prefs.edit().putBoolean("pending_google_verification_${user.uid}", true).apply()
+                }
+                _userProfile.value = profile
+                saveUserProfileToPrefs(profile)
+                _isUserVerifiedState.value = false
+                cancelAllSyncJobs()
+                return
+            }
+
+            if (profile.authProvider != "google" && user.isEmailVerified && profile.requiresEmailVerification && !profile.emailVerifiedConfirmed) {
+                try {
+                    firestoreSyncRepo.markEmailVerifiedConfirmed(user.uid)
+                    profile = profile.copy(emailVerifiedConfirmed = true)
+                } catch (_: Exception) {}
+            }
 
             // Auto-sync Google account photo URL if profile has no photo yet
             if (profile.photoUrl.isBlank() && user.photoUrl != null) {
@@ -1711,7 +1758,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                                 reminderEnabled = remoteProfile.reminderEnabled,
                                 reminderHour = remoteProfile.reminderHour,
                                 reminderMinute = remoteProfile.reminderMinute,
-                                notificationConsentCompleted = remoteProfile.notificationConsentCompleted || (current?.notificationConsentCompleted ?: false)
+                                notificationConsentCompleted = remoteProfile.notificationConsentCompleted || (current?.notificationConsentCompleted ?: false),
+                                requiresEmailVerification = remoteProfile.requiresEmailVerification,
+                                emailVerifiedConfirmed = remoteProfile.emailVerifiedConfirmed
                             )
                             _userProfile.value = merged
                             saveUserProfileToPrefs(merged)
@@ -2115,15 +2164,26 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun onAppResumed() {
         val user = _currentUser.value ?: auth.currentUser ?: return
         if (!isUserVerified(user)) {
-            user.reload().addOnCompleteListener {
-                val refreshed = auth.currentUser ?: user
-                val verified = isUserVerified(refreshed)
-                _isUserVerifiedState.value = verified
-                if (verified) {
-                    _currentUser.value = refreshed
-                    showSnackbar("Το email επιβεβαιώθηκε επιτυχώς! Καλώς ήρθατε!")
-                    viewModelScope.launch {
-                        loadUserProfileAndHousehold(refreshed)
+            // Only auto-advance on resume when Firebase Email Verification flips from false -> true (Email/Password link).
+            // For newly registered Google accounts awaiting link confirmation, wait for explicit confirmation on EmailVerificationScreen.
+            if (!user.isEmailVerified) {
+                user.reload().addOnCompleteListener {
+                    val refreshed = auth.currentUser ?: user
+                    if (refreshed.isEmailVerified) {
+                        viewModelScope.launch {
+                            try {
+                                firestoreSyncRepo.markEmailVerifiedConfirmed(refreshed.uid)
+                            } catch (_: Exception) {}
+                        }
+                        _currentUser.value = refreshed
+                        _isUserVerifiedState.value = true
+                        showSnackbar(
+                            if (_appLanguage.value == "EN") "Email verified successfully! Welcome!"
+                            else "Το email επιβεβαιώθηκε επιτυχώς! Καλώς ήρθατε!"
+                        )
+                        viewModelScope.launch {
+                            loadUserProfileAndHousehold(refreshed)
+                        }
                     }
                 }
             }
@@ -2468,8 +2528,13 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 val hIds = _userHouseholds.value.map { it.id }
                 firestoreSyncRepo.deleteUserEntireData(uid, hIds)
 
-                // 2. Delete the Firebase Auth account
+                // 2. Delete the Firebase Auth account & clear Credential Manager state
                 user.delete().await()
+                withContext(NonCancellable) {
+                    try {
+                        CredentialManager.create(getApplication()).clearCredentialState(ClearCredentialStateRequest())
+                    } catch (_: Exception) {}
+                }
 
                 // 3. Clear local device cache & Room DB
                 repository.clearAllData()
@@ -2479,6 +2544,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
                 // 4. Reset in-memory state
                 _currentUser.value = null
+                _isUserVerifiedState.value = false
                 _userProfile.value = null
                 _currentHousehold.value = null
                 _userHouseholds.value = emptyList()
@@ -2507,7 +2573,20 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     val isAuthLoading = _isAuthLoading.asStateFlow()
 
     fun isUserVerified(user: FirebaseUser?): Boolean {
-        return user != null
+        if (user == null) return false
+        if (!user.isEmailVerified) return false
+        if (isMariosUser(user)) return true
+        if (prefs.getBoolean("pending_google_verification_${user.uid}", false)) return false
+        val profile = _userProfile.value
+        if (profile != null &&
+            profile.uid == user.uid &&
+            profile.authProvider == "google" &&
+            profile.requiresEmailVerification &&
+            !profile.emailVerifiedConfirmed
+        ) {
+            return false
+        }
+        return true
     }
 
     fun checkEmailVerification(onResult: (Boolean) -> Unit) {
@@ -2516,34 +2595,43 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         _isAuthLoading.value = true
-        user.reload().addOnCompleteListener { task ->
-            val refreshedUser = auth.currentUser ?: user
-            val verified = isUserVerified(refreshedUser)
-            if (verified) {
-                _isAuthLoading.value = false
-                _isUserVerifiedState.value = true
-                _currentUser.value = refreshedUser
-                showSnackbar("Το email επιβεβαιώθηκε επιτυχώς! Καλώς ήρθατε!")
-                viewModelScope.launch {
-                    loadUserProfileAndHousehold(refreshedUser)
-                }
-                onResult(true)
-            } else {
-                // Secondary check: force-refresh token to make sure claims/verification state updates
-                user.getIdToken(true).addOnCompleteListener {
+        viewModelScope.launch {
+            try {
+                user.reload().await()
+                val refreshedUser = auth.currentUser ?: user
+                if (!refreshedUser.isEmailVerified) {
                     _isAuthLoading.value = false
-                    val doubleCheckUser = auth.currentUser ?: user
-                    val finalVerified = isUserVerified(doubleCheckUser)
-                    _isUserVerifiedState.value = finalVerified
-                    if (finalVerified) {
-                        _currentUser.value = doubleCheckUser
-                        showSnackbar("Το email επιβεβαιώθηκε επιτυχώς! Καλώς ήρθατε!")
-                        viewModelScope.launch {
-                            loadUserProfileAndHousehold(doubleCheckUser)
-                        }
-                    }
-                    onResult(finalVerified)
+                    _isUserVerifiedState.value = false
+                    onResult(false)
+                    return@launch
                 }
+
+                // Clear pending verification state once user confirms email verification
+                prefs.edit().remove("pending_google_verification_${refreshedUser.uid}").apply()
+                try {
+                    firestoreSyncRepo.markEmailVerifiedConfirmed(refreshedUser.uid)
+                } catch (e: Exception) {
+                    Log.w("OikoNomosVM", "markEmailVerifiedConfirmed warning: ${e.message}")
+                }
+                _userProfile.value = _userProfile.value?.copy(emailVerifiedConfirmed = true)
+                _currentUser.value = refreshedUser
+                _isUserVerifiedState.value = true
+                _isAuthLoading.value = false
+                showSnackbar(
+                    if (_appLanguage.value == "EN") "Email verified successfully! Welcome!"
+                    else "Το email επιβεβαιώθηκε επιτυχώς! Καλώς ήρθατε!"
+                )
+                loadUserProfileAndHousehold(refreshedUser)
+                onResult(true)
+            } catch (e: FirebaseAuthInvalidUserException) {
+                Log.w("OikoNomosVM", "checkEmailVerification user invalid: ${e.message}")
+                _isAuthLoading.value = false
+                signOutUser()
+                onResult(false)
+            } catch (e: Exception) {
+                Log.w("OikoNomosVM", "checkEmailVerification reload error: ${e.message}")
+                _isAuthLoading.value = false
+                onResult(false)
             }
         }
     }
@@ -2551,7 +2639,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun resendVerificationEmail(onSuccess: () -> Unit, onError: (String) -> Unit) {
         val user = auth.currentUser ?: _currentUser.value
         if (user == null) {
-            onError("Δεν βρέθηκε συνδεδεμένος χρήστης")
+            onError(if (_appLanguage.value == "EN") "No signed-in user found" else "Δεν βρέθηκε συνδεδεμένος χρήστης")
             return
         }
         _isAuthLoading.value = true
@@ -2559,12 +2647,21 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         user.sendEmailVerification()
             .addOnSuccessListener {
                 _isAuthLoading.value = false
-                showSnackbar("Στάλθηκε νέο email επιβεβαίωσης!")
+                showSnackbar(
+                    if (_appLanguage.value == "EN") "A new verification email has been sent!"
+                    else "Στάλθηκε νέο email επιβεβαίωσης!"
+                )
                 onSuccess()
             }
             .addOnFailureListener { exc ->
                 _isAuthLoading.value = false
-                onError(exc.localizedMessage ?: "Σφάλμα αποστολής email")
+                val msg = if (exc is FirebaseTooManyRequestsException) {
+                    if (_appLanguage.value == "EN") "Too many requests. Please wait a bit before resending."
+                    else "Πολλές αποστολές email σε σύντομο χρόνο. Παρακαλούμε περιμένετε λίγο και προσπαθήστε ξανά."
+                } else {
+                    exc.localizedMessage ?: (if (_appLanguage.value == "EN") "Failed to send verification email" else "Σφάλμα αποστολής email")
+                }
+                onError(msg)
             }
     }
 
@@ -2705,35 +2802,65 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun signInWithEmail(email: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-        if (email.isBlank() || pass.isBlank()) {
-            onError("Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης")
+        val cleanEmail = email.trim()
+        val isEn = _appLanguage.value == "EN"
+        if (cleanEmail.isBlank() || pass.isBlank()) {
+            onError(if (isEn) "Please enter your email and password" else "Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης")
+            return
+        }
+        if (!Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+            onError(if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email")
             return
         }
         _isAuthLoading.value = true
-        auth.signInWithEmailAndPassword(email.trim(), pass)
-            .addOnSuccessListener { result ->
-                val user = result.user
-                _isAuthLoading.value = false
-                _currentUser.value = user
+        suppressAuthStateListener = true
+        viewModelScope.launch {
+            try {
+                val result = auth.signInWithEmailAndPassword(cleanEmail, pass).await()
+                val rawUser = result.user ?: throw IllegalStateException("Authentication returned no user")
+                try {
+                    rawUser.reload().await()
+                } catch (_: Exception) {}
+                val user = auth.currentUser ?: rawUser
                 val verified = isUserVerified(user)
+                _currentUser.value = user
                 _isUserVerifiedState.value = verified
+                _isAuthLoading.value = false
                 if (verified) {
-                    showSnackbar("Συνδεθήκατε επιτυχώς!")
+                    showSnackbar(if (isEn) "Signed in successfully!" else "Συνδεθήκατε επιτυχώς!")
+                    loadUserProfileAndHousehold(user)
                 } else {
-                    showSnackbar("Απαιτείται επιβεβαίωση email.")
+                    showSnackbar(
+                        if (isEn) "Email verification is required. Please click the link sent to your email."
+                        else "Απαιτείται επιβεβαίωση email. Πατήστε στον σύνδεσμο που στάλθηκε στο email σας."
+                    )
                 }
                 onSuccess()
-            }
-            .addOnFailureListener { exc ->
+            } catch (exc: Exception) {
                 _isAuthLoading.value = false
+                val code = (exc as? FirebaseAuthException)?.errorCode.orEmpty()
                 val msg = when {
-                    exc.message?.contains("user-not-found") == true -> "Δεν βρέθηκε λογαριασμός με αυτό το email"
-                    exc.message?.contains("wrong-password") == true || exc.message?.contains("invalid-credential") == true -> "Λανθασμένος κωδικός ή email"
-                    exc.message?.contains("invalid-email") == true -> "Μη έγκυρη μορφή email"
-                    else -> exc.localizedMessage ?: "Σφάλμα σύνδεσης"
+                    code == "ERROR_USER_NOT_FOUND" || exc.message?.contains("user-not-found") == true ->
+                        if (isEn) "No registered account found with this email. Please Sign Up first."
+                        else "Δεν βρέθηκε εγγεγραμμένος λογαριασμός με αυτό το email. Κάντε πρώτα Εγγραφή."
+                    code == "ERROR_WRONG_PASSWORD" || code == "ERROR_INVALID_CREDENTIAL" ||
+                        exc.message?.contains("wrong-password") == true || exc.message?.contains("invalid-credential") == true ->
+                        if (isEn) "Incorrect email or password, or account is not registered."
+                        else "Λανθασμένο email ή κωδικός πρόσβασης, ή ο λογαριασμός δεν είναι εγγεγραμμένος."
+                    code == "ERROR_INVALID_EMAIL" || exc.message?.contains("invalid-email") == true ->
+                        if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email"
+                    code == "ERROR_USER_DISABLED" ->
+                        if (isEn) "This account has been disabled." else "Αυτός ο λογαριασμός έχει απενεργοποιηθεί."
+                    exc is FirebaseTooManyRequestsException || code == "ERROR_TOO_MANY_REQUESTS" ->
+                        if (isEn) "Too many attempts. Please try again shortly."
+                        else "Πολλές αποτυχημένες προσπάθειες. Δοκιμάστε ξανά σε λίγο."
+                    else -> exc.localizedMessage ?: (if (isEn) "Sign in error" else "Σφάλμα σύνδεσης")
                 }
                 onError(msg)
+            } finally {
+                suppressAuthStateListener = false
             }
+        }
     }
 
     fun signUpWithEmail(
@@ -2748,140 +2875,280 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
+        val isEn = _appLanguage.value == "EN"
+        val cleanEmail = email.trim()
         if (firstName.isBlank() || lastName.isBlank()) {
-            onError("Παρακαλώ συμπληρώστε Όνομα και Επίθετο")
+            onError(if (isEn) "Please enter First Name and Last Name" else "Παρακαλώ συμπληρώστε Όνομα και Επίθετο")
             return
         }
         if (birthDate.isBlank()) {
-            onError("Παρακαλώ επιλέξτε την Ημερομηνία Γέννησής σας")
+            onError(if (isEn) "Please select your Date of Birth" else "Παρακαλώ επιλέξτε την Ημερομηνία Γέννησής σας")
             return
         }
         if (phoneNumber.isBlank() || phoneNumber.length < 10) {
-            onError("Παρακαλώ εισάγετε έγκυρο κινητό τηλέφωνο (τουλάχιστον 10 ψηφία)")
+            onError(if (isEn) "Please enter a valid mobile phone (at least 10 digits)" else "Παρακαλώ εισάγετε έγκυρο κινητό τηλέφωνο (τουλάχιστον 10 ψηφία)")
             return
         }
-        if (email.isBlank() || pass.isBlank()) {
-            onError("Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης")
+        if (cleanEmail.isBlank() || pass.isBlank()) {
+            onError(if (isEn) "Please enter email and password" else "Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης")
+            return
+        }
+        if (!Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
+            onError(if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email")
             return
         }
         if (pass.length < 6) {
-            onError("Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες")
+            onError(if (isEn) "Password must be at least 6 characters" else "Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες")
             return
         }
         _isAuthLoading.value = true
-        // Zero Data Loss Guard: Do not wipe cache prematurely before user creation succeeds.
+        suppressAuthStateListener = true
         val fullName = "${firstName.trim()} ${lastName.trim()}"
-        auth.createUserWithEmailAndPassword(email.trim(), pass)
-            .addOnSuccessListener { result ->
-                val user = result.user
-                if (user != null) {
+        viewModelScope.launch {
+            try {
+                val result = auth.createUserWithEmailAndPassword(cleanEmail, pass).await()
+                val user = result.user ?: throw IllegalStateException("User creation returned null")
+                try {
                     val updateReq = UserProfileChangeRequest.Builder()
                         .setDisplayName(fullName)
                         .build()
-                    user.updateProfile(updateReq).addOnCompleteListener {
-                        // Create and initialize the user's Firestore profile with all personal fields
-                        viewModelScope.launch {
-                            try {
-                                val createdProfile = firestoreSyncRepo.getOrCreateUserProfile(
-                                    uid = user.uid,
-                                    email = user.email ?: email.trim(),
-                                    displayName = fullName,
-                                    firstName = firstName.trim(),
-                                    lastName = lastName.trim(),
-                                    birthDate = birthDate.trim(),
-                                    phoneNumber = phoneNumber.trim(),
-                                    occupation = occupation.trim(),
-                                    city = city.trim()
-                                )
-                                _userProfile.value = createdProfile
-                                saveUserProfileToPrefs(createdProfile)
-
-                                val initialHid = createdProfile.householdId.ifBlank { "household_${user.uid}" }
-                                val safeHousehold = Household(
-                                    id = initialHid,
-                                    name = "Το Εξοδολόγιό μου",
-                                    ownerId = user.uid,
-                                    memberUids = listOf(user.uid)
-                                )
-                                _currentHousehold.value = safeHousehold
-                                _userHouseholds.value = listOf(safeHousehold)
-                                prefs.edit()
-                                    .putString("user_household_${user.uid}", initialHid)
-                                    .putString("last_household_id", initialHid)
-                                    .apply()
-
-                                // Fully load profile, setup listeners & sanitization
-                                loadUserProfileAndHousehold(user)
-                            } catch (e: Exception) {
-                                Log.e("OikoNomosVM", "Error storing profile during sign up", e)
-                            } finally {
-                                try {
-                                    auth.setLanguageCode(if (_appLanguage.value == "EN") "en" else "el")
-                                    user.sendEmailVerification()
-                                        .addOnSuccessListener {
-                                            Log.d("OikoNomosVM", "sendEmailVerification succeeded for ${user.email}")
-                                        }
-                                        .addOnFailureListener { exc ->
-                                            Log.e("OikoNomosVM", "sendEmailVerification failed", exc)
-                                            showSnackbar(exc.localizedMessage ?: "Σφάλμα αποστολής email επιβεβαίωσης")
-                                        }
-                                } catch (e: Exception) {
-                                    Log.e("OikoNomosVM", "sendEmailVerification exception", e)
-                                }
-                                val verified = isUserVerified(user)
-                                _currentUser.value = user
-                                _isUserVerifiedState.value = verified
-                                _isAuthLoading.value = false
-                                if (verified) {
-                                    showSnackbar(if (_appLanguage.value == "EN") "Welcome!" else "Καλώς ήρθατε!")
-                                } else {
-                                    showSnackbar(
-                                        if (_appLanguage.value == "EN")
-                                            "Verification email sent to ${user.email}!"
-                                        else
-                                            "Στάλθηκε email επιβεβαίωσης στο ${user.email}!"
-                                    )
-                                }
-                                onSuccess()
-                            }
-                        }
-                    }
-                } else {
-                    _isAuthLoading.value = false
-                    onSuccess()
+                    user.updateProfile(updateReq).await()
+                } catch (e: Exception) {
+                    Log.w("OikoNomosVM", "updateProfile warning: ${e.message}")
                 }
-            }
-            .addOnFailureListener { exc ->
+
+                val pendingProfile = UserProfile(
+                    uid = user.uid,
+                    email = user.email ?: cleanEmail,
+                    displayName = fullName,
+                    firstName = firstName.trim(),
+                    lastName = lastName.trim(),
+                    birthDate = birthDate.trim(),
+                    phoneNumber = phoneNumber.trim(),
+                    occupation = occupation.trim(),
+                    city = city.trim(),
+                    authProvider = "password",
+                    requiresEmailVerification = true,
+                    emailVerifiedConfirmed = false,
+                    appLanguage = _appLanguage.value,
+                    createdAt = com.google.firebase.Timestamp.now()
+                )
+                try {
+                    firestoreSyncRepo.savePendingUserProfile(pendingProfile)
+                    _userProfile.value = pendingProfile
+                    saveUserProfileToPrefs(pendingProfile)
+                } catch (e: Exception) {
+                    Log.e("OikoNomosVM", "Error storing profile during sign up", e)
+                }
+
+                try {
+                    auth.setLanguageCode(if (isEn) "en" else "el")
+                    user.sendEmailVerification().await()
+                } catch (e: Exception) {
+                    Log.e("OikoNomosVM", "sendEmailVerification error", e)
+                    showSnackbar(e.localizedMessage ?: (if (isEn) "Failed to send verification email" else "Σφάλμα αποστολής email επιβεβαίωσης"))
+                }
+
+                val verified = isUserVerified(user)
+                _currentUser.value = user
+                _isUserVerifiedState.value = verified
                 _isAuthLoading.value = false
+                if (!verified) {
+                    showSnackbar(
+                        if (isEn) "Verification link sent to ${user.email}!"
+                        else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
+                    )
+                } else {
+                    loadUserProfileAndHousehold(user)
+                }
+                onSuccess()
+            } catch (exc: Exception) {
+                _isAuthLoading.value = false
+                val code = (exc as? FirebaseAuthException)?.errorCode.orEmpty()
                 val msg = when {
-                    exc.message?.contains("email-already-in-use") == true -> "Αυτό το email χρησιμοποιείται ήδη"
-                    exc.message?.contains("weak-password") == true -> "Ο κωδικός είναι πολύ αδύναμος"
-                    exc.message?.contains("invalid-email") == true -> "Μη έγκυρη μορφή email"
-                    else -> exc.localizedMessage ?: "Σφάλμα δημιουργίας λογαριασμού"
+                    code == "ERROR_EMAIL_ALREADY_IN_USE" || exc.message?.contains("email-already-in-use") == true ->
+                        if (isEn) "This email is already registered. Please switch to Sign In."
+                        else "Αυτό το email χρησιμοποιείται ήδη. Παρακαλούμε μεταβείτε στη Σύνδεση."
+                    code == "ERROR_WEAK_PASSWORD" || exc.message?.contains("weak-password") == true ->
+                        if (isEn) "Password is too weak" else "Ο κωδικός είναι πολύ αδύναμος"
+                    code == "ERROR_INVALID_EMAIL" || exc.message?.contains("invalid-email") == true ->
+                        if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email"
+                    else -> exc.localizedMessage ?: (if (isEn) "Error creating account" else "Σφάλμα δημιουργίας λογαριασμού")
                 }
                 onError(msg)
+            } finally {
+                suppressAuthStateListener = false
             }
+        }
     }
 
-    fun signInWithGoogleToken(idToken: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+    fun signInWithGoogleToken(
+        idToken: String,
+        isSignUpMode: Boolean = false,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val isEn = _appLanguage.value == "EN"
         _isAuthLoading.value = true
+        suppressAuthStateListener = true
         val credential = GoogleAuthProvider.getCredential(idToken, null)
-        auth.signInWithCredential(credential)
-            .addOnSuccessListener { result ->
+        viewModelScope.launch {
+            try {
+                val result = auth.signInWithCredential(credential).await()
+                val user = result.user ?: throw IllegalStateException("Google authentication returned no user")
+                val isNewAuthUser = result.additionalUserInfo?.isNewUser == true
+                val isMarios = isMariosUser(user)
+                val existingProfile = try {
+                    firestoreSyncRepo.getUserProfileOnce(user.uid)
+                } catch (e: Exception) {
+                    Log.w("OikoNomosVM", "getUserProfileOnce error: ${e.message}")
+                    // If existing Auth user and network read failed, allow verification gate check later in loadUserProfileAndHousehold
+                    if (isNewAuthUser) null else UserProfile(uid = user.uid, email = user.email.orEmpty())
+                }
+
+                if (!isSignUpMode) {
+                    // Login tab: Only already-registered users may enter
+                    if (!isMarios && (isNewAuthUser || existingProfile == null)) {
+                        if (isNewAuthUser) {
+                            try {
+                                user.delete().await()
+                            } catch (delErr: Exception) {
+                                Log.w("OikoNomosVM", "Delete unregistered Google Auth user warning: ${delErr.message}")
+                            }
+                        }
+                        withContext(NonCancellable) {
+                            try {
+                                CredentialManager.create(getApplication()).clearCredentialState(ClearCredentialStateRequest())
+                            } catch (_: Exception) {}
+                            auth.signOut()
+                        }
+                        _currentUser.value = null
+                        _isUserVerifiedState.value = false
+                        _userProfile.value = null
+                        _isAuthLoading.value = false
+                        onError(
+                            if (isEn) "No registered account found for this Google email. Please select Sign Up first."
+                            else "Δεν βρέθηκε εγγεγραμμένος λογαριασμός με αυτό το Google email. Παρακαλούμε επιλέξτε πρώτα «Εγγραφή»."
+                        )
+                        return@launch
+                    }
+
+                    // Registered user signing in with Google: check if email verification is still pending
+                    val isPendingVerification = !isMarios && (
+                        !user.isEmailVerified ||
+                            prefs.getBoolean("pending_google_verification_${user.uid}", false) ||
+                            (existingProfile != null && existingProfile.authProvider == "google" && existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed)
+                        )
+                    if (isPendingVerification) {
+                        prefs.edit().putBoolean("pending_google_verification_${user.uid}", true).apply()
+                        _userProfile.value = existingProfile
+                        _currentUser.value = user
+                        _isUserVerifiedState.value = false
+                        _isAuthLoading.value = false
+                        showSnackbar(
+                            if (isEn) "Please verify your email via the link sent to ${user.email}."
+                            else "Απαιτείται επιβεβαίωση email. Πατήστε στον σύνδεσμο που στάλθηκε στο ${user.email}."
+                        )
+                        onSuccess()
+                    } else {
+                        _userProfile.value = existingProfile
+                        _currentUser.value = user
+                        _isUserVerifiedState.value = true
+                        _isAuthLoading.value = false
+                        showSnackbar(if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!")
+                        loadUserProfileAndHousehold(user)
+                        onSuccess()
+                    }
+                } else {
+                    // Sign Up tab: Register new Google user OR resume incomplete registration -> require email verification link!
+                    if (!isMarios && (isNewAuthUser || existingProfile == null)) {
+                        val displayName = user.displayName.orEmpty().trim()
+                        val parts = displayName.split(" ").filter { it.isNotBlank() }
+                        val pendingProfile = UserProfile(
+                            uid = user.uid,
+                            email = user.email.orEmpty().trim(),
+                            displayName = displayName.ifBlank { "Χρήστης Finsay" },
+                            firstName = parts.firstOrNull().orEmpty(),
+                            lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
+                            photoUrl = user.photoUrl?.toString().orEmpty(),
+                            authProvider = "google",
+                            requiresEmailVerification = true,
+                            emailVerifiedConfirmed = false,
+                            appLanguage = _appLanguage.value,
+                            createdAt = com.google.firebase.Timestamp.now()
+                        )
+                        try {
+                            firestoreSyncRepo.savePendingUserProfile(pendingProfile)
+                            saveUserProfileToPrefs(pendingProfile)
+                        } catch (e: Exception) {
+                            Log.w("OikoNomosVM", "savePendingUserProfile Google warning: ${e.message}")
+                        }
+                        prefs.edit().putBoolean("pending_google_verification_${user.uid}", true).apply()
+                        try {
+                            auth.setLanguageCode(if (isEn) "en" else "el")
+                            user.sendEmailVerification().await()
+                        } catch (e: Exception) {
+                            Log.w("OikoNomosVM", "Google sendEmailVerification warning: ${e.message}")
+                        }
+                        _userProfile.value = pendingProfile
+                        _currentUser.value = user
+                        _isUserVerifiedState.value = false
+                        _isAuthLoading.value = false
+                        showSnackbar(
+                            if (isEn) "Verification link sent to ${user.email}!"
+                            else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
+                        )
+                        onSuccess()
+                    } else {
+                        val isPendingVerification = !isMarios && (
+                            !user.isEmailVerified ||
+                                prefs.getBoolean("pending_google_verification_${user.uid}", false) ||
+                                (existingProfile != null && existingProfile.authProvider == "google" && existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed)
+                            )
+                        if (isPendingVerification) {
+                            prefs.edit().putBoolean("pending_google_verification_${user.uid}", true).apply()
+                            _userProfile.value = existingProfile
+                            _currentUser.value = user
+                            _isUserVerifiedState.value = false
+                            _isAuthLoading.value = false
+                            showSnackbar(
+                                if (isEn) "Please verify your email via the link sent to ${user.email}."
+                                else "Παρακαλούμε επιβεβαιώστε το email σας από τον σύνδεσμο στο ${user.email}."
+                            )
+                            onSuccess()
+                        } else {
+                            _userProfile.value = existingProfile
+                            _currentUser.value = user
+                            _isUserVerifiedState.value = true
+                            _isAuthLoading.value = false
+                            showSnackbar(if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!")
+                            loadUserProfileAndHousehold(user)
+                            onSuccess()
+                        }
+                    }
+                }
+            } catch (exc: Exception) {
                 _isAuthLoading.value = false
-                _currentUser.value = result.user
-                _isUserVerifiedState.value = isUserVerified(result.user)
-                showSnackbar("Συνδεθήκατε μέσω Google!")
-                onSuccess()
+                onError(exc.localizedMessage ?: (if (isEn) "Google sign-in error" else "Σφάλμα σύνδεσης Google"))
+            } finally {
+                suppressAuthStateListener = false
             }
-            .addOnFailureListener { exc ->
-                _isAuthLoading.value = false
-                onError(exc.localizedMessage ?: "Σφάλμα σύνδεσης Google")
-            }
+        }
     }
 
     fun signOutUser() {
-        auth.signOut()
+        val prevUid = auth.currentUser?.uid ?: _currentUser.value?.uid
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                try {
+                    CredentialManager.create(getApplication()).clearCredentialState(ClearCredentialStateRequest())
+                } catch (e: Exception) {
+                    Log.w("OikoNomosVM", "clearCredentialState warning: ${e.message}")
+                } finally {
+                    auth.signOut()
+                }
+            }
+        }
         _currentUser.value = null
         _isUserVerifiedState.value = false
         _userProfile.value = null
@@ -2916,11 +3183,21 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 Log.w("OikoNomosVM", "Error clearing Room on signOut: ${e.message}")
             }
         }
-        showSnackbar("Αποσυνδεθήκατε επιτυχώς")
+        if (prevUid != null) {
+            Log.d("OikoNomosVM", "Signed out user $prevUid")
+        }
+        showSnackbar(if (_appLanguage.value == "EN") "Signed out successfully" else "Αποσυνδεθήκατε επιτυχώς")
     }
 
     fun factoryResetAndSignOut() {
-        auth.signOut()
+        viewModelScope.launch {
+            withContext(NonCancellable) {
+                try {
+                    CredentialManager.create(getApplication()).clearCredentialState(ClearCredentialStateRequest())
+                } catch (_: Exception) {}
+                auth.signOut()
+            }
+        }
         _currentUser.value = null
         _isUserVerifiedState.value = false
         _userProfile.value = null

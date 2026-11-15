@@ -69,6 +69,7 @@ fun EmailVerificationScreen(
     val isAuthLoading by viewModel.isAuthLoading.collectAsState()
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
+    var isStatusError by remember { mutableStateOf(false) }
     var isChecking by remember { mutableStateOf(false) }
 
     BackHandler {
@@ -188,13 +189,15 @@ fun EmailVerificationScreen(
                         Spacer(modifier = Modifier.height(14.dp))
                         Surface(
                             shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                            color = if (isStatusError) MaterialTheme.colorScheme.errorContainer
+                            else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
                                 text = statusMessage ?: "",
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                color = if (isStatusError) MaterialTheme.colorScheme.onErrorContainer
+                                else MaterialTheme.colorScheme.onSecondaryContainer,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(10.dp)
                             )
@@ -208,14 +211,17 @@ fun EmailVerificationScreen(
                         onClick = {
                             isChecking = true
                             statusMessage = null
+                            isStatusError = false
                             viewModel.checkEmailVerification { verified ->
                                 isChecking = false
                                 if (!verified) {
+                                    isStatusError = true
                                     statusMessage = if (lang == Localization.Language.ENGLISH)
                                         "Email is not verified yet. Please check your inbox and click the link."
                                     else
                                         "Το email δεν έχει επιβεβαιωθεί ακόμα. Ελέγξτε τα εισερχόμενά σας και πατήστε τον σύνδεσμο."
                                 } else {
+                                    isStatusError = false
                                     statusMessage = if (lang == Localization.Language.ENGLISH)
                                         "Email verified! Entering your account..."
                                     else
@@ -255,14 +261,18 @@ fun EmailVerificationScreen(
                     // Secondary Button: Resend Email
                     OutlinedButton(
                         onClick = {
+                            isStatusError = false
+                            statusMessage = null
                             viewModel.resendVerificationEmail(
                                 onSuccess = {
+                                    isStatusError = false
                                     statusMessage = if (lang == Localization.Language.ENGLISH)
                                         "A new verification email has been sent!"
                                     else
                                         "Στάλθηκε νέο email επιβεβαίωσης! Ελέγξτε τα εισερχόμενά σας."
                                 },
                                 onError = { err ->
+                                    isStatusError = true
                                     statusMessage = err
                                 }
                             )
