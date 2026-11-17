@@ -15,15 +15,29 @@
         "occupation": { "type": "string" },
         "city": { "type": "string" },
         "householdId": { "type": "string" },
+        "householdIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "photoUrl": { "type": "string" },
+        "authProvider": { "type": "string" },
         "isPremium": { "type": "boolean" },
-        "createdAt": { "type": "number" }
+        "appLanguage": { "type": "string" },
+        "themeMode": { "type": "string" },
+        "reminderEnabled": { "type": "boolean" },
+        "reminderHour": { "type": "number" },
+        "reminderMinute": { "type": "number" },
+        "notificationConsentCompleted": { "type": "boolean" },
+        "requiresEmailVerification": { "type": "boolean" },
+        "emailVerifiedConfirmed": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
       "required": ["uid", "email", "displayName"]
     },
     "Household": {
       "title": "Household",
-      "description": "Shared household budget group for family members",
+      "description": "Household budget book with 3-tier RBAC (CREATOR, EDITOR, REGISTAR) and verified-user sharing",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -34,13 +48,32 @@
           "type": "array",
           "items": { "type": "string" }
         },
-        "createdAt": { "type": "number" }
+        "invitedEmails": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "memberRoles": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "memberEmails": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "memberNames": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "pendingInviteRole": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
-      "required": ["id", "name", "ownerId", "inviteCode", "memberUids"]
+      "required": ["id", "name", "ownerId", "memberUids"]
     },
     "Expense": {
       "title": "Expense",
-      "description": "Logged expense in a shared household",
+      "description": "Logged expense in a household",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -55,7 +88,92 @@
         "note": { "type": "string" },
         "createdByUid": { "type": "string" }
       },
-      "required": ["id", "householdId", "title", "amount", "timestamp", "createdByUid"]
+      "required": ["id", "householdId", "title", "amount", "timestamp"]
+    },
+    "Income": {
+      "title": "Income",
+      "description": "Logged income in a household",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "memberId": { "type": "number" },
+        "memberName": { "type": "string" },
+        "category": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "note": { "type": "string" },
+        "createdByUid": { "type": "string" }
+      },
+      "required": ["id", "householdId", "title", "amount", "timestamp"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Household family/participant member (CREATOR and EDITOR write; REGISTAR read-only)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "avatarColorHex": { "type": "number" },
+        "voiceKeywords": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "householdId", "name"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Expense category (CREATOR and EDITOR write; REGISTAR read-only)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "iconKey": { "type": "string" },
+        "monthlyBudget": { "type": "number" },
+        "colorHex": { "type": "number" },
+        "voiceKeywords": { "type": "string" },
+        "sortOrder": { "type": "number" },
+        "fontColorHex": { "type": "number" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "householdId", "name"]
+    },
+    "SavingsGoal": {
+      "title": "SavingsGoal",
+      "description": "Household savings goal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "deadlineDate": { "type": "string" }
+      },
+      "required": ["id", "householdId", "title", "targetAmount"]
+    },
+    "RecurringExpense": {
+      "title": "RecurringExpense",
+      "description": "Standing order / recurring expense in a household",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "householdId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "amount": { "type": "number" },
+        "dayOfMonth": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "householdId", "title", "amount"]
     }
   }
 }

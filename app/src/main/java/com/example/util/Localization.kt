@@ -415,4 +415,21 @@ object Localization {
 
     fun everyDayOfMonth(lang: Language, day: Int): String = if (lang == Language.ENGLISH) "Every $day of month" else "Κάθε $day του μήνα"
     fun everyDayOfMonth(day: Int, lang: Language): String = everyDayOfMonth(lang, day)
+
+    fun householdRoleLabel(role: com.example.data.model.HouseholdRole, lang: Language): String = when (role) {
+        com.example.data.model.HouseholdRole.CREATOR -> if (lang == Language.ENGLISH) "Creator" else "Δημιουργός"
+        com.example.data.model.HouseholdRole.EDITOR -> if (lang == Language.ENGLISH) "Editor" else "Συντάκτης"
+        com.example.data.model.HouseholdRole.REGISTAR -> if (lang == Language.ENGLISH) "Registar" else "Καταχωρητής"
+    }
+
+    fun findAction(lang: Language): String = if (lang == Language.ENGLISH) "Find" else "Εύρεση"
+    fun userNotFound(lang: Language): String = if (lang == Language.ENGLISH) "Not found" else "Δεν βρέθηκε"
+    fun userEmailPlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "User email" else "Email χρήστη"
+    fun alreadyAddedMsg(lang: Language): String = if (lang == Language.ENGLISH) "Already added" else "Ήδη προστέθηκε"
+    fun sharedUsersTitle(lang: Language, count: Int): String = if (lang == Language.ENGLISH) "Shared users ($count)" else "Χρήστες με πρόσβαση ($count)"
+    fun removeUserAction(lang: Language): String = if (lang == Language.ENGLISH) "Remove user" else "Αφαίρεση χρήστη"
+    fun leaveHouseholdAction(lang: Language): String = if (lang == Language.ENGLISH) "Leave" else "Αποχώρηση"
+    fun myHouseholdsHeader(lang: Language, count: Int): String = if (lang == Language.ENGLISH) "MY HOUSEHOLDS ($count)" else "ΤΑ ΕΞΟΔΟΛΟΓΙΑ ΜΟΥ ($count)"
+    fun loadingEmail(lang: Language): String = if (lang == Language.ENGLISH) "Loading email..." else "Φόρτωση email..."
+    fun registeredUserLabel(lang: Language): String = if (lang == Language.ENGLISH) "Registered user" else "Εγγεγραμμένος χρήστης"
 }

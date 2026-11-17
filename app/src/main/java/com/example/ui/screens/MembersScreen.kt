@@ -217,30 +217,41 @@ fun MembersScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = if (isGreek)
-                                "Προσθέστε μέλη για να παρακολουθείτε ποιος πληρώνει τι."
-                            else
-                                "Add members to track who pays what.",
+                            text = if (canManage) {
+                                if (isGreek)
+                                    "Προσθέστε μέλη για να παρακολουθείτε ποιος πληρώνει τι."
+                                else
+                                    "Add members to track who pays what."
+                            } else {
+                                if (isGreek)
+                                    "Δεν υπάρχουν μέλη στο εξοδολόγιο."
+                                else
+                                    "No members in this household."
+                            },
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        if (canManage) {
+                            Spacer(modifier = Modifier.height(16.dp))
 
-                        Button(
-                            onClick = onAddMember,
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
-                            modifier = Modifier.height(42.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isGreek) "Προσθήκη Μέλους" else "Add Member",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.5.sp
-                            )
+                            Button(
+                                onClick = onAddMember,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
+                                modifier = Modifier
+                                    .height(42.dp)
+                                    .testTag("empty_add_member_button")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isGreek) "Προσθήκη Μέλους" else "Add Member",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.5.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -433,30 +444,32 @@ fun MembersScreen(
                     }
 
                     // Recycle Bin / Soft-deleted members access button at the bottom
-                    item {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        OutlinedButton(
-                            onClick = { showDeletedMembersDialog = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp)
-                                .testTag("deleted_members_button"),
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (isGreek) "Διαγραμμένα Μέλη (${deletedMembers.size})" else "Deleted Members (${deletedMembers.size})",
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                    if (canManage) {
+                        item {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = { showDeletedMembersDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp)
+                                    .testTag("deleted_members_button"),
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isGreek) "Διαγραμμένα Μέλη (${deletedMembers.size})" else "Deleted Members (${deletedMembers.size})",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
 

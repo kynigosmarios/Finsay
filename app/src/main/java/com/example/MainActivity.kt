@@ -40,8 +40,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         try {
             enableEdgeToEdge()
-        } catch (e: Exception) {
-            Log.w("MainActivity", "enableEdgeToEdge safe fallback: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "enableEdgeToEdge safe fallback: ${t.message}")
         }
 
         try {
@@ -51,8 +51,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
             billingManager.startConnection()
-        } catch (e: Exception) {
-            Log.w("MainActivity", "BillingManager init error: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "BillingManager init error: ${t.message}")
         }
 
         try {
@@ -61,14 +61,14 @@ class MainActivity : ComponentActivity() {
             com.example.util.BankNotificationHolder.onTransactionRemoved = { id ->
                 com.example.util.BankNotificationSystemManager.cancelNotification(this, id)
             }
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Bank notification init: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "Bank notification init: ${t.message}")
         }
 
         try {
             handleIntent(intent)
-        } catch (e: Exception) {
-            Log.w("MainActivity", "handleIntent safe fallback: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "handleIntent safe fallback: ${t.message}")
         }
 
         setContent {
@@ -86,9 +86,14 @@ class MainActivity : ComponentActivity() {
                     AppRootNavigator(
                         viewModel = viewModel,
                         onLaunchBilling = { act, planId ->
-                            if (::billingManager.isInitialized) {
-                                billingManager.launchPurchaseFlow(act, planId)
-                            } else {
+                            try {
+                                if (::billingManager.isInitialized) {
+                                    billingManager.launchPurchaseFlow(act, planId)
+                                } else {
+                                    false
+                                }
+                            } catch (t: Throwable) {
+                                Log.w("MainActivity", "launchPurchaseFlow safe fallback: ${t.message}")
                                 false
                             }
                         }
@@ -104,8 +109,8 @@ class MainActivity : ComponentActivity() {
             if (::billingManager.isInitialized) {
                 billingManager.endConnection()
             }
-        } catch (e: Exception) {
-            Log.w("MainActivity", "BillingManager endConnection: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "BillingManager endConnection: ${t.message}")
         }
     }
 
@@ -114,8 +119,8 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         try {
             handleIntent(intent)
-        } catch (e: Exception) {
-            Log.w("MainActivity", "onNewIntent safe fallback: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "onNewIntent safe fallback: ${t.message}")
         }
     }
 
@@ -126,8 +131,8 @@ class MainActivity : ComponentActivity() {
             com.example.util.BankNotificationHolder.reloadFromPrefs(this)
             com.example.service.BankNotificationListenerService.requestRebindIfPossible(this)
             com.example.service.BankNotificationListenerService.scanActiveNotifications(this)
-        } catch (e: Exception) {
-            Log.w("MainActivity", "onResume safe fallback: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "onResume safe fallback: ${t.message}")
         }
     }
 
@@ -152,8 +157,8 @@ class MainActivity : ComponentActivity() {
             if (billReminderId > 0L) {
                 viewModel.triggerReminderById(billReminderId)
             }
-        } catch (e: Exception) {
-            Log.w("MainActivity", "Error parsing intent: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "Error parsing intent: ${t.message}")
         }
     }
 }

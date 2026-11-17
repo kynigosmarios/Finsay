@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
@@ -54,13 +57,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.Household
+import com.example.data.model.HouseholdRole
+import com.example.data.model.UserProfile
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
+import com.example.ui.viewmodel.OikoNomosViewModel
 import com.example.util.Localization
 
 @Composable
@@ -69,6 +76,15 @@ fun ExodologioManagerDialog(
     allHouseholds: List<Household>,
     isPremium: Boolean,
     isHouseholdOwner: (Household) -> Boolean = { true },
+    getHouseholdRole: (Household) -> HouseholdRole = { if (isHouseholdOwner(it)) HouseholdRole.CREATOR else HouseholdRole.REGISTAR },
+    lookupState: OikoNomosViewModel.VerifiedUserLookupState = OikoNomosViewModel.VerifiedUserLookupState.Idle,
+    resolvedUsersByUid: Map<String, UserProfile> = emptyMap(),
+    onSearchUser: (email: String, householdId: String) -> Unit = { _, _ -> },
+    onClearLookup: () -> Unit = {},
+    onAddSharedUser: (householdId: String, targetUser: UserProfile, role: HouseholdRole) -> Unit = { _, _, _ -> },
+    onChangeSharedUserRole: (householdId: String, targetUid: String, targetEmail: String, newRole: HouseholdRole) -> Unit = { _, _, _, _ -> },
+    onRemoveSharedUser: (householdId: String, targetUid: String, targetEmail: String) -> Unit = { _, _, _ -> },
+    onLeaveHousehold: ((Household) -> Unit)? = null,
     appLanguage: String = "EL",
     currentUserId: String = "",
     onSelectHousehold: (Household) -> Unit,
@@ -81,6 +97,7 @@ fun ExodologioManagerDialog(
     var showCreateDialog by remember { mutableStateOf(false) }
     var newHouseholdName by remember { mutableStateOf("") }
     var householdToDelete by remember { mutableStateOf<Household?>(null) }
+    var expandedShareHouseholdId by remember { mutableStateOf<String?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -211,101 +228,208 @@ fun ExodologioManagerDialog(
 
                     myHouseholds.forEach { household ->
                         val isSelected = household.id == currentHousehold?.id
+                        val isCreator = isHouseholdOwner(household)
+                        val householdRole = getHouseholdRole(household)
+                        val isShareExpanded = isCreator && expandedShareHouseholdId == household.id
+                        val sharedCount = household.memberUids
+                            .count { it.isNotBlank() && it != household.ownerId && it != currentUserId }
+
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) Emerald700.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) {
+                                Emerald700.copy(alpha = 0.08f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            },
                             border = BorderStroke(
-                                width = if (isSelected) 1.5.dp else 1.dp,
-                                color = if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                            ),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectHousehold(household)
-                                    onDismiss()
+                                width = if (isSelected) 1.2.dp else 0.8.dp,
+                                color = if (isSelected) {
+                                    Emerald700.copy(alpha = 0.55f)
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)
                                 }
+                            ),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onSelectHousehold(household)
+                                            onDismiss()
+                                        },
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = Localization.translateHouseholdName(household.name, lang),
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = if (household.memberUids.size <= 1)
+                                                (if (isEn) "1 member" else "1 μέλος")
+                                            else
+                                                (if (isEn) "${household.memberUids.size} members" else "${household.memberUids.size} μέλη"),
+                                            fontSize = 11.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        Text(
-                                            text = Localization.translateHouseholdName(household.name, lang),
-                                            fontSize = 14.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Emerald700.copy(alpha = 0.12f),
-                                            border = BorderStroke(0.5.dp, Emerald700.copy(alpha = 0.3f))
-                                        ) {
-                                            Text(
-                                                text = if (isEn) "Owner" else "Ιδιοκτήτης",
-                                                fontSize = 9.5.sp,
-                                                fontWeight = FontWeight.Bold,
+                                        if (isSelected) {
+                                            Surface(
+                                                shape = CircleShape,
                                                 color = Emerald700,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                            )
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = if (isEn) "Selected" else "Επιλεγμένο",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(15.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (isCreator && onDeleteHousehold != null) {
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = Color(0xFFEF4444).copy(alpha = 0.10f),
+                                                modifier = Modifier
+                                                    .size(34.dp)
+                                                    .clickable { householdToDelete = household }
+                                                    .testTag("delete_household_btn_${household.id}")
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = if (isEn) "Delete Household" else "Διαγραφή Εξοδολογίου",
+                                                        tint = Color(0xFFEF4444),
+                                                        modifier = Modifier.size(17.dp)
+                                                    )
+                                                }
+                                            }
+                                        } else if (!isCreator && onLeaveHousehold != null && myHouseholds.size > 1) {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0xFFEF4444).copy(alpha = 0.10f),
+                                                modifier = Modifier
+                                                    .clickable {
+                                                        onLeaveHousehold(household)
+                                                        onDismiss()
+                                                    }
+                                                    .testTag("leave_household_manager_${household.id}")
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Logout,
+                                                        contentDescription = Localization.leaveHouseholdAction(lang),
+                                                        tint = Color(0xFFEF4444),
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Text(
+                                                        text = Localization.leaveHouseholdAction(lang),
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFFEF4444),
+                                                        maxLines = 1,
+                                                        softWrap = false
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = if (household.memberUids.size <= 1)
-                                            (if (isEn) "1 member" else "1 μέλος")
-                                        else
-                                            (if (isEn) "${household.memberUids.size} members" else "${household.memberUids.size} μέλη"),
-                                        fontSize = 11.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
                                 }
 
                                 Row(
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    if (isSelected) {
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = Emerald700,
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Box(contentAlignment = Alignment.Center) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Check,
-                                                    contentDescription = if (isEn) "Selected" else "Επιλεγμένο",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(15.dp)
-                                                )
-                                            }
-                                        }
-                                    }
+                                    HouseholdRoleBadge(role = householdRole, lang = lang)
 
-                                    if (onDeleteHousehold != null && isHouseholdOwner(household)) {
+                                    Spacer(modifier = Modifier.weight(1f))
+
+                                    if (isCreator) {
                                         Surface(
-                                            shape = CircleShape,
-                                            color = Color(0xFFEF4444).copy(alpha = 0.12f),
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (isShareExpanded) Emerald700 else Emerald700.copy(alpha = 0.12f),
                                             modifier = Modifier
-                                                .size(32.dp)
-                                                .clickable { householdToDelete = household }
-                                                .testTag("delete_household_btn_${household.id}")
+                                                .clickable {
+                                                    onClearLookup()
+                                                    expandedShareHouseholdId =
+                                                        if (isShareExpanded) null else household.id
+                                                }
+                                                .testTag("toggle_share_manager_${household.id}")
                                         ) {
-                                            Box(contentAlignment = Alignment.Center) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
                                                 Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = if (isEn) "Delete Household" else "Διαγραφή Εξοδολογίου",
-                                                    tint = Color(0xFFEF4444),
-                                                    modifier = Modifier.size(17.dp)
+                                                    imageVector = Icons.Default.Share,
+                                                    contentDescription = Localization.share(lang),
+                                                    tint = if (isShareExpanded) Color.White else Emerald700,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Text(
+                                                    text = if (sharedCount > 0) {
+                                                        "${Localization.share(lang)} ($sharedCount)"
+                                                    } else {
+                                                        Localization.share(lang)
+                                                    },
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isShareExpanded) Color.White else Emerald700,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                                Icon(
+                                                    imageVector = if (isShareExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                                    contentDescription = null,
+                                                    tint = if (isShareExpanded) Color.White else Emerald700,
+                                                    modifier = Modifier.size(14.dp)
                                                 )
                                             }
                                         }
                                     }
+                                }
+
+                                AnimatedVisibility(visible = isShareExpanded) {
+                                    HouseholdShareMask(
+                                        household = household,
+                                        appLanguage = appLanguage,
+                                        lookupState = lookupState,
+                                        resolvedUsersByUid = resolvedUsersByUid,
+                                        currentUserId = currentUserId,
+                                        onSearchUser = onSearchUser,
+                                        onClearLookup = onClearLookup,
+                                        onAddSharedUser = onAddSharedUser,
+                                        onChangeSharedUserRole = onChangeSharedUserRole,
+                                        onRemoveSharedUser = onRemoveSharedUser
+                                    )
                                 }
                             }
                         }

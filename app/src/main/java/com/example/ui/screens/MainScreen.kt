@@ -219,6 +219,9 @@ fun MainScreen(
 
     val userHouseholds by viewModel.userHouseholds.collectAsStateWithLifecycle()
     val canManage by viewModel.canManageMembersAndCategories.collectAsStateWithLifecycle()
+    val isCreator by viewModel.isCurrentHouseholdCreator.collectAsStateWithLifecycle()
+    val verifiedUserLookupState by viewModel.verifiedUserLookupState.collectAsStateWithLifecycle()
+    val resolvedUsersByUid by viewModel.resolvedUsersByUid.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val showExodologioManagerDialog by viewModel.showExodologioManagerDialog.collectAsStateWithLifecycle()
     val showBurgerMenu by viewModel.showBurgerMenu.collectAsStateWithLifecycle()
@@ -821,14 +824,23 @@ fun MainScreen(
         )
     }
 
-    // Exodologio Details Dialog (Rename, Members, Switch, Clear)
+    // Exodologio Details Dialog (Rename, Share, Switch, Clear)
     if (showExodologioDetailsDialog) {
         ExodologioDetailsDialog(
             currentHousehold = currentHousehold,
             allHouseholds = userHouseholds,
             isPremium = isUserPro,
-            isOwner = canManage,
-            isHouseholdOwner = { viewModel.isUserOwnerOfHousehold(it) },
+            isOwner = isCreator,
+            isHouseholdOwner = { viewModel.isUserCreatorOfHousehold(it) },
+            getHouseholdRole = { viewModel.getUserRoleForHousehold(it) },
+            lookupState = verifiedUserLookupState,
+            resolvedUsersByUid = resolvedUsersByUid,
+            onSearchUser = { email, hid -> viewModel.searchVerifiedUserForSharing(email, hid) },
+            onClearLookup = { viewModel.clearVerifiedUserLookupState() },
+            onAddSharedUser = { hid, user, role -> viewModel.shareHouseholdWithVerifiedUser(hid, user, role) },
+            onChangeSharedUserRole = { hid, uid, email, role -> viewModel.updateSharedUserRole(hid, uid, email, role) },
+            onRemoveSharedUser = { hid, uid, email -> viewModel.removeSharedUserFromHousehold(hid, uid, email) },
+            onLeaveHousehold = { viewModel.leaveSharedHousehold(it) },
             appLanguage = appLanguage,
             currentUserId = currentUser?.uid.orEmpty(),
             onRenameHousehold = { viewModel.renameCurrentHousehold(it) },
@@ -839,7 +851,10 @@ fun MainScreen(
             onManageMembers = { currentTab = 2 },
             onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
             onClearExpenses = { viewModel.clearCurrentExodologioExpenses() },
-            onDismiss = { viewModel.dismissExodologioDetailsDialog() }
+            onDismiss = {
+                viewModel.clearVerifiedUserLookupState()
+                viewModel.dismissExodologioDetailsDialog()
+            }
         )
     }
 
@@ -849,14 +864,26 @@ fun MainScreen(
             currentHousehold = currentHousehold,
             allHouseholds = userHouseholds,
             isPremium = isUserPro,
-            isHouseholdOwner = { viewModel.isUserOwnerOfHousehold(it) },
+            isHouseholdOwner = { viewModel.isUserCreatorOfHousehold(it) },
+            getHouseholdRole = { viewModel.getUserRoleForHousehold(it) },
+            lookupState = verifiedUserLookupState,
+            resolvedUsersByUid = resolvedUsersByUid,
+            onSearchUser = { email, hid -> viewModel.searchVerifiedUserForSharing(email, hid) },
+            onClearLookup = { viewModel.clearVerifiedUserLookupState() },
+            onAddSharedUser = { hid, user, role -> viewModel.shareHouseholdWithVerifiedUser(hid, user, role) },
+            onChangeSharedUserRole = { hid, uid, email, role -> viewModel.updateSharedUserRole(hid, uid, email, role) },
+            onRemoveSharedUser = { hid, uid, email -> viewModel.removeSharedUserFromHousehold(hid, uid, email) },
+            onLeaveHousehold = { viewModel.leaveSharedHousehold(it) },
             appLanguage = appLanguage,
             currentUserId = currentUser?.uid.orEmpty(),
             onSelectHousehold = { viewModel.switchExodologio(it) },
             onCreateNewHousehold = { viewModel.createNewExodologio(it) },
             onDeleteHousehold = { viewModel.deleteHousehold(it) },
             onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
-            onDismiss = { viewModel.dismissExodologioManager() }
+            onDismiss = {
+                viewModel.clearVerifiedUserLookupState()
+                viewModel.dismissExodologioManager()
+            }
         )
     }
 
@@ -1045,18 +1072,24 @@ fun MainScreen(
         OnboardingCarouselDialog(
             appLanguage = appLanguage,
             onDismiss = { viewModel.dismissOnboardingCarousel() },
-            onAddMember = {
-                viewModel.dismissOnboardingCarousel()
-                viewModel.openMemberDialog()
-            },
-            onAddCategory = {
-                viewModel.dismissOnboardingCarousel()
-                viewModel.openCategoryDialog()
-            },
-            onSeedCategories = {
-                viewModel.dismissOnboardingCarousel()
-                viewModel.seedStandardCategories()
-            }
+            onAddMember = if (canManage) {
+                {
+                    viewModel.dismissOnboardingCarousel()
+                    viewModel.openMemberDialog()
+                }
+            } else null,
+            onAddCategory = if (canManage) {
+                {
+                    viewModel.dismissOnboardingCarousel()
+                    viewModel.openCategoryDialog()
+                }
+            } else null,
+            onSeedCategories = if (canManage) {
+                {
+                    viewModel.dismissOnboardingCarousel()
+                    viewModel.seedStandardCategories()
+                }
+            } else null
         )
     }
 

@@ -4,6 +4,37 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.PropertyName
 
+enum class HouseholdRole(val key: String) {
+    CREATOR("CREATOR"),
+    EDITOR("EDITOR"),
+    REGISTAR("REGISTAR");
+
+    val canManageMembersAndCategories: Boolean
+        get() = this == CREATOR || this == EDITOR
+
+    val canManageSharingAndHousehold: Boolean
+        get() = this == CREATOR
+
+    companion object {
+        fun fromRaw(raw: String?, isCreator: Boolean = false): HouseholdRole {
+            if (isCreator) return CREATOR
+            return when (raw?.trim()?.uppercase()) {
+                "CREATOR", "OWNER" -> CREATOR
+                "EDITOR" -> EDITOR
+                "REGISTAR", "REGISTRAR", "CONTRIBUTOR", "VIEWER" -> REGISTAR
+                else -> REGISTAR
+            }
+        }
+    }
+}
+
+data class SharedHouseholdUser(
+    val uid: String,
+    val email: String,
+    val displayName: String,
+    val role: HouseholdRole
+)
+
 @IgnoreExtraProperties
 data class Household(
     var id: String = "",
@@ -12,8 +43,10 @@ data class Household(
     var inviteCode: String = "",
     var memberUids: List<String> = emptyList(),
     var invitedEmails: List<String> = emptyList(),
-    var memberRoles: Map<String, String> = emptyMap(), // uid -> "OWNER" or "CONTRIBUTOR"
-    var pendingInviteRole: String = "CONTRIBUTOR",
+    var memberRoles: Map<String, String> = emptyMap(), // uid or email -> "CREATOR", "EDITOR", or "REGISTAR"
+    var memberEmails: Map<String, String> = emptyMap(), // uid -> email
+    var memberNames: Map<String, String> = emptyMap(), // uid -> displayName
+    var pendingInviteRole: String = "REGISTAR",
     var isPremium: Boolean = false,
     var createdAt: Timestamp? = null,
     var updatedAt: Timestamp? = null

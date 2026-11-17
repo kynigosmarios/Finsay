@@ -16,23 +16,35 @@ import java.lang.ref.WeakReference
 class BankNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
-        super.onListenerConnected()
-        activeInstance = WeakReference(this)
-        Log.d(TAG, "BankNotificationListenerService connected successfully")
-        scanActiveNotificationsInternal()
+        try {
+            super.onListenerConnected()
+            activeInstance = WeakReference(this)
+            Log.d(TAG, "BankNotificationListenerService connected successfully")
+            scanActiveNotificationsInternal()
+        } catch (t: Throwable) {
+            Log.w(TAG, "onListenerConnected warning: ${t.message}")
+        }
     }
 
     override fun onListenerDisconnected() {
-        super.onListenerDisconnected()
-        activeInstance = null
-        Log.d(TAG, "BankNotificationListenerService disconnected")
+        try {
+            super.onListenerDisconnected()
+            activeInstance = null
+            Log.d(TAG, "BankNotificationListenerService disconnected")
+        } catch (t: Throwable) {
+            Log.w(TAG, "onListenerDisconnected warning: ${t.message}")
+        }
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
-        super.onNotificationPosted(sbn)
-        if (sbn == null) return
-        activeInstance = WeakReference(this)
-        processStatusBarNotification(sbn, hasGroupChildren = false)
+        try {
+            super.onNotificationPosted(sbn)
+            if (sbn == null) return
+            activeInstance = WeakReference(this)
+            processStatusBarNotification(sbn, hasGroupChildren = false)
+        } catch (t: Throwable) {
+            Log.w(TAG, "onNotificationPosted warning: ${t.message}")
+        }
     }
 
     fun scanActiveNotificationsInternal() {
@@ -53,8 +65,8 @@ class BankNotificationListenerService : NotificationListenerService() {
                 val hasChildren = isSummary && !sbn.groupKey.isNullOrBlank() && groupsWithChildren.contains(groupId)
                 processStatusBarNotification(sbn, hasGroupChildren = hasChildren)
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error scanning active notifications: ${e.message}")
+        } catch (t: Throwable) {
+            Log.w(TAG, "Error scanning active notifications: ${t.message}")
         }
     }
 
@@ -134,8 +146,8 @@ class BankNotificationListenerService : NotificationListenerService() {
                     BankNotificationSystemManager.showNotification(this, parsed)
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error processing notification: ${e.message}", e)
+        } catch (t: Throwable) {
+            Log.e(TAG, "Error processing notification: ${t.message}", t)
         }
     }
 
@@ -148,8 +160,8 @@ class BankNotificationListenerService : NotificationListenerService() {
         fun scanActiveNotifications(context: Context) {
             try {
                 activeInstance?.get()?.scanActiveNotificationsInternal()
-            } catch (e: Exception) {
-                Log.w(TAG, "scanActiveNotifications failed: ${e.message}")
+            } catch (t: Throwable) {
+                Log.w(TAG, "scanActiveNotifications failed: ${t.message}")
             }
         }
 
@@ -166,8 +178,8 @@ class BankNotificationListenerService : NotificationListenerService() {
                         requestRebind(component)
                         Log.d(TAG, "Requested rebind for BankNotificationListenerService")
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "requestRebind failed: ${e.message}")
+                } catch (t: Throwable) {
+                    Log.w(TAG, "requestRebind failed: ${t.message}")
                 }
             }
         }

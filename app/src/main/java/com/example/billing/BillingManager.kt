@@ -20,15 +20,20 @@ class BillingManager(
         const val INAPP_LIFETIME = "finsay_pro_lifetime"
     }
 
-    private var billingClient: BillingClient = BillingClient.newBuilder(context)
-        .setListener(this)
-        .enablePendingPurchases(
-            PendingPurchasesParams.newBuilder()
-                .enableOneTimeProducts()
-                .enablePrepaidPlans()
-                .build()
-        )
-        .build()
+    private var billingClient: BillingClient? = try {
+        BillingClient.newBuilder(context.applicationContext)
+            .setListener(this)
+            .enablePendingPurchases(
+                PendingPurchasesParams.newBuilder()
+                    .enableOneTimeProducts()
+                    .enablePrepaidPlans()
+                    .build()
+            )
+            .build()
+    } catch (t: Throwable) {
+        Log.w(TAG, "BillingClient creation safe fallback: ${t.message}")
+        null
+    }
 
     private val _isBillingReady = MutableStateFlow(false)
     val isBillingReady: StateFlow<Boolean> = _isBillingReady.asStateFlow()
@@ -43,192 +48,256 @@ class BillingManager(
     val lifetimeProductDetails: StateFlow<ProductDetails?> = _lifetimeProductDetails.asStateFlow()
 
     fun startConnection() {
-        if (billingClient.isReady) {
-            _isBillingReady.value = true
-            queryAllProducts()
-            queryActivePurchases()
-            return
-        }
-        billingClient.startConnection(object : BillingClientStateListener {
-            override fun onBillingSetupFinished(billingResult: BillingResult) {
-                if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                    _isBillingReady.value = true
-                    queryAllProducts()
-                    queryActivePurchases()
-                } else {
-                    _isBillingReady.value = false
-                    Log.i(TAG, "Billing service not available on current environment (code: ${billingResult.responseCode}): ${billingResult.debugMessage}")
+        val client = billingClient ?: return
+        try {
+            if (client.isReady) {
+                _isBillingReady.value = true
+                queryAllProducts()
+                queryActivePurchases()
+                return
+            }
+            client.startConnection(object : BillingClientStateListener {
+                override fun onBillingSetupFinished(billingResult: BillingResult) {
+                    try {
+                        if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                            _isBillingReady.value = true
+                            queryAllProducts()
+                            queryActivePurchases()
+                        } else {
+                            _isBillingReady.value = false
+                            Log.i(TAG, "Billing service not available on current environment (code: ${billingResult.responseCode}): ${billingResult.debugMessage}")
+                        }
+                    } catch (t: Throwable) {
+                        _isBillingReady.value = false
+                        Log.w(TAG, "onBillingSetupFinished safe fallback: ${t.message}")
+                    }
                 }
-            }
 
-            override fun onBillingServiceDisconnected() {
-                _isBillingReady.value = false
-                Log.d(TAG, "Billing service disconnected")
-            }
-        })
+                override fun onBillingServiceDisconnected() {
+                    _isBillingReady.value = false
+                    Log.d(TAG, "Billing service disconnected")
+                }
+            })
+        } catch (t: Throwable) {
+            _isBillingReady.value = false
+            Log.w(TAG, "startConnection safe fallback: ${t.message}")
+        }
     }
 
     fun queryAllProducts() {
-        if (!billingClient.isReady) return
+        val client = billingClient ?: return
+        try {
+            if (!client.isReady) return
 
-        // 1. Query Subscription products (Monthly & Yearly)
-        val subsList = listOf(
-            QueryProductDetailsParams.Product.newBuilder()
-                .setProductId(SUB_MONTHLY)
-                .setProductType(BillingClient.ProductType.SUBS)
-                .build(),
-            QueryProductDetailsParams.Product.newBuilder()
-                .setProductId(SUB_YEARLY)
-                .setProductType(BillingClient.ProductType.SUBS)
-                .build()
-        )
-        val subsParams = QueryProductDetailsParams.newBuilder().setProductList(subsList).build()
-        billingClient.queryProductDetailsAsync(subsParams) { billingResult, queryResult ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                val list = queryResult.productDetailsList ?: emptyList()
-                for (details in list) {
-                    when (details.productId) {
-                        SUB_MONTHLY -> _monthlyProductDetails.value = details
-                        SUB_YEARLY -> _yearlyProductDetails.value = details
+            // 1. Query Subscription products (Monthly & Yearly)
+            val subsList = listOf(
+                QueryProductDetailsParams.Product.newBuilder()
+                    .setProductId(SUB_MONTHLY)
+                    .setProductType(BillingClient.ProductType.SUBS)
+                    .build(),
+                QueryProductDetailsParams.Product.newBuilder()
+                    .setProductId(SUB_YEARLY)
+                    .setProductType(BillingClient.ProductType.SUBS)
+                    .build()
+            )
+            val subsParams = QueryProductDetailsParams.newBuilder().setProductList(subsList).build()
+            client.queryProductDetailsAsync(subsParams) { billingResult, queryResult ->
+                try {
+                    if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                        val list = queryResult.productDetailsList ?: emptyList()
+                        for (details in list) {
+                            when (details.productId) {
+                                SUB_MONTHLY -> _monthlyProductDetails.value = details
+                                SUB_YEARLY -> _yearlyProductDetails.value = details
+                            }
+                            Log.d(TAG, "Found subscription: ${details.productId} - ${details.title}")
+                        }
+                    } else {
+                        Log.d(TAG, "Query subscriptions status: ${billingResult.responseCode} - ${billingResult.debugMessage}")
                     }
-                    Log.d(TAG, "Found subscription: ${details.productId} - ${details.title}")
+                } catch (t: Throwable) {
+                    Log.w(TAG, "Subs query callback warning: ${t.message}")
                 }
-            } else {
-                Log.d(TAG, "Query subscriptions status: ${billingResult.responseCode} - ${billingResult.debugMessage}")
             }
-        }
 
-        // 2. Query In-App One-Time product (Lifetime)
-        val inappList = listOf(
-            QueryProductDetailsParams.Product.newBuilder()
-                .setProductId(INAPP_LIFETIME)
-                .setProductType(BillingClient.ProductType.INAPP)
-                .build()
-        )
-        val inappParams = QueryProductDetailsParams.newBuilder().setProductList(inappList).build()
-        billingClient.queryProductDetailsAsync(inappParams) { billingResult, queryResult ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                val list = queryResult.productDetailsList ?: emptyList()
-                for (details in list) {
-                    if (details.productId == INAPP_LIFETIME) {
-                        _lifetimeProductDetails.value = details
-                        Log.d(TAG, "Found in-app product: ${details.productId} - ${details.title}")
+            // 2. Query In-App One-Time product (Lifetime)
+            val inappList = listOf(
+                QueryProductDetailsParams.Product.newBuilder()
+                    .setProductId(INAPP_LIFETIME)
+                    .setProductType(BillingClient.ProductType.INAPP)
+                    .build()
+            )
+            val inappParams = QueryProductDetailsParams.newBuilder().setProductList(inappList).build()
+            client.queryProductDetailsAsync(inappParams) { billingResult, queryResult ->
+                try {
+                    if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                        val list = queryResult.productDetailsList ?: emptyList()
+                        for (details in list) {
+                            if (details.productId == INAPP_LIFETIME) {
+                                _lifetimeProductDetails.value = details
+                                Log.d(TAG, "Found in-app product: ${details.productId} - ${details.title}")
+                            }
+                        }
+                    } else {
+                        Log.d(TAG, "Query in-app status: ${billingResult.responseCode} - ${billingResult.debugMessage}")
                     }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "In-app query callback warning: ${t.message}")
                 }
-            } else {
-                Log.d(TAG, "Query in-app status: ${billingResult.responseCode} - ${billingResult.debugMessage}")
             }
+        } catch (t: Throwable) {
+            Log.w(TAG, "queryAllProducts safe fallback: ${t.message}")
         }
     }
 
     fun launchPurchaseFlow(activity: Activity, productId: String = SUB_YEARLY): Boolean {
-        if (!billingClient.isReady) {
-            startConnection()
-            return false
-        }
+        val client = billingClient ?: return false
+        return try {
+            if (!client.isReady) {
+                startConnection()
+                return false
+            }
 
-        if (productId == INAPP_LIFETIME) {
-            val details = _lifetimeProductDetails.value
-            if (details == null) {
-                Log.w(TAG, "No product details available for $productId.")
-                return false
+            if (productId == INAPP_LIFETIME) {
+                val details = _lifetimeProductDetails.value ?: run {
+                    Log.w(TAG, "No product details available for $productId.")
+                    return false
+                }
+                val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+                    .setProductDetails(details)
+                    .build()
+                val billingFlowParams = BillingFlowParams.newBuilder()
+                    .setProductDetailsParamsList(listOf(productDetailsParams))
+                    .build()
+                val result = client.launchBillingFlow(activity, billingFlowParams)
+                result.responseCode == BillingClient.BillingResponseCode.OK
+            } else {
+                val details = if (productId == SUB_MONTHLY) _monthlyProductDetails.value else _yearlyProductDetails.value
+                val offerToken = details?.subscriptionOfferDetails?.firstOrNull()?.offerToken
+                if (details == null || offerToken == null) {
+                    Log.w(TAG, "No product details or offer token available for $productId.")
+                    return false
+                }
+                val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+                    .setProductDetails(details)
+                    .setOfferToken(offerToken)
+                    .build()
+                val billingFlowParams = BillingFlowParams.newBuilder()
+                    .setProductDetailsParamsList(listOf(productDetailsParams))
+                    .build()
+                val result = client.launchBillingFlow(activity, billingFlowParams)
+                result.responseCode == BillingClient.BillingResponseCode.OK
             }
-            val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-                .setProductDetails(details)
-                .build()
-            val billingFlowParams = BillingFlowParams.newBuilder()
-                .setProductDetailsParamsList(listOf(productDetailsParams))
-                .build()
-            val result = billingClient.launchBillingFlow(activity, billingFlowParams)
-            return result.responseCode == BillingClient.BillingResponseCode.OK
-        } else {
-            val details = if (productId == SUB_MONTHLY) _monthlyProductDetails.value else _yearlyProductDetails.value
-            val offerToken = details?.subscriptionOfferDetails?.firstOrNull()?.offerToken
-            if (details == null || offerToken == null) {
-                Log.w(TAG, "No product details or offer token available for $productId.")
-                return false
-            }
-            val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
-                .setProductDetails(details)
-                .setOfferToken(offerToken)
-                .build()
-            val billingFlowParams = BillingFlowParams.newBuilder()
-                .setProductDetailsParamsList(listOf(productDetailsParams))
-                .build()
-            val result = billingClient.launchBillingFlow(activity, billingFlowParams)
-            return result.responseCode == BillingClient.BillingResponseCode.OK
+        } catch (t: Throwable) {
+            Log.w(TAG, "launchPurchaseFlow safe fallback: ${t.message}")
+            false
         }
     }
 
     fun queryActivePurchases() {
-        if (!billingClient.isReady) return
+        val client = billingClient ?: return
+        try {
+            if (!client.isReady) return
 
-        // 1. Query Subscriptions
-        val subsParams = QueryPurchasesParams.newBuilder()
-            .setProductType(BillingClient.ProductType.SUBS)
-            .build()
-        billingClient.queryPurchasesAsync(subsParams) { billingResult, purchases ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                handlePurchasesList(purchases)
+            // 1. Query Subscriptions
+            val subsParams = QueryPurchasesParams.newBuilder()
+                .setProductType(BillingClient.ProductType.SUBS)
+                .build()
+            client.queryPurchasesAsync(subsParams) { billingResult, purchases ->
+                try {
+                    if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                        handlePurchasesList(purchases)
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "querySubsPurchases callback warning: ${t.message}")
+                }
             }
-        }
 
-        // 2. Query In-App purchases
-        val inappParams = QueryPurchasesParams.newBuilder()
-            .setProductType(BillingClient.ProductType.INAPP)
-            .build()
-        billingClient.queryPurchasesAsync(inappParams) { billingResult, purchases ->
-            if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-                handlePurchasesList(purchases)
+            // 2. Query In-App purchases
+            val inappParams = QueryPurchasesParams.newBuilder()
+                .setProductType(BillingClient.ProductType.INAPP)
+                .build()
+            client.queryPurchasesAsync(inappParams) { billingResult, purchases ->
+                try {
+                    if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
+                        handlePurchasesList(purchases)
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "queryInAppPurchases callback warning: ${t.message}")
+                }
             }
+        } catch (t: Throwable) {
+            Log.w(TAG, "queryActivePurchases safe fallback: ${t.message}")
         }
     }
 
     private fun handlePurchasesList(purchases: List<Purchase>?) {
-        val hasActive = purchases?.any { it.purchaseState == Purchase.PurchaseState.PURCHASED } == true
-        if (hasActive) {
-            Log.d(TAG, "Found active purchase from Google Play.")
-            onSubscriptionActivated(true)
-        }
-        purchases?.forEach { purchase ->
-            if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED && !purchase.isAcknowledged) {
-                acknowledgePurchase(purchase)
+        try {
+            val hasActive = purchases?.any { it.purchaseState == Purchase.PurchaseState.PURCHASED } == true
+            if (hasActive) {
+                Log.d(TAG, "Found active purchase from Google Play.")
+                onSubscriptionActivated(true)
             }
+            purchases?.forEach { purchase ->
+                if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED && !purchase.isAcknowledged) {
+                    acknowledgePurchase(purchase)
+                }
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "handlePurchasesList warning: ${t.message}")
         }
     }
 
     override fun onPurchasesUpdated(billingResult: BillingResult, purchases: List<Purchase>?) {
-        when (billingResult.responseCode) {
-            BillingClient.BillingResponseCode.OK -> {
-                handlePurchasesList(purchases)
+        try {
+            when (billingResult.responseCode) {
+                BillingClient.BillingResponseCode.OK -> {
+                    handlePurchasesList(purchases)
+                }
+                BillingClient.BillingResponseCode.USER_CANCELED -> {
+                    Log.d(TAG, "User canceled Google Play purchase flow.")
+                }
+                else -> {
+                    Log.w(TAG, "Purchase update: ${billingResult.responseCode} - ${billingResult.debugMessage}")
+                }
             }
-            BillingClient.BillingResponseCode.USER_CANCELED -> {
-                Log.d(TAG, "User canceled Google Play purchase flow.")
-            }
-            else -> {
-                Log.w(TAG, "Purchase update: ${billingResult.responseCode} - ${billingResult.debugMessage}")
-            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "onPurchasesUpdated safe fallback: ${t.message}")
         }
     }
 
     private fun acknowledgePurchase(purchase: Purchase) {
-        if (purchase.isAcknowledged) return
-        val acknowledgeParams = AcknowledgePurchaseParams.newBuilder()
-            .setPurchaseToken(purchase.purchaseToken)
-            .build()
-        billingClient.acknowledgePurchase(acknowledgeParams) { result ->
-            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                Log.d(TAG, "Purchase acknowledged successfully: ${purchase.orderId}")
-                onSubscriptionActivated(true)
-            } else {
-                Log.w(TAG, "Purchase acknowledge note: ${result.debugMessage}")
+        val client = billingClient ?: return
+        try {
+            if (purchase.isAcknowledged) return
+            val acknowledgeParams = AcknowledgePurchaseParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken)
+                .build()
+            client.acknowledgePurchase(acknowledgeParams) { result ->
+                try {
+                    if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                        Log.d(TAG, "Purchase acknowledged successfully: ${purchase.orderId}")
+                        onSubscriptionActivated(true)
+                    } else {
+                        Log.w(TAG, "Purchase acknowledge note: ${result.debugMessage}")
+                    }
+                } catch (t: Throwable) {
+                    Log.w(TAG, "acknowledgePurchase callback warning: ${t.message}")
+                }
             }
+        } catch (t: Throwable) {
+            Log.w(TAG, "acknowledgePurchase safe fallback: ${t.message}")
         }
     }
 
     fun endConnection() {
-        if (billingClient.isReady) {
-            billingClient.endConnection()
+        try {
+            val client = billingClient ?: return
+            if (client.isReady) {
+                client.endConnection()
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "endConnection safe fallback: ${t.message}")
         }
     }
 }

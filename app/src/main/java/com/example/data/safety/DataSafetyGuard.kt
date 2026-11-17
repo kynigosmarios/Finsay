@@ -160,8 +160,9 @@ object DataSafetyGuard {
                     )
                     if (activeHouseholdId.isNotBlank()) {
                         firestoreSyncRepo.syncSavingsGoal(activeHouseholdId, fbGoal)
+                    } else {
+                        firestoreSyncRepo.syncUserSavingsGoal(userId, fbGoal)
                     }
-                    firestoreSyncRepo.syncUserSavingsGoal(userId, fbGoal)
                 }
                 Log.d(TAG, "Secured ${localGoals.size} savings goals to cloud.")
             }
@@ -198,8 +199,9 @@ object DataSafetyGuard {
                     )
                     if (activeHouseholdId.isNotBlank()) {
                         firestoreSyncRepo.syncRecurringExpense(activeHouseholdId, fbRec)
+                    } else {
+                        firestoreSyncRepo.syncUserRecurringExpense(userId, fbRec)
                     }
-                    firestoreSyncRepo.syncUserRecurringExpense(userId, fbRec)
                 }
                 Log.d(TAG, "Secured ${uniqueRecurring.size} recurring expenses to cloud.")
             }
@@ -219,8 +221,9 @@ object DataSafetyGuard {
                         )
                         if (activeHouseholdId.isNotBlank()) {
                             firestoreSyncRepo.syncExpense(fbExp)
+                        } else {
+                            firestoreSyncRepo.syncUserExpense(userId, fbExp)
                         }
-                        firestoreSyncRepo.syncUserExpense(userId, fbExp)
                     }
                     Log.d(TAG, "Secured ${unsynced.size} unsynced expenses to cloud.")
                 }
@@ -246,8 +249,9 @@ object DataSafetyGuard {
                     )
                     if (activeHouseholdId.isNotBlank()) {
                         firestoreSyncRepo.syncIncome(fbInc)
+                    } else {
+                        firestoreSyncRepo.syncUserIncome(userId, fbInc)
                     }
-                    firestoreSyncRepo.syncUserIncome(userId, fbInc)
                 }
                 Log.d(TAG, "Secured ${localIncomes.size} local incomes to cloud.")
             }

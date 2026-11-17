@@ -17,7 +17,7 @@ object RecurringExpenseAutoProcessor {
     fun resolveCloudEntityId(rawId: String): Long {
         val cleaned = rawId.trim().removePrefix("rec_")
         return cleaned.toLongOrNull()?.takeIf { it > 0L }
-            ?: Math.abs(rawId.hashCode().toLong()).coerceAtLeast(1L)
+            ?: StartupSafety.safePositiveIdHash(rawId)
     }
 
     fun deduplicateRecurringExpenses(list: List<RecurringExpense>): List<RecurringExpense> {

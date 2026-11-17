@@ -262,9 +262,9 @@ fun ExpensesScreen(
             effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> allExpenses
             effectiveMonthKey.startsWith("YEAR:") -> {
                 val targetYear = effectiveMonthKey.removePrefix("YEAR:")
-                allExpenses.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+                allExpenses.filter { it.timestamp > 0L && yearKeyFormat.format(Date(it.timestamp)) == targetYear }
             }
-            else -> allExpenses.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+            else -> allExpenses.filter { it.timestamp > 0L && monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
         }
     }
     val heroMonthIncomes = remember(allIncomes, effectiveMonthKey) {
@@ -272,9 +272,9 @@ fun ExpensesScreen(
             effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> allIncomes
             effectiveMonthKey.startsWith("YEAR:") -> {
                 val targetYear = effectiveMonthKey.removePrefix("YEAR:")
-                allIncomes.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+                allIncomes.filter { it.timestamp > 0L && yearKeyFormat.format(Date(it.timestamp)) == targetYear }
             }
-            else -> allIncomes.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+            else -> allIncomes.filter { it.timestamp > 0L && monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
         }
     }
 
@@ -284,9 +284,9 @@ fun ExpensesScreen(
             effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> expenses
             effectiveMonthKey.startsWith("YEAR:") -> {
                 val targetYear = effectiveMonthKey.removePrefix("YEAR:")
-                expenses.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+                expenses.filter { it.timestamp > 0L && yearKeyFormat.format(Date(it.timestamp)) == targetYear }
             }
-            else -> expenses.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+            else -> expenses.filter { it.timestamp > 0L && monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
         }
     }
     val monthIncomes = remember(incomes, effectiveMonthKey) {
@@ -294,9 +294,9 @@ fun ExpensesScreen(
             effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> incomes
             effectiveMonthKey.startsWith("YEAR:") -> {
                 val targetYear = effectiveMonthKey.removePrefix("YEAR:")
-                incomes.filter { yearKeyFormat.format(Date(it.timestamp)) == targetYear }
+                incomes.filter { it.timestamp > 0L && yearKeyFormat.format(Date(it.timestamp)) == targetYear }
             }
-            else -> incomes.filter { monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
+            else -> incomes.filter { it.timestamp > 0L && monthYearKeyFormat.format(Date(it.timestamp)) == effectiveMonthKey }
         }
     }
 
@@ -345,6 +345,16 @@ fun ExpensesScreen(
         val catById = categories.associateBy { it.id }
         val catByName = categories.associateBy { it.name.trim().lowercase() }
 
+        val usedKeys = HashSet<String>((monthExpenses.size + monthIncomes.size) * 2 + 8)
+        fun uniqueKey(base: String): String {
+            if (usedKeys.add(base)) return base
+            var suffix = 1
+            while (!usedKeys.add("${base}_#$suffix")) {
+                suffix++
+            }
+            return "${base}_#$suffix"
+        }
+
         fun createExpenseItem(exp: Expense): ActivityItem.ExpenseItem {
             val matchingCat = catById[exp.categoryId] ?: catByName[exp.categoryName.trim().lowercase()]
             val iconKey = matchingCat?.iconKey ?: "cart"
@@ -352,9 +362,10 @@ fun ExpensesScreen(
             val catDisplay = Localization.translateCategory(exp.categoryName, lang)
             val title = exp.title.ifBlank { catDisplay }
 
-            itemCal.timeInMillis = exp.timestamp
+            val safeTs = if (exp.timestamp > 0L) exp.timestamp else System.currentTimeMillis()
+            itemCal.timeInMillis = safeTs
             val hasTime = itemCal.get(Calendar.HOUR_OF_DAY) != 0 || itemCal.get(Calendar.MINUTE) != 0
-            val dateStr = if (hasTime) dateTimeFormat.format(Date(exp.timestamp)) else dateFormat.format(Date(exp.timestamp))
+            val dateStr = if (hasTime) dateTimeFormat.format(Date(safeTs)) else dateFormat.format(Date(safeTs))
 
             val rawPayer = exp.getPayerCategoryOrNamesDisplay(members, lang)
             val cleanPayer = stripParen(rawPayer)
@@ -372,7 +383,8 @@ fun ExpensesScreen(
                     cleanBeneficiary.contains("Roommates") || cleanBeneficiary.contains("Family") ||
                     cleanBeneficiary.contains("&") || cleanBeneficiary.contains(",")
 
-            val key = if (exp.id > 0) "exp_${exp.id}" else "exp_c_${if (exp.cloudId.isNotBlank()) exp.cloudId else exp.timestamp.toString()}_${exp.title.hashCode()}"
+            val baseKey = if (exp.id > 0) "exp_${exp.id}" else "exp_c_${if (exp.cloudId.isNotBlank()) exp.cloudId else safeTs.toString()}_${exp.title.hashCode()}"
+            val key = uniqueKey(baseKey)
 
             return ActivityItem.ExpenseItem(
                 expense = exp,
@@ -391,10 +403,12 @@ fun ExpensesScreen(
         }
 
         fun createIncomeItem(inc: Income): ActivityItem.IncomeItem {
-            itemCal.timeInMillis = inc.timestamp
+            val safeTs = if (inc.timestamp > 0L) inc.timestamp else System.currentTimeMillis()
+            itemCal.timeInMillis = safeTs
             val hasTime = itemCal.get(Calendar.HOUR_OF_DAY) != 0 || itemCal.get(Calendar.MINUTE) != 0
-            val dateStr = if (hasTime) dateTimeFormat.format(Date(inc.timestamp)) else dateFormat.format(Date(inc.timestamp))
-            val key = if (inc.id > 0) "inc_${inc.id}" else "inc_c_${if (inc.cloudId.isNotBlank()) inc.cloudId else inc.timestamp.toString()}_${inc.title.hashCode()}"
+            val dateStr = if (hasTime) dateTimeFormat.format(Date(safeTs)) else dateFormat.format(Date(safeTs))
+            val baseKey = if (inc.id > 0) "inc_${inc.id}" else "inc_c_${if (inc.cloudId.isNotBlank()) inc.cloudId else safeTs.toString()}_${inc.title.hashCode()}"
+            val key = uniqueKey(baseKey)
 
             return ActivityItem.IncomeItem(
                 income = inc,
@@ -428,7 +442,8 @@ fun ExpensesScreen(
         val itemCal = Calendar.getInstance()
 
         val rawGroups = displayItems.groupBy { item ->
-            itemCal.timeInMillis = item.timestamp
+            val safeTs = if (item.timestamp > 0L) item.timestamp else System.currentTimeMillis()
+            itemCal.timeInMillis = safeTs
 
             val isToday = itemCal.get(Calendar.YEAR) == calToday.get(Calendar.YEAR) &&
                     itemCal.get(Calendar.DAY_OF_YEAR) == calToday.get(Calendar.DAY_OF_YEAR)
@@ -440,26 +455,32 @@ fun ExpensesScreen(
                 isToday -> if (lang == Localization.Language.ENGLISH) "Today" else "Σήμερα"
                 isYesterday -> if (lang == Localization.Language.ENGLISH) "Yesterday" else "Χθες"
                 else -> {
-                    val raw = dayFormat.format(Date(item.timestamp))
+                    val raw = dayFormat.format(Date(safeTs))
                     raw.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
                 }
             }
-            val key = dayKeyFormat.format(Date(item.timestamp))
+            val key = dayKeyFormat.format(Date(safeTs))
             Pair(key, label)
         }
 
-        rawGroups.entries.sortedByDescending { it.key.first }.map { entry ->
-            val itemsInDay = entry.value
-            val dayExpenseTotal = itemsInDay.filterIsInstance<ActivityItem.ExpenseItem>().sumOf { it.expense.amount }
-            val dayIncomeTotal = itemsInDay.filterIsInstance<ActivityItem.IncomeItem>().sumOf { it.income.amount }
-            DayGroup(
-                key = entry.key.first,
-                label = entry.key.second,
-                dayExpenseTotal = dayExpenseTotal,
-                dayIncomeTotal = dayIncomeTotal,
-                items = itemsInDay
-            )
-        }
+        val usedGroupKeys = HashSet<String>(rawGroups.size * 2 + 4)
+        rawGroups.entries
+            .sortedByDescending { it.key.first }
+            .groupBy { it.key.first }
+            .map { (dayKey, entriesForDay) ->
+                val itemsInDay = entriesForDay.flatMap { it.value }
+                val label = entriesForDay.first().key.second
+                val dayExpenseTotal = itemsInDay.filterIsInstance<ActivityItem.ExpenseItem>().sumOf { it.expense.amount }
+                val dayIncomeTotal = itemsInDay.filterIsInstance<ActivityItem.IncomeItem>().sumOf { it.income.amount }
+                val uniqueGroupKey = if (usedGroupKeys.add(dayKey)) dayKey else "${dayKey}_${usedGroupKeys.size}"
+                DayGroup(
+                    key = uniqueGroupKey,
+                    label = label,
+                    dayExpenseTotal = dayExpenseTotal,
+                    dayIncomeTotal = dayIncomeTotal,
+                    items = itemsInDay
+                )
+            }
     }
 
     Column(

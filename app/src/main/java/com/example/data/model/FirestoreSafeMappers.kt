@@ -2,348 +2,489 @@ package com.example.data.model
 
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
+import java.util.Date
 
 /**
- * Robust, fail-safe Firestore mappers that safely extract fields from DocumentSnapshot.
- * These protect against field type mismatches (Double vs Long/Int), conflicting annotations,
- * and missing values so that queries NEVER throw unhandled exceptions or drop documents.
+ * Robust, fail-safe Firestore mappers that safely extract fields from DocumentSnapshot
+ * or raw field maps. These protect against field type mismatches (Double vs Long/Int/String,
+ * Boolean vs Long/String, Timestamp vs Number/Date), conflicting annotations, and corrupted
+ * cached entries so that queries and cache replays NEVER throw unhandled RuntimeExceptions.
  */
 
-fun DocumentSnapshot.toSafeExpense(): FirebaseExpense {
-    val existing = try {
-        this.toObject(FirebaseExpense::class.java)
-    } catch (_: Exception) {
-        null
+internal fun coerceSafeString(raw: Any?): String? = try {
+    when (raw) {
+        is String -> raw
+        is Number, is Boolean -> raw.toString()
+        else -> null
     }
-    val rawAmount = get("amount")
-    val amt = when (rawAmount) {
-        is Number -> rawAmount.toDouble()
-        is String -> rawAmount.toDoubleOrNull() ?: 0.0
-        else -> existing?.amount ?: 0.0
-    }
-    val rawCatId = get("categoryId")
-    val catId = when (rawCatId) {
-        is Number -> rawCatId.toLong()
-        is String -> rawCatId.toLongOrNull() ?: 1L
-        else -> existing?.categoryId ?: 1L
-    }
-    val rawTimestamp = get("timestamp")
-    val ts = when (rawTimestamp) {
-        is Number -> rawTimestamp.toLong()
-        is String -> rawTimestamp.toLongOrNull() ?: 0L
-        is Timestamp -> rawTimestamp.toDate().time
-        else -> getTimestamp("createdAt")?.toDate()?.time ?: existing?.timestamp ?: 0L
-    }
-    val rawPayerId = get("payerMemberId")
-    val payerId = when (rawPayerId) {
-        is Number -> rawPayerId.toLong()
-        is String -> rawPayerId.toLongOrNull() ?: 0L
-        else -> existing?.payerMemberId ?: 0L
-    }
+} catch (_: Throwable) {
+    null
+}
 
-    val docId = getString("id")?.ifBlank { this.id } ?: this.id
+internal fun coerceSafeDouble(raw: Any?): Double? = try {
+    when (raw) {
+        is Number -> raw.toDouble().takeIf { !it.isNaN() && !it.isInfinite() }
+        is String -> raw.replace(',', '.').trim().toDoubleOrNull()?.takeIf { !it.isNaN() && !it.isInfinite() }
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
 
-    return (existing ?: FirebaseExpense()).copy(
-        id = docId,
-        householdId = getString("householdId") ?: existing?.householdId ?: "",
-        title = getString("title") ?: existing?.title ?: "",
+internal fun coerceSafeLong(raw: Any?): Long? = try {
+    when (raw) {
+        is Number -> raw.toLong()
+        is String -> raw.trim().toLongOrNull()
+        is Timestamp -> raw.toDate().time
+        is Date -> raw.time
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
+
+internal fun coerceSafeInt(raw: Any?): Int? = try {
+    when (raw) {
+        is Number -> raw.toInt()
+        is String -> raw.trim().toIntOrNull()
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
+
+internal fun coerceSafeBoolean(raw: Any?): Boolean? = try {
+    when (raw) {
+        is Boolean -> raw
+        is Number -> raw.toInt() != 0
+        is String -> when (raw.trim().lowercase()) {
+            "true", "1", "yes" -> true
+            "false", "0", "no" -> false
+            else -> null
+        }
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
+
+internal fun coerceSafeTimestamp(raw: Any?): Timestamp? = try {
+    when (raw) {
+        is Timestamp -> raw
+        is Date -> Timestamp(raw)
+        is Number -> Timestamp(Date(raw.toLong()))
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
+
+internal fun coerceSafeTimestampMillis(raw: Any?): Long? = try {
+    when (raw) {
+        is Number -> raw.toLong()
+        is String -> raw.trim().toLongOrNull()
+        is Timestamp -> raw.toDate().time
+        is Date -> raw.time
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
+
+internal fun coerceSafeStringList(raw: Any?): List<String>? = try {
+    when (raw) {
+        is Iterable<*> -> raw.mapNotNull { coerceSafeString(it) }
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
+
+internal fun coerceSafeStringMap(raw: Any?): Map<String, String>? = try {
+    when (raw) {
+        is Map<*, *> -> raw.entries.mapNotNull { (k, v) ->
+            val key = k?.toString()?.takeIf { it.isNotBlank() }
+            val value = coerceSafeString(v)
+            if (key != null && value != null) key to value else null
+        }.toMap()
+        else -> null
+    }
+} catch (_: Throwable) {
+    null
+}
+
+fun DocumentSnapshot.safeGet(field: String): Any? = try {
+    get(field)
+} catch (_: Throwable) {
+    null
+}
+
+fun DocumentSnapshot.safeString(field: String): String? = coerceSafeString(safeGet(field))
+
+fun DocumentSnapshot.safeBoolean(field: String): Boolean? = coerceSafeBoolean(safeGet(field))
+
+fun DocumentSnapshot.safeStringList(field: String): List<String>? = coerceSafeStringList(safeGet(field))
+
+private fun DocumentSnapshot.safeDocId(): String = try {
+    id
+} catch (_: Throwable) {
+    ""
+}
+
+fun mapExpenseFromFields(
+    docId: String,
+    existing: FirebaseExpense? = null,
+    getField: (String) -> Any?
+): FirebaseExpense = try {
+    val rawAmount = getField("amount")
+    val amt = coerceSafeDouble(rawAmount) ?: existing?.amount ?: 0.0
+    val catId = coerceSafeLong(getField("categoryId")) ?: existing?.categoryId ?: 1L
+    val createdAtTs = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
+    val ts = coerceSafeTimestampMillis(getField("timestamp"))
+        ?: try { createdAtTs?.toDate()?.time } catch (_: Throwable) { null }
+        ?: existing?.timestamp
+        ?: 0L
+    val payerId = coerceSafeLong(getField("payerMemberId")) ?: existing?.payerMemberId ?: 0L
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
+
+    (existing ?: FirebaseExpense()).copy(
+        id = resolvedId,
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        title = coerceSafeString(getField("title")) ?: existing?.title ?: "",
         amount = amt,
         categoryId = catId,
-        categoryName = getString("categoryName") ?: existing?.categoryName ?: "",
+        categoryName = coerceSafeString(getField("categoryName")) ?: existing?.categoryName ?: "",
         timestamp = ts,
-        splitType = getString("splitType") ?: existing?.splitType ?: "ALL",
-        memberIdsCsv = getString("memberIdsCsv") ?: existing?.memberIdsCsv ?: "",
-        memberNamesDisplay = getString("memberNamesDisplay") ?: existing?.memberNamesDisplay ?: "",
-        note = getString("note") ?: existing?.note ?: "",
+        splitType = coerceSafeString(getField("splitType")) ?: existing?.splitType ?: "ALL",
+        memberIdsCsv = coerceSafeString(getField("memberIdsCsv")) ?: existing?.memberIdsCsv ?: "",
+        memberNamesDisplay = coerceSafeString(getField("memberNamesDisplay")) ?: existing?.memberNamesDisplay ?: "",
+        note = coerceSafeString(getField("note")) ?: existing?.note ?: "",
         payerMemberId = payerId,
-        payerMemberName = getString("payerMemberName") ?: existing?.payerMemberName ?: "",
-        payerMemberIdsCsv = getString("payerMemberIdsCsv") ?: existing?.payerMemberIdsCsv ?: "",
-        payerAmountsCsv = getString("payerAmountsCsv") ?: existing?.payerAmountsCsv ?: "",
-        createdByUid = getString("createdByUid") ?: existing?.createdByUid ?: "",
-        createdByName = getString("createdByName") ?: existing?.createdByName ?: "",
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt
+        payerMemberName = coerceSafeString(getField("payerMemberName")) ?: existing?.payerMemberName ?: "",
+        payerMemberIdsCsv = coerceSafeString(getField("payerMemberIdsCsv")) ?: existing?.payerMemberIdsCsv ?: "",
+        payerAmountsCsv = coerceSafeString(getField("payerAmountsCsv")) ?: existing?.payerAmountsCsv ?: "",
+        createdByUid = coerceSafeString(getField("createdByUid")) ?: existing?.createdByUid ?: "",
+        createdByName = coerceSafeString(getField("createdByName")) ?: existing?.createdByName ?: "",
+        createdAt = createdAtTs
     )
+} catch (_: Throwable) {
+    existing ?: FirebaseExpense(id = docId)
+}
+
+fun DocumentSnapshot.toSafeExpense(): FirebaseExpense {
+    val docId = safeDocId()
+    val existing = try {
+        this.toObject(FirebaseExpense::class.java)
+    } catch (_: Throwable) {
+        null
+    }
+    return mapExpenseFromFields(docId, existing) { field -> safeGet(field) }
+}
+
+fun mapMemberFromFields(
+    docId: String,
+    existing: FirebaseMember? = null,
+    getField: (String) -> Any?
+): FirebaseMember = try {
+    val rawDefault = getField("default") ?: getField("isDefault")
+    val defVal = coerceSafeBoolean(rawDefault) ?: existing?.isDefault ?: false
+    val color = coerceSafeLong(getField("avatarColorHex")) ?: existing?.avatarColorHex ?: 0xFF059669
+    val sort = coerceSafeInt(getField("sortOrder")) ?: existing?.sortOrder ?: 0
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
+
+    (existing ?: FirebaseMember()).copy(
+        id = resolvedId,
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        userId = coerceSafeString(getField("userId")) ?: existing?.userId ?: "",
+        name = coerceSafeString(getField("name")) ?: existing?.name ?: "",
+        role = coerceSafeString(getField("role")) ?: existing?.role ?: "Γονέας",
+        avatarColorHex = color,
+        voiceKeywords = coerceSafeString(getField("voiceKeywords")) ?: existing?.voiceKeywords ?: "",
+        isDefault = defVal,
+        sortOrder = sort,
+        isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
+        createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
+    )
+} catch (_: Throwable) {
+    existing ?: FirebaseMember(id = docId)
 }
 
 fun DocumentSnapshot.toSafeMember(): FirebaseMember {
+    val docId = safeDocId()
     val existing = try {
         this.toObject(FirebaseMember::class.java)
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         null
     }
-    val rawDefault = get("default") ?: get("isDefault")
-    val defVal = when (rawDefault) {
-        is Boolean -> rawDefault
-        is String -> rawDefault.toBoolean()
-        is Number -> rawDefault.toInt() != 0
-        else -> existing?.isDefault ?: false
-    }
-    val rawColor = get("avatarColorHex")
-    val color = when (rawColor) {
-        is Number -> rawColor.toLong()
-        is String -> rawColor.toLongOrNull() ?: 0xFF059669
-        else -> existing?.avatarColorHex ?: 0xFF059669
-    }
-    val rawSort = get("sortOrder")
-    val sort = when (rawSort) {
-        is Number -> rawSort.toInt()
-        is String -> rawSort.toIntOrNull() ?: 0
-        else -> existing?.sortOrder ?: 0
-    }
-    val docId = getString("id")?.ifBlank { this.id } ?: this.id
+    return mapMemberFromFields(docId, existing) { field -> safeGet(field) }
+}
 
-    return (existing ?: FirebaseMember()).copy(
-        id = docId,
-        householdId = getString("householdId") ?: existing?.householdId ?: "",
-        userId = getString("userId") ?: existing?.userId ?: "",
-        name = getString("name") ?: existing?.name ?: "",
-        role = getString("role") ?: existing?.role ?: "Γονέας",
-        avatarColorHex = color,
-        voiceKeywords = getString("voiceKeywords") ?: existing?.voiceKeywords ?: "",
-        isDefault = defVal,
-        sortOrder = sort,
-        isDeleted = getBoolean("isDeleted") ?: existing?.isDeleted ?: false,
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt
+fun mapIncomeFromFields(
+    docId: String,
+    existing: FirebaseIncome? = null,
+    getField: (String) -> Any?
+): FirebaseIncome = try {
+    val amt = coerceSafeDouble(getField("amount")) ?: existing?.amount ?: 0.0
+    val mId = coerceSafeLong(getField("memberId")) ?: existing?.memberId ?: 0L
+    val createdAtTs = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
+    val ts = coerceSafeTimestampMillis(getField("timestamp"))
+        ?: try { createdAtTs?.toDate()?.time } catch (_: Throwable) { null }
+        ?: existing?.timestamp
+        ?: 0L
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
+
+    (existing ?: FirebaseIncome()).copy(
+        id = resolvedId,
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        title = coerceSafeString(getField("title")) ?: existing?.title ?: "",
+        amount = amt,
+        memberId = mId,
+        memberName = coerceSafeString(getField("memberName")) ?: existing?.memberName ?: "",
+        category = coerceSafeString(getField("category")) ?: existing?.category ?: "Μισθός",
+        timestamp = ts,
+        note = coerceSafeString(getField("note")) ?: existing?.note ?: "",
+        createdByUid = coerceSafeString(getField("createdByUid")) ?: existing?.createdByUid ?: "",
+        createdByName = coerceSafeString(getField("createdByName")) ?: existing?.createdByName ?: "",
+        createdAt = createdAtTs
     )
+} catch (_: Throwable) {
+    existing ?: FirebaseIncome(id = docId)
 }
 
 fun DocumentSnapshot.toSafeIncome(): FirebaseIncome {
+    val docId = safeDocId()
     val existing = try {
         this.toObject(FirebaseIncome::class.java)
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         null
     }
-    val rawAmount = get("amount")
-    val amt = when (rawAmount) {
-        is Number -> rawAmount.toDouble()
-        is String -> rawAmount.toDoubleOrNull() ?: 0.0
-        else -> existing?.amount ?: 0.0
-    }
-    val rawMemberId = get("memberId")
-    val mId = when (rawMemberId) {
-        is Number -> rawMemberId.toLong()
-        is String -> rawMemberId.toLongOrNull() ?: 0L
-        else -> existing?.memberId ?: 0L
-    }
-    val rawTimestamp = get("timestamp")
-    val ts = when (rawTimestamp) {
-        is Number -> rawTimestamp.toLong()
-        is String -> rawTimestamp.toLongOrNull() ?: 0L
-        is Timestamp -> rawTimestamp.toDate().time
-        else -> getTimestamp("createdAt")?.toDate()?.time ?: existing?.timestamp ?: 0L
-    }
-    val docId = getString("id")?.ifBlank { this.id } ?: this.id
+    return mapIncomeFromFields(docId, existing) { field -> safeGet(field) }
+}
 
-    return (existing ?: FirebaseIncome()).copy(
-        id = docId,
-        householdId = getString("householdId") ?: existing?.householdId ?: "",
-        title = getString("title") ?: existing?.title ?: "",
-        amount = amt,
-        memberId = mId,
-        memberName = getString("memberName") ?: existing?.memberName ?: "",
-        category = getString("category") ?: existing?.category ?: "Μισθός",
-        timestamp = ts,
-        note = getString("note") ?: existing?.note ?: "",
-        createdByUid = getString("createdByUid") ?: existing?.createdByUid ?: "",
-        createdByName = getString("createdByName") ?: existing?.createdByName ?: "",
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt
+fun mapCategoryFromFields(
+    docId: String,
+    existing: FirebaseCategory? = null,
+    getField: (String) -> Any?
+): FirebaseCategory = try {
+    val budget = coerceSafeDouble(getField("monthlyBudget")) ?: existing?.monthlyBudget ?: 0.0
+    val color = coerceSafeLong(getField("colorHex")) ?: existing?.colorHex ?: 0xFF059669
+    val fontColor = coerceSafeLong(getField("fontColorHex")) ?: existing?.fontColorHex ?: 0L
+    val sort = coerceSafeInt(getField("sortOrder")) ?: existing?.sortOrder ?: 0
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
+
+    (existing ?: FirebaseCategory()).copy(
+        id = resolvedId,
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        userId = coerceSafeString(getField("userId")) ?: existing?.userId ?: "",
+        name = coerceSafeString(getField("name")) ?: existing?.name ?: "",
+        iconKey = coerceSafeString(getField("iconKey")) ?: existing?.iconKey ?: "cart",
+        monthlyBudget = budget,
+        colorHex = color,
+        voiceKeywords = coerceSafeString(getField("voiceKeywords")) ?: existing?.voiceKeywords ?: "",
+        sortOrder = sort,
+        fontColorHex = fontColor,
+        isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
+        createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
+} catch (_: Throwable) {
+    existing ?: FirebaseCategory(id = docId)
 }
 
 fun DocumentSnapshot.toSafeCategory(): FirebaseCategory {
+    val docId = safeDocId()
     val existing = try {
         this.toObject(FirebaseCategory::class.java)
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         null
     }
-    val rawBudget = get("monthlyBudget")
-    val budget = when (rawBudget) {
-        is Number -> rawBudget.toDouble()
-        is String -> rawBudget.toDoubleOrNull() ?: 0.0
-        else -> existing?.monthlyBudget ?: 0.0
-    }
-    val rawColor = get("colorHex")
-    val color = when (rawColor) {
-        is Number -> rawColor.toLong()
-        is String -> rawColor.toLongOrNull() ?: 0xFF059669
-        else -> existing?.colorHex ?: 0xFF059669
-    }
-    val rawFontColor = get("fontColorHex")
-    val fontColor = when (rawFontColor) {
-        is Number -> rawFontColor.toLong()
-        is String -> rawFontColor.toLongOrNull() ?: 0L
-        else -> existing?.fontColorHex ?: 0L
-    }
-    val rawSort = get("sortOrder")
-    val sort = when (rawSort) {
-        is Number -> rawSort.toInt()
-        is String -> rawSort.toIntOrNull() ?: 0
-        else -> existing?.sortOrder ?: 0
-    }
-    val docId = getString("id")?.ifBlank { this.id } ?: this.id
-
-    return (existing ?: FirebaseCategory()).copy(
-        id = docId,
-        householdId = getString("householdId") ?: existing?.householdId ?: "",
-        userId = getString("userId") ?: existing?.userId ?: "",
-        name = getString("name") ?: existing?.name ?: "",
-        iconKey = getString("iconKey") ?: existing?.iconKey ?: "cart",
-        monthlyBudget = budget,
-        colorHex = color,
-        voiceKeywords = getString("voiceKeywords") ?: existing?.voiceKeywords ?: "",
-        sortOrder = sort,
-        fontColorHex = fontColor,
-        isDeleted = getBoolean("isDeleted") ?: existing?.isDeleted ?: false,
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt
-    )
+    return mapCategoryFromFields(docId, existing) { field -> safeGet(field) }
 }
 
-fun DocumentSnapshot.toSafeHousehold(): Household {
-    val existing = try {
-        this.toObject(Household::class.java)
-    } catch (_: Exception) {
-        null
-    }
-    val members = (get("memberUids") as? List<*>)?.mapNotNull { it?.toString() } ?: existing?.memberUids ?: emptyList()
-    val invited = (get("invitedEmails") as? List<*>)?.mapNotNull { it?.toString() } ?: existing?.invitedEmails ?: emptyList()
-    val rawPrem = get("isPremium") ?: get("premium")
-    val isPrem = when (rawPrem) {
-        is Boolean -> rawPrem
-        is String -> rawPrem.toBoolean()
-        is Number -> rawPrem.toInt() != 0
-        else -> existing?.isPremium ?: false
-    }
-    val docId = getString("id")?.ifBlank { this.id } ?: this.id
+fun mapHouseholdFromFields(
+    docId: String,
+    existing: Household? = null,
+    getField: (String) -> Any?
+): Household = try {
+    val members = coerceSafeStringList(getField("memberUids")) ?: existing?.memberUids ?: emptyList()
+    val invited = coerceSafeStringList(getField("invitedEmails")) ?: existing?.invitedEmails ?: emptyList()
+    val rawPrem = getField("isPremium") ?: getField("premium")
+    val isPrem = coerceSafeBoolean(rawPrem) ?: existing?.isPremium ?: false
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
 
-    val rolesMap = (get("memberRoles") as? Map<*, *>)?.mapNotNull { (k, v) ->
-        if (k != null && v != null) k.toString() to v.toString() else null
-    }?.toMap() ?: existing?.memberRoles ?: emptyMap()
+    val rolesMap = coerceSafeStringMap(getField("memberRoles")) ?: existing?.memberRoles ?: emptyMap()
+    val emailsMap = coerceSafeStringMap(getField("memberEmails")) ?: existing?.memberEmails ?: emptyMap()
+    val namesMap = coerceSafeStringMap(getField("memberNames")) ?: existing?.memberNames ?: emptyMap()
 
-    return (existing ?: Household()).copy(
-        id = docId,
-        name = getString("name") ?: existing?.name ?: "Το Εξοδολόγιό μου",
-        ownerId = getString("ownerId") ?: existing?.ownerId ?: "",
-        inviteCode = getString("inviteCode") ?: existing?.inviteCode ?: "",
+    (existing ?: Household()).copy(
+        id = resolvedId,
+        name = coerceSafeString(getField("name"))?.ifBlank { null } ?: existing?.name ?: "Το Εξοδολόγιό μου",
+        ownerId = coerceSafeString(getField("ownerId")) ?: existing?.ownerId ?: "",
+        inviteCode = coerceSafeString(getField("inviteCode")) ?: existing?.inviteCode ?: "",
         memberUids = members,
         invitedEmails = invited,
         memberRoles = rolesMap,
-        pendingInviteRole = getString("pendingInviteRole") ?: existing?.pendingInviteRole ?: "CONTRIBUTOR",
+        memberEmails = emailsMap,
+        memberNames = namesMap,
+        pendingInviteRole = coerceSafeString(getField("pendingInviteRole")) ?: existing?.pendingInviteRole ?: "REGISTAR",
         isPremium = isPrem,
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt,
-        updatedAt = getTimestamp("updatedAt") ?: existing?.updatedAt
+        createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt,
+        updatedAt = coerceSafeTimestamp(getField("updatedAt")) ?: existing?.updatedAt
     )
+} catch (_: Throwable) {
+    existing ?: Household(id = docId)
+}
+
+fun DocumentSnapshot.toSafeHousehold(): Household {
+    val docId = safeDocId()
+    val existing = try {
+        this.toObject(Household::class.java)
+    } catch (_: Throwable) {
+        null
+    }
+    return mapHouseholdFromFields(docId, existing) { field -> safeGet(field) }
+}
+
+fun mapUserProfileFromFields(
+    docId: String,
+    existing: UserProfile? = null,
+    getField: (String) -> Any?
+): UserProfile = try {
+    val hids = coerceSafeStringList(getField("householdIds")) ?: existing?.householdIds ?: emptyList()
+    val rawPrem = getField("isPremium") ?: getField("premium")
+    val isPrem = coerceSafeBoolean(rawPrem) ?: existing?.isPremium ?: false
+    val uidVal = coerceSafeString(getField("uid"))?.ifBlank { docId } ?: docId
+    val remHour = (coerceSafeInt(getField("reminderHour")) ?: existing?.reminderHour ?: 21).coerceIn(0, 23)
+    val remMinute = (coerceSafeInt(getField("reminderMinute")) ?: existing?.reminderMinute ?: 30).coerceIn(0, 59)
+
+    (existing ?: UserProfile()).copy(
+        uid = uidVal,
+        email = coerceSafeString(getField("email")) ?: existing?.email ?: "",
+        displayName = coerceSafeString(getField("displayName")) ?: existing?.displayName ?: "",
+        firstName = coerceSafeString(getField("firstName")) ?: existing?.firstName ?: "",
+        lastName = coerceSafeString(getField("lastName")) ?: existing?.lastName ?: "",
+        birthDate = coerceSafeString(getField("birthDate")) ?: existing?.birthDate ?: "",
+        phoneNumber = coerceSafeString(getField("phoneNumber")) ?: existing?.phoneNumber ?: "",
+        occupation = coerceSafeString(getField("occupation")) ?: existing?.occupation ?: "",
+        city = coerceSafeString(getField("city")) ?: existing?.city ?: "",
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        householdIds = hids,
+        isPremium = isPrem,
+        photoUrl = coerceSafeString(getField("photoUrl")) ?: existing?.photoUrl ?: "",
+        authProvider = coerceSafeString(getField("authProvider")) ?: existing?.authProvider ?: "password",
+        appLanguage = coerceSafeString(getField("appLanguage")) ?: existing?.appLanguage ?: "EL",
+        themeMode = coerceSafeString(getField("themeMode")) ?: existing?.themeMode ?: "SYSTEM",
+        reminderEnabled = coerceSafeBoolean(getField("reminderEnabled")) ?: existing?.reminderEnabled ?: false,
+        reminderHour = remHour,
+        reminderMinute = remMinute,
+        notificationConsentCompleted = coerceSafeBoolean(getField("notificationConsentCompleted"))
+            ?: existing?.notificationConsentCompleted ?: false,
+        requiresEmailVerification = coerceSafeBoolean(getField("requiresEmailVerification"))
+            ?: existing?.requiresEmailVerification ?: false,
+        emailVerifiedConfirmed = coerceSafeBoolean(getField("emailVerifiedConfirmed"))
+            ?: existing?.emailVerifiedConfirmed ?: true,
+        createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt,
+        updatedAt = coerceSafeTimestamp(getField("updatedAt")) ?: existing?.updatedAt
+    )
+} catch (_: Throwable) {
+    existing ?: UserProfile(uid = docId)
 }
 
 fun DocumentSnapshot.toSafeUserProfile(): UserProfile {
+    val docId = safeDocId()
     val existing = try {
         this.toObject(UserProfile::class.java)
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         null
     }
-    val hids = (get("householdIds") as? List<*>)?.mapNotNull { it?.toString() } ?: existing?.householdIds ?: emptyList()
-    val rawPrem = get("isPremium") ?: get("premium")
-    val isPrem = when (rawPrem) {
-        is Boolean -> rawPrem
-        is String -> rawPrem.toBoolean()
-        is Number -> rawPrem.toInt() != 0
-        else -> existing?.isPremium ?: false
-    }
-    val uidVal = getString("uid")?.ifBlank { this.id } ?: this.id
+    return mapUserProfileFromFields(docId, existing) { field -> safeGet(field) }
+}
 
-    return (existing ?: UserProfile()).copy(
-        uid = uidVal,
-        email = getString("email") ?: existing?.email ?: "",
-        displayName = getString("displayName") ?: existing?.displayName ?: "",
-        firstName = getString("firstName") ?: existing?.firstName ?: "",
-        lastName = getString("lastName") ?: existing?.lastName ?: "",
-        birthDate = getString("birthDate") ?: existing?.birthDate ?: "",
-        phoneNumber = getString("phoneNumber") ?: existing?.phoneNumber ?: "",
-        occupation = getString("occupation") ?: existing?.occupation ?: "",
-        city = getString("city") ?: existing?.city ?: "",
-        householdId = getString("householdId") ?: existing?.householdId ?: "",
-        householdIds = hids,
-        isPremium = isPrem,
-        photoUrl = getString("photoUrl") ?: existing?.photoUrl ?: "",
-        authProvider = getString("authProvider") ?: existing?.authProvider ?: "password",
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt,
-        updatedAt = getTimestamp("updatedAt") ?: existing?.updatedAt
+fun mapSavingsGoalFromFields(
+    docId: String,
+    existing: FirebaseSavingsGoal? = null,
+    getField: (String) -> Any?
+): FirebaseSavingsGoal = try {
+    val target = coerceSafeDouble(getField("targetAmount")) ?: existing?.targetAmount ?: 0.0
+    val current = coerceSafeDouble(getField("currentAmount")) ?: existing?.currentAmount ?: 0.0
+    val color = coerceSafeLong(getField("colorHex")) ?: existing?.colorHex ?: 0xFF059669
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
+
+    (existing ?: FirebaseSavingsGoal()).copy(
+        id = resolvedId,
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        userId = coerceSafeString(getField("userId")) ?: existing?.userId ?: "",
+        title = coerceSafeString(getField("title")) ?: existing?.title ?: "",
+        targetAmount = target,
+        currentAmount = current,
+        deadlineDate = coerceSafeString(getField("deadlineDate")) ?: existing?.deadlineDate ?: "",
+        iconKey = coerceSafeString(getField("iconKey")) ?: existing?.iconKey ?: "vacation",
+        colorHex = color,
+        note = coerceSafeString(getField("note")) ?: existing?.note ?: "",
+        createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
+} catch (_: Throwable) {
+    existing ?: FirebaseSavingsGoal(id = docId)
 }
 
 fun DocumentSnapshot.toSafeSavingsGoal(): FirebaseSavingsGoal {
+    val docId = safeDocId()
     val existing = try {
         this.toObject(FirebaseSavingsGoal::class.java)
-    } catch (_: Exception) {
+    } catch (_: Throwable) {
         null
     }
-    val target = getDouble("targetAmount") ?: (get("targetAmount") as? Number)?.toDouble() ?: existing?.targetAmount ?: 0.0
-    val current = getDouble("currentAmount") ?: (get("currentAmount") as? Number)?.toDouble() ?: existing?.currentAmount ?: 0.0
-    val color = getLong("colorHex") ?: (get("colorHex") as? Number)?.toLong() ?: existing?.colorHex ?: 0xFF059669
-    val docId = getString("id")?.ifBlank { this.id } ?: this.id
-
-    return (existing ?: FirebaseSavingsGoal()).copy(
-        id = docId,
-        householdId = getString("householdId") ?: existing?.householdId ?: "",
-        userId = getString("userId") ?: existing?.userId ?: "",
-        title = getString("title") ?: existing?.title ?: "",
-        targetAmount = target,
-        currentAmount = current,
-        deadlineDate = getString("deadlineDate") ?: existing?.deadlineDate ?: "",
-        iconKey = getString("iconKey") ?: existing?.iconKey ?: "vacation",
-        colorHex = color,
-        note = getString("note") ?: existing?.note ?: "",
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt
-    )
+    return mapSavingsGoalFromFields(docId, existing) { field -> safeGet(field) }
 }
 
-fun DocumentSnapshot.toSafeRecurringExpense(): FirebaseRecurringExpense {
-    val existing = try {
-        this.toObject(FirebaseRecurringExpense::class.java)
-    } catch (_: Exception) {
-        null
-    }
-    val amt = getDouble("amount") ?: (get("amount") as? Number)?.toDouble() ?: existing?.amount ?: 0.0
-    val catId = getLong("categoryId") ?: (get("categoryId") as? Number)?.toLong() ?: existing?.categoryId ?: 0L
-    val day = getLong("dayOfMonth")?.toInt() ?: (get("dayOfMonth") as? Number)?.toInt() ?: existing?.dayOfMonth ?: 1
-    val rHour = (getLong("reminderHour")?.toInt() ?: (get("reminderHour") as? Number)?.toInt() ?: existing?.reminderHour ?: 9).coerceIn(0, 23)
-    val rMinute = (getLong("reminderMinute")?.toInt() ?: (get("reminderMinute") as? Number)?.toInt() ?: existing?.reminderMinute ?: 0).coerceIn(0, 59)
-    val rawAct = get("isActive") ?: get("active")
-    val isAct = when (rawAct) {
-        is Boolean -> rawAct
-        is String -> rawAct.toBoolean()
-        is Number -> rawAct.toInt() != 0
-        else -> existing?.isActive ?: true
-    }
-    val rawPayerId = get("payerMemberId")
-    val payerId = when (rawPayerId) {
-        is Number -> rawPayerId.toLong()
-        is String -> rawPayerId.toLongOrNull() ?: 0L
-        else -> existing?.payerMemberId ?: 0L
-    }
-    val docId = getString("id")?.ifBlank { this.id } ?: this.id
+fun mapRecurringExpenseFromFields(
+    docId: String,
+    existing: FirebaseRecurringExpense? = null,
+    getField: (String) -> Any?
+): FirebaseRecurringExpense = try {
+    val amt = coerceSafeDouble(getField("amount")) ?: existing?.amount ?: 0.0
+    val catId = coerceSafeLong(getField("categoryId")) ?: existing?.categoryId ?: 0L
+    val day = coerceSafeInt(getField("dayOfMonth")) ?: existing?.dayOfMonth ?: 1
+    val rHour = (coerceSafeInt(getField("reminderHour")) ?: existing?.reminderHour ?: 9).coerceIn(0, 23)
+    val rMinute = (coerceSafeInt(getField("reminderMinute")) ?: existing?.reminderMinute ?: 0).coerceIn(0, 59)
+    val rawAct = getField("isActive") ?: getField("active")
+    val isAct = coerceSafeBoolean(rawAct) ?: existing?.isActive ?: true
+    val payerId = coerceSafeLong(getField("payerMemberId")) ?: existing?.payerMemberId ?: 0L
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
 
-    return (existing ?: FirebaseRecurringExpense()).copy(
-        id = docId,
-        householdId = getString("householdId") ?: existing?.householdId ?: "",
-        userId = getString("userId") ?: existing?.userId ?: "",
-        title = getString("title") ?: existing?.title ?: "",
+    (existing ?: FirebaseRecurringExpense()).copy(
+        id = resolvedId,
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        userId = coerceSafeString(getField("userId")) ?: existing?.userId ?: "",
+        title = coerceSafeString(getField("title")) ?: existing?.title ?: "",
         amount = amt,
         categoryId = catId,
-        categoryName = getString("categoryName") ?: existing?.categoryName ?: "",
-        frequency = getString("frequency") ?: existing?.frequency ?: "MONTHLY",
+        categoryName = coerceSafeString(getField("categoryName")) ?: existing?.categoryName ?: "",
+        frequency = coerceSafeString(getField("frequency")) ?: existing?.frequency ?: "MONTHLY",
         dayOfMonth = day,
         reminderHour = rHour,
         reminderMinute = rMinute,
-        splitType = getString("splitType") ?: existing?.splitType ?: "ALL_FAMILY",
-        memberIdsCsv = getString("memberIdsCsv") ?: existing?.memberIdsCsv ?: "",
-        memberNamesDisplay = getString("memberNamesDisplay") ?: existing?.memberNamesDisplay ?: "Κοινό Οικογένειας",
-        note = getString("note") ?: existing?.note ?: "",
+        splitType = coerceSafeString(getField("splitType")) ?: existing?.splitType ?: "ALL_FAMILY",
+        memberIdsCsv = coerceSafeString(getField("memberIdsCsv")) ?: existing?.memberIdsCsv ?: "",
+        memberNamesDisplay = coerceSafeString(getField("memberNamesDisplay")) ?: existing?.memberNamesDisplay ?: "Κοινό Οικογένειας",
+        note = coerceSafeString(getField("note")) ?: existing?.note ?: "",
         isActive = isAct,
-        lastGeneratedMonth = getString("lastGeneratedMonth") ?: existing?.lastGeneratedMonth ?: "",
+        lastGeneratedMonth = coerceSafeString(getField("lastGeneratedMonth")) ?: existing?.lastGeneratedMonth ?: "",
         payerMemberId = payerId,
-        payerMemberName = getString("payerMemberName") ?: existing?.payerMemberName ?: "",
-        payerMemberIdsCsv = getString("payerMemberIdsCsv") ?: existing?.payerMemberIdsCsv ?: "",
-        payerAmountsCsv = getString("payerAmountsCsv") ?: existing?.payerAmountsCsv ?: "",
-        createdAt = getTimestamp("createdAt") ?: existing?.createdAt
+        payerMemberName = coerceSafeString(getField("payerMemberName")) ?: existing?.payerMemberName ?: "",
+        payerMemberIdsCsv = coerceSafeString(getField("payerMemberIdsCsv")) ?: existing?.payerMemberIdsCsv ?: "",
+        payerAmountsCsv = coerceSafeString(getField("payerAmountsCsv")) ?: existing?.payerAmountsCsv ?: "",
+        createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
+} catch (_: Throwable) {
+    existing ?: FirebaseRecurringExpense(id = docId)
+}
+
+fun DocumentSnapshot.toSafeRecurringExpense(): FirebaseRecurringExpense {
+    val docId = safeDocId()
+    val existing = try {
+        this.toObject(FirebaseRecurringExpense::class.java)
+    } catch (_: Throwable) {
+        null
+    }
+    return mapRecurringExpenseFromFields(docId, existing) { field -> safeGet(field) }
 }
