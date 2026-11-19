@@ -1,21 +1,38 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# Finsay R8 / ProGuard keep rules
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Preserve line numbers for Crashlytics / Play Console stack traces
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Preserve annotations and generic signatures needed by Firestore, Moshi, Retrofit, Room
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Keep all Firestore & Room data model classes
+-keep class com.example.data.model.** { *; }
+-keep class com.example.data.entity.** { *; }
+
+# Keep classes annotated with @Keep or Firestore @IgnoreExtraProperties
+-keep @androidx.annotation.Keep class * { *; }
+-keepclassmembers class * {
+    @androidx.annotation.Keep *;
+    @com.google.firebase.firestore.PropertyName *;
+}
+-keep @com.google.firebase.firestore.IgnoreExtraProperties class * { *; }
+
+# Moshi JSON adapters & reflection
+-keep class com.squareup.moshi.** { *; }
+-keep @com.squareup.moshi.JsonClass class * { *; }
+-keepclassmembers class * {
+    @com.squareup.moshi.Json *;
+}
+
+# Google Play Billing
+-keep class com.android.billingclient.** { *; }
+
+# Jetpack Credential Manager & Google Identity
+-keep class androidx.credentials.** { *; }
+-keep class com.google.android.libraries.identity.googleid.** { *; }
+
+# ML Kit OCR & Barcode Scanning
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.vision.** { *; }

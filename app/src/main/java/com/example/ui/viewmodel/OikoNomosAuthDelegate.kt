@@ -7,7 +7,6 @@ import androidx.credentials.CredentialManager
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.UserProfile
 import com.example.data.safety.DataSafetyGuard
-import com.example.reminder.DailyReminderManager
 import com.example.util.Localization
 import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.Timestamp
@@ -65,19 +64,7 @@ internal class OikoNomosAuthDelegate(
 
     fun isUserVerified(user: FirebaseUser?): Boolean {
         if (user == null) return false
-        if (!user.isEmailVerified) return false
-        if (vm.isMariosUser(user)) return true
-        if (vm.prefs.getBoolean("pending_google_verification_${user.uid}", false)) return false
-        val profile = vm._userProfile.value
-        if (profile != null &&
-            profile.uid == user.uid &&
-            profile.authProvider == "google" &&
-            profile.requiresEmailVerification &&
-            !profile.emailVerifiedConfirmed
-        ) {
-            return false
-        }
-        return true
+        return user.isEmailVerified
     }
 
     fun checkEmailVerification(onResult: (Boolean) -> Unit) {
@@ -181,92 +168,6 @@ internal class OikoNomosAuthDelegate(
                 }
                 onError(msg)
             }
-    }
-
-    fun sendPasswordResetPhoneCode(
-        phone: String,
-        onSuccess: (generatedCode: String, maskedPhone: String, userEmail: String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val cleanPhone = phone.trim().replace(" ", "").replace("-", "")
-        if (cleanPhone.length < 10) {
-            onError("Παρακαλώ εισάγετε ένα έγκυρο κινητό τηλέφωνο (τουλάχιστον 10 ψηφία)")
-            return
-        }
-        vm._isAuthLoading.value = true
-        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            try {
-                val matchedUser = vm.firestoreSyncRepo.findUserByPhoneNumber(cleanPhone)
-                if (matchedUser == null || matchedUser.email.isBlank()) {
-                    vm._isAuthLoading.value = false
-                    onError("Δεν βρέθηκε εγγεγραμμένος χρήστης με αυτό το κινητό τηλέφωνο ($cleanPhone). Ελέγξτε τον αριθμό ή δοκιμάστε μέσω email.")
-                    return@launch
-                }
-                val code = kotlin.random.Random.nextInt(100000, 999999).toString()
-                vm.firestoreSyncRepo.savePasswordResetPhoneCode(cleanPhone, code, matchedUser.email)
-                try {
-                    DailyReminderManager.showNotification(
-                        context = vm.getApplication(),
-                        title = "📱 Finsay - 6ψήφιος Κωδικός SMS",
-                        message = "Ο κωδικός επαλήθευσής σας είναι: $code. Χρησιμοποιήστε τον στην εφαρμογή."
-                    )
-                } catch (_: Exception) {}
-                vm._isAuthLoading.value = false
-                val masked = if (cleanPhone.length >= 6) cleanPhone.take(3) + "****" + cleanPhone.takeLast(3) else cleanPhone
-                vm.showSnackbar("Ο 6ψήφιος κωδικός στάλθηκε στο κινητό $masked!")
-                onSuccess(code, masked, matchedUser.email)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                vm._isAuthLoading.value = false
-                onError("Σφάλμα αποστολής SMS κωδικού: ${e.localizedMessage ?: "Παρακαλώ προσπαθήστε ξανά"}")
-            }
-        }
-    }
-
-    fun verifyPasswordResetPhoneCode(
-        phone: String,
-        enteredCode: String,
-        onSuccess: (emailSent: String) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val cleanPhone = phone.trim().replace(" ", "").replace("-", "")
-        val cleanCode = enteredCode.trim()
-        if (cleanCode.length != 6) {
-            onError("Παρακαλώ εισάγετε τον 6ψήφιο κωδικό επαλήθευσης")
-            return
-        }
-        vm._isAuthLoading.value = true
-        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            try {
-                val record = vm.firestoreSyncRepo.getPasswordResetPhoneCode(cleanPhone)
-                if (record == null) {
-                    vm._isAuthLoading.value = false
-                    onError("Δεν βρέθηκε ενεργός κωδικός για αυτό το κινητό. Παρακαλώ ζητήστε νέο κωδικό.")
-                    return@launch
-                }
-                if (record.first != cleanCode) {
-                    vm._isAuthLoading.value = false
-                    onError("Ο 6ψήφιος κωδικός δεν είναι σωστός. Ελέγξτε το SMS σας.")
-                    return@launch
-                }
-                val userEmail = record.second
-                vm.auth.setLanguageCode(if (vm._appLanguage.value == "EN") "en" else "el")
-                vm.auth.sendPasswordResetEmail(userEmail)
-                    .addOnSuccessListener {
-                        vm._isAuthLoading.value = false
-                        vm.showSnackbar("Επιτυχής ταυτοποίηση! Στάλθηκε σύνδεσμος στο $userEmail")
-                        onSuccess(userEmail)
-                    }
-                    .addOnFailureListener { exc ->
-                        vm._isAuthLoading.value = false
-                        onError(exc.localizedMessage ?: "Σφάλμα ολοκλήρωσης επαναφοράς")
-                    }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                vm._isAuthLoading.value = false
-                onError("Σφάλμα επαλήθευσης: ${e.localizedMessage}")
-            }
-        }
     }
 
     fun signInWithEmail(email: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
@@ -465,7 +366,6 @@ internal class OikoNomosAuthDelegate(
                 val result = vm.auth.signInWithCredential(credential).await()
                 val user = result.user ?: throw IllegalStateException("Google authentication returned no user")
                 val isNewAuthUser = result.additionalUserInfo?.isNewUser == true
-                val isMarios = vm.isMariosUser(user)
                 val existingProfile = try {
                     vm.firestoreSyncRepo.getUserProfileOnce(user.uid)
                 } catch (e: Exception) {
@@ -474,7 +374,7 @@ internal class OikoNomosAuthDelegate(
                 }
 
                 if (!isSignUpMode) {
-                    if (!isMarios && (isNewAuthUser || existingProfile == null)) {
+                    if (isNewAuthUser || existingProfile == null) {
                         if (isNewAuthUser) {
                             try { user.delete().await() } catch (delErr: Exception) {
                                 Log.w("OikoNomosVM", "Delete unregistered Google Auth user warning: ${delErr.message}")
@@ -497,16 +397,13 @@ internal class OikoNomosAuthDelegate(
                         return@launch
                     }
 
-                    val isPendingVerification = !isMarios && (
-                        !user.isEmailVerified ||
-                            vm.prefs.getBoolean("pending_google_verification_${user.uid}", false) ||
-                            (existingProfile != null && existingProfile.authProvider == "google" && existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed)
-                        )
-                    if (isPendingVerification) {
-                        vm.prefs.edit()
-                            .putString("cached_active_uid", user.uid)
-                            .putBoolean("pending_google_verification_${user.uid}", true)
-                            .apply()
+                    val googleVerified = user.isEmailVerified
+                    vm.prefs.edit()
+                        .putString("cached_active_uid", user.uid)
+                        .remove("pending_google_verification_${user.uid}")
+                        .apply()
+
+                    if (!googleVerified) {
                         vm._userProfile.value = existingProfile
                         vm._currentUser.value = user
                         vm._isUserVerifiedState.value = false
@@ -517,8 +414,10 @@ internal class OikoNomosAuthDelegate(
                         )
                         onSuccess()
                     } else {
-                        vm.prefs.edit().putString("cached_active_uid", user.uid).apply()
-                        vm._userProfile.value = existingProfile
+                        if (existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed) {
+                            try { vm.firestoreSyncRepo.markEmailVerifiedConfirmed(user.uid) } catch (_: Exception) {}
+                        }
+                        vm._userProfile.value = existingProfile.copy(requiresEmailVerification = false, emailVerifiedConfirmed = true)
                         vm._currentUser.value = user
                         vm._isUserVerifiedState.value = true
                         vm._isAuthLoading.value = false
@@ -527,10 +426,11 @@ internal class OikoNomosAuthDelegate(
                         onSuccess()
                     }
                 } else {
-                    if (!isMarios && (isNewAuthUser || existingProfile == null)) {
+                    val googleVerified = user.isEmailVerified
+                    if (isNewAuthUser || existingProfile == null) {
                         val displayName = user.displayName.orEmpty().trim()
                         val parts = displayName.split(" ").filter { it.isNotBlank() }
-                        val pendingProfile = UserProfile(
+                        val newProfile = UserProfile(
                             uid = user.uid,
                             email = user.email.orEmpty().trim(),
                             displayName = displayName.ifBlank { "Χρήστης Finsay" },
@@ -538,47 +438,49 @@ internal class OikoNomosAuthDelegate(
                             lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
                             photoUrl = user.photoUrl?.toString().orEmpty(),
                             authProvider = "google",
-                            requiresEmailVerification = true,
-                            emailVerifiedConfirmed = false,
+                            requiresEmailVerification = !googleVerified,
+                            emailVerifiedConfirmed = googleVerified,
                             appLanguage = vm._appLanguage.value,
                             createdAt = Timestamp.now()
                         )
                         try {
-                            vm.firestoreSyncRepo.savePendingUserProfile(pendingProfile)
-                            saveUserProfileToPrefs(pendingProfile)
+                            vm.firestoreSyncRepo.savePendingUserProfile(newProfile)
+                            saveUserProfileToPrefs(newProfile)
                         } catch (e: Exception) {
                             Log.w("OikoNomosVM", "savePendingUserProfile Google warning: ${e.message}")
                         }
                         vm.prefs.edit()
                             .putString("cached_active_uid", user.uid)
-                            .putBoolean("pending_google_verification_${user.uid}", true)
+                            .remove("pending_google_verification_${user.uid}")
                             .apply()
-                        try {
-                            vm.auth.setLanguageCode(if (isEn) "en" else "el")
-                            user.sendEmailVerification().await()
-                        } catch (e: Exception) {
-                            Log.w("OikoNomosVM", "Google sendEmailVerification warning: ${e.message}")
+                        if (!googleVerified) {
+                            try {
+                                vm.auth.setLanguageCode(if (isEn) "en" else "el")
+                                user.sendEmailVerification().await()
+                            } catch (e: Exception) {
+                                Log.w("OikoNomosVM", "Google sendEmailVerification warning: ${e.message}")
+                            }
                         }
-                        vm._userProfile.value = pendingProfile
+                        vm._userProfile.value = newProfile
                         vm._currentUser.value = user
-                        vm._isUserVerifiedState.value = false
+                        vm._isUserVerifiedState.value = googleVerified
                         vm._isAuthLoading.value = false
-                        vm.showSnackbar(
-                            if (isEn) "Verification link sent to ${user.email}!"
-                            else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
-                        )
+                        if (googleVerified) {
+                            vm.showSnackbar(if (isEn) "Signed up with Google!" else "Η εγγραφή μέσω Google ολοκληρώθηκε!")
+                            vm.loadUserProfileAndHousehold(user)
+                        } else {
+                            vm.showSnackbar(
+                                if (isEn) "Verification link sent to ${user.email}!"
+                                else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
+                            )
+                        }
                         onSuccess()
                     } else {
-                        val isPendingVerification = !isMarios && (
-                            !user.isEmailVerified ||
-                                vm.prefs.getBoolean("pending_google_verification_${user.uid}", false) ||
-                                (existingProfile != null && existingProfile.authProvider == "google" && existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed)
-                            )
-                        if (isPendingVerification) {
-                            vm.prefs.edit()
-                                .putString("cached_active_uid", user.uid)
-                                .putBoolean("pending_google_verification_${user.uid}", true)
-                                .apply()
+                        vm.prefs.edit()
+                            .putString("cached_active_uid", user.uid)
+                            .remove("pending_google_verification_${user.uid}")
+                            .apply()
+                        if (!googleVerified) {
                             vm._userProfile.value = existingProfile
                             vm._currentUser.value = user
                             vm._isUserVerifiedState.value = false
@@ -589,8 +491,10 @@ internal class OikoNomosAuthDelegate(
                             )
                             onSuccess()
                         } else {
-                            vm.prefs.edit().putString("cached_active_uid", user.uid).apply()
-                            vm._userProfile.value = existingProfile
+                            if (existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed) {
+                                try { vm.firestoreSyncRepo.markEmailVerifiedConfirmed(user.uid) } catch (_: Exception) {}
+                            }
+                            vm._userProfile.value = existingProfile.copy(requiresEmailVerification = false, emailVerifiedConfirmed = true)
                             vm._currentUser.value = user
                             vm._isUserVerifiedState.value = true
                             vm._isAuthLoading.value = false

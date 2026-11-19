@@ -95,12 +95,15 @@ test("Unauthenticated user cannot read users or households or subcollections", a
   await assertFails(unauthDb.collection("households").doc(HOUSEHOLD_ID).collection("members").get());
 });
 
-test("Authenticated user can query users for verified lookup, but cannot overwrite another user's profile", async () => {
+test("Authenticated user can query single user by email with limit(1), cannot enumerate users, and cannot overwrite another user's profile", async () => {
   await seedSharedHousehold();
   const creatorDb = testEnv.authenticatedContext(CREATOR_UID).firestore();
   await assertSucceeds(
-    creatorDb.collection("users").where("email", "==", "editor@example.com").get()
+    creatorDb.collection("users").where("email", "==", "editor@example.com").limit(1).get()
   );
+  // Bulk enumeration of all users must be denied
+  await assertFails(creatorDb.collection("users").get());
+  await assertFails(creatorDb.collection("users").limit(5).get());
   await assertFails(
     creatorDb.collection("users").doc(EDITOR_UID).set({ displayName: "Hacked" }, { merge: true })
   );
@@ -449,4 +452,78 @@ test("Household activity log allows member append with matching actorUid and blo
   await assertFails(regAct.doc("act_1").update({ summaryEl: "Tampered" }));
   await assertFails(edAct.doc("act_1").delete());
 });
+
+test("phone_password_resets collection is completely locked for both unauthenticated and authenticated clients", async () => {
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const authDb = testEnv.authenticatedContext(CREATOR_UID).firestore();
+
+  await assertFails(unauthDb.collection("phone_password_resets").doc("6900000000").set({ code: "123456" }));
+  await assertFails(unauthDb.collection("phone_password_resets").doc("6900000000").get());
+  await assertFails(authDb.collection("phone_password_resets").doc("6900000000").set({ code: "123456" }));
+  await assertFails(authDb.collection("phone_password_resets").doc("6900000000").get());
+});
+
+test("Clients cannot self-grant or tamper with isPremium on /users or /households, while normal updates succeed", async () => {
+  await seedSharedHousehold();
+  const creatorDb = testEnv.authenticatedContext(CREATOR_UID).firestore();
+  const newUserUid = "new_user_uid";
+  const newUserDb = testEnv.authenticatedContext(newUserUid).firestore();
+
+  // Cannot create a user profile with isPremium: true
+  await assertFails(
+    newUserDb.collection("users").doc(newUserUid).set({
+      uid: newUserUid,
+      email: "new@example.com",
+      displayName: "New User",
+      isPremium: true,
+    })
+  );
+
+  // Can create a user profile with isPremium: false
+  await assertSucceeds(
+    newUserDb.collection("users").doc(newUserUid).set({
+      uid: newUserUid,
+      email: "new@example.com",
+      displayName: "New User",
+      isPremium: false,
+    })
+  );
+
+  // Cannot update own user profile to escalate isPremium to true
+  await assertFails(
+    newUserDb.collection("users").doc(newUserUid).update({ isPremium: true })
+  );
+  await assertFails(
+    creatorDb.collection("users").doc(CREATOR_UID).set({ isPremium: true }, { merge: true })
+  );
+
+  // Normal user profile update still succeeds
+  await assertSucceeds(
+    creatorDb.collection("users").doc(CREATOR_UID).set({ displayName: "Creator Updated" }, { merge: true })
+  );
+
+  // Cannot create a household with isPremium: true
+  await assertFails(
+    creatorDb.collection("households").doc("hh_fake_pro").set({
+      id: "hh_fake_pro",
+      name: "Fake Pro",
+      ownerId: CREATOR_UID,
+      inviteCode: "OIKO-7777",
+      memberUids: [CREATOR_UID],
+      memberRoles: { [CREATOR_UID]: "CREATOR" },
+      isPremium: true,
+    })
+  );
+
+  // Cannot update existing household to set isPremium: true
+  await assertFails(
+    creatorDb.collection("households").doc(HOUSEHOLD_ID).update({ isPremium: true })
+  );
+
+  // Normal household rename still succeeds
+  await assertSucceeds(
+    creatorDb.collection("households").doc(HOUSEHOLD_ID).update({ name: "Renamed Safely" })
+  );
+});
+
 

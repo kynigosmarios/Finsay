@@ -45,11 +45,23 @@ class MainActivity : ComponentActivity() {
         }
 
         try {
-            billingManager = com.example.billing.BillingManager(this) { isActivated ->
-                if (isActivated) {
-                    viewModel.unlockPro()
+            billingManager = com.example.billing.BillingManager(
+                context = this,
+                onPurchasePending = {
+                    runOnUiThread {
+                        viewModel.onPurchasePending()
+                    }
+                },
+                onSubscriptionActivated = { isActivated ->
+                    runOnUiThread {
+                        if (isActivated) {
+                            viewModel.unlockPro()
+                        } else {
+                            viewModel.revokePro()
+                        }
+                    }
                 }
-            }
+            )
             billingManager.startConnection()
         } catch (t: Throwable) {
             Log.w("MainActivity", "BillingManager init error: ${t.message}")
@@ -128,6 +140,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         try {
             viewModel.onAppResumed()
+            if (::billingManager.isInitialized) {
+                billingManager.queryActivePurchases()
+            }
             com.example.util.BankNotificationHolder.reloadFromPrefs(this)
             com.example.service.BankNotificationListenerService.requestRebindIfPossible(this)
             com.example.service.BankNotificationListenerService.scanActiveNotifications(this)

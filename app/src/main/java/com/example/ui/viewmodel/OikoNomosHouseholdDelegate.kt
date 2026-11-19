@@ -12,7 +12,6 @@ import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
 import com.example.data.repository.FirestoreSyncRepository
-import com.example.data.seed.FirestoreDataSeed
 import com.example.util.DefaultPayerHelper
 import com.example.util.StartupSafety
 import com.google.firebase.auth.FirebaseUser
@@ -115,33 +114,19 @@ internal class OikoNomosHouseholdDelegate(
         }
     }
 
-    fun isMariosUser(user: FirebaseUser? = null, email: String? = null, uid: String? = null): Boolean {
-        val effectiveUser = user ?: vm._currentUser.value ?: vm.auth.currentUser
-        val effectiveEmail = (email ?: effectiveUser?.email).orEmpty().trim()
-        val effectiveUid = uid ?: effectiveUser?.uid.orEmpty()
-        return effectiveEmail.equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true) ||
-            effectiveUid == FirestoreDataSeed.DEFAULT_USER_UID ||
-            effectiveUid == "t5kN4RvPRugIxXUz18Fep2khSrC2" ||
-            effectiveUid == "tSLWmkXZ0MTqIKGoX3wd6HdhDw63" ||
-            effectiveUid == "jllDLLQl7VgFzOQpVIHi0wo8B013" ||
-            effectiveUid == "oA6smvWcC6QYCAKMvYdWEcmVCO43"
-    }
-
     fun getUserRoleForHousehold(household: Household?, user: FirebaseUser? = vm._currentUser.value): HouseholdRole {
         val effectiveUser = user ?: return HouseholdRole.CREATOR
         return StartupSafety.resolveHouseholdRole(
             household = household,
             userUid = effectiveUser.uid,
             userEmail = effectiveUser.email.orEmpty(),
-            isMarios = isMariosUser(effectiveUser),
-            mariosDefaultIds = vm.mariosDefaultHouseholdIds
+            isMarios = false,
+            mariosDefaultIds = emptySet()
         )
     }
 
     fun getOrEnsureHouseholdId(user: FirebaseUser? = null): String {
         val effectiveUser = user ?: vm._currentUser.value ?: vm.auth.currentUser ?: return ""
-        val isMarios = isMariosUser(effectiveUser)
-        val mariosHids = vm.mariosDefaultHouseholdIds
         val savedLastHid = vm.prefs.getString("last_household_id", "").orEmpty()
         val userSpecificPrefHid = vm.prefs.getString("user_household_${effectiveUser.uid}", "").orEmpty()
         val cachedProfile = vm._userProfile.value
@@ -153,35 +138,32 @@ internal class OikoNomosHouseholdDelegate(
             vm._currentHousehold.value?.takeIf { h ->
                 h.id.isNotBlank() && (h.ownerId == effectiveUser.uid || h.memberUids.contains(effectiveUser.uid) || h.memberRoles.containsKey(effectiveUser.uid))
             }?.id?.let { add(it) }
-            if (userSpecificPrefHid.isNotBlank() && (!mariosHids.contains(userSpecificPrefHid) || userSpecificPrefHid == savedLastHid)) {
+            if (userSpecificPrefHid.isNotBlank()) {
                 add(userSpecificPrefHid)
             }
         }
 
         val currentHid = vm._currentHousehold.value?.id.orEmpty()
-        if (StartupSafety.isHouseholdAllowedForUser(currentHid, isMarios, mariosHids, explicitlyKnownHids)) return currentHid
-        if (isMarios) {
-            return cachedProfile?.householdId?.takeIf { it.isNotBlank() } ?: FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID
-        }
-        if (StartupSafety.isHouseholdAllowedForUser(savedLastHid, false, mariosHids, explicitlyKnownHids)) return savedLastHid
+        if (StartupSafety.isHouseholdAllowedForUser(currentHid, false, emptySet(), explicitlyKnownHids)) return currentHid
+        if (StartupSafety.isHouseholdAllowedForUser(savedLastHid, false, emptySet(), explicitlyKnownHids)) return savedLastHid
         val profileHid = cachedProfile?.householdId.orEmpty()
-        if (StartupSafety.isHouseholdAllowedForUser(profileHid, false, mariosHids, explicitlyKnownHids)) return profileHid
+        if (StartupSafety.isHouseholdAllowedForUser(profileHid, false, emptySet(), explicitlyKnownHids)) return profileHid
         val profileHids = cachedProfile?.householdIds?.firstOrNull {
-            StartupSafety.isHouseholdAllowedForUser(it, false, mariosHids, explicitlyKnownHids)
+            StartupSafety.isHouseholdAllowedForUser(it, false, emptySet(), explicitlyKnownHids)
         }.orEmpty()
         if (profileHids.isNotBlank()) return profileHids
         val userHids = vm._userHouseholds.value.firstOrNull {
-            StartupSafety.isHouseholdAllowedForUser(it.id, false, mariosHids, explicitlyKnownHids)
+            StartupSafety.isHouseholdAllowedForUser(it.id, false, emptySet(), explicitlyKnownHids)
         }?.id.orEmpty()
         if (userHids.isNotBlank()) return userHids
-        if (StartupSafety.isHouseholdAllowedForUser(userSpecificPrefHid, false, mariosHids, explicitlyKnownHids)) return userSpecificPrefHid
+        if (StartupSafety.isHouseholdAllowedForUser(userSpecificPrefHid, false, emptySet(), explicitlyKnownHids)) return userSpecificPrefHid
 
         val safeUserHid = "household_${effectiveUser.uid}"
         vm.prefs.edit()
             .putString("user_household_${effectiveUser.uid}", safeUserHid)
             .putString("last_household_id", safeUserHid)
             .apply()
-        if (vm._currentHousehold.value == null || !StartupSafety.isHouseholdAllowedForUser(vm._currentHousehold.value?.id.orEmpty(), false, mariosHids, explicitlyKnownHids)) {
+        if (vm._currentHousehold.value == null || !StartupSafety.isHouseholdAllowedForUser(vm._currentHousehold.value?.id.orEmpty(), false, emptySet(), explicitlyKnownHids)) {
             val defaultH = Household(
                 id = safeUserHid,
                 name = "Το Εξοδολόγιό μου",
@@ -666,13 +648,7 @@ internal class OikoNomosHouseholdDelegate(
         val deletedHids = getDeletedHouseholdIds()
         try {
             val allUserHouseholds = vm.firestoreSyncRepo.getAllUserHouseholds(user.uid, userEmail, deletedHids)
-            val mariosDefaultIds = if (isMariosUser(user)) {
-                setOf(FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID, "e1d4ae67-499")
-            } else emptySet()
-            val existingMarios = vm._userHouseholds.value.filter {
-                mariosDefaultIds.contains(it.id) && allUserHouseholds.none { h -> h.id == it.id } && !deletedHids.contains(it.id)
-            }
-            val merged = (allUserHouseholds + existingMarios).filter { !deletedHids.contains(it.id) }.distinctBy { it.id }
+            val merged = allUserHouseholds.filter { !deletedHids.contains(it.id) }.distinctBy { it.id }
             if (merged.isNotEmpty()) {
                 vm._userHouseholds.value = merged
                 resolveMissingHouseholdMemberEmails(merged)
@@ -728,7 +704,7 @@ internal class OikoNomosHouseholdDelegate(
         val user = vm._currentUser.value ?: return
         val profile = vm._userProfile.value ?: return
         val ownedCount = vm._userHouseholds.value.count { it.ownerId == user.uid }
-        if (!profile.isPremium && !isMariosUser(user) && ownedCount >= 1) {
+        if (!vm.isCurrentUserPro() && ownedCount >= 1) {
             vm.showPremiumPaywall("multi_exodologio")
             return
         }

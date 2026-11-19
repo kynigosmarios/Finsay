@@ -94,6 +94,7 @@ import java.util.Calendar
 fun UserProfileDialog(
     currentUser: FirebaseUser?,
     userProfile: UserProfile?,
+    isPro: Boolean = false,
     expenseCount: Int,
     totalSpent: Double,
     currencySymbol: String,
@@ -349,10 +350,10 @@ fun UserProfileDialog(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (userProfile?.isPremium == true) "Finsay Pro Member ★" else "Finsay Free Account",
+                                        text = if (isPro) "Finsay Pro Member ★" else "Finsay Free Account",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = if (userProfile?.isPremium == true) Amber700 else Emerald700
+                                        color = if (isPro) Amber700 else Emerald700
                                     )
                                 }
                             }
@@ -888,10 +889,10 @@ fun UserProfileDialog(
                     // 3. Plan / Subscription Card
                     Surface(
                         shape = RoundedCornerShape(18.dp),
-                        color = if (userProfile?.isPremium == true) Amber700.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        color = if (isPro) Amber700.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                         border = BorderStroke(
                             width = 1.dp,
-                            color = if (userProfile?.isPremium == true) Amber700.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            color = if (isPro) Amber700.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -904,14 +905,14 @@ fun UserProfileDialog(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Surface(
                                         shape = CircleShape,
-                                        color = (if (userProfile?.isPremium == true) Amber700 else MaterialTheme.colorScheme.outline).copy(alpha = 0.15f),
+                                        color = (if (isPro) Amber700 else MaterialTheme.colorScheme.outline).copy(alpha = 0.15f),
                                         modifier = Modifier.size(38.dp)
                                     ) {
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = Icons.Default.Star,
                                                 contentDescription = null,
-                                                tint = if (userProfile?.isPremium == true) Amber700 else MaterialTheme.colorScheme.outline,
+                                                tint = if (isPro) Amber700 else MaterialTheme.colorScheme.outline,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         }
@@ -919,13 +920,13 @@ fun UserProfileDialog(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = if (userProfile?.isPremium == true) "Finsay Pro" else Localization.freePlan(lang),
+                                            text = if (isPro) "Finsay Pro" else Localization.freePlan(lang),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 15.sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = if (userProfile?.isPremium == true)
+                                            text = if (isPro)
                                                 (if (lang == Localization.Language.ENGLISH) "Unlimited households & members" else "Απεριόριστα εξοδολόγια & μέλη")
                                             else
                                                 Localization.activeHouseholdCount(lang, 1),
@@ -935,7 +936,7 @@ fun UserProfileDialog(
                                     }
                                 }
 
-                                if (userProfile?.isPremium == true) {
+                                if (isPro) {
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
                                         color = Amber700.copy(alpha = 0.15f)
@@ -951,7 +952,7 @@ fun UserProfileDialog(
                                 }
                             }
 
-                            if (userProfile?.isPremium != true) {
+                            if (!isPro) {
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
                                     onClick = {

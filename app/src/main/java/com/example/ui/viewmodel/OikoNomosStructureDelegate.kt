@@ -7,7 +7,6 @@ import com.example.data.entity.FamilyMember
 import com.example.data.model.FirebaseCategory
 import com.example.data.model.FirebaseMember
 import com.example.data.model.UserProfile
-import com.example.data.seed.FirestoreDataSeed
 import com.example.reminder.BillReminderManager
 import com.example.reminder.DailyReminderManager
 import com.example.util.AnalyticsSpecialFilter
@@ -182,9 +181,6 @@ internal class OikoNomosStructureDelegate(
         val deletedNames = getDeletedMemberNames(currentHouseholdId)
         val uid = explicitUser?.uid ?: vm._currentUser.value?.uid ?: ""
         val userEmail = explicitProfile?.email ?: explicitUser?.email ?: vm._userProfile.value?.email ?: vm._currentUser.value?.email ?: ""
-        val isMarios = vm.isMariosUser(explicitUser, userEmail, uid)
-        val isMariosDefaultHousehold = currentHouseholdId == FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID ||
-            currentHouseholdId == "e1d4ae67-499"
 
         val remoteDeleted = incomingMembers.filter { it.isDeleted }
         if (remoteDeleted.isNotEmpty() && currentHouseholdId.isNotBlank()) {
@@ -218,9 +214,8 @@ internal class OikoNomosStructureDelegate(
         val effectiveDeletedIds = getDeletedMemberIds(currentHouseholdId) + remoteDeleted.map { it.id }.toSet()
         val effectiveDeletedNames = getDeletedMemberNames(currentHouseholdId) + remoteDeleted.map { normalizeDeletedKey(it.name) }.toSet()
         val activeIncoming = incomingMembers.filter { !it.isDeleted }
-        val isSingleRemoteDefaultOnly = activeIncoming.size == 1 && activeIncoming.first().name.equals("Εγώ", ignoreCase = true)
 
-        val finalMembers: List<FamilyMember> = if (activeIncoming.isNotEmpty() && !(isMarios && isMariosDefaultHousehold && isSingleRemoteDefaultOnly)) {
+        val finalMembers: List<FamilyMember> = if (activeIncoming.isNotEmpty()) {
             val mapped = activeIncoming.map { fm ->
                 val resolvedId = fm.id.toLongOrNull() ?: StartupSafety.safePositiveIdHash(fm.id)
                 Triple(resolvedId, fm, normalizeDeletedKey(fm.name))
@@ -264,58 +259,40 @@ internal class OikoNomosStructureDelegate(
             if (currentLocal.isNotEmpty() && !currentLocal.all { it.name == "Εγώ" }) {
                 currentLocal
             } else {
-                if (isMarios && isMariosDefaultHousehold) {
-                    val mariosSeed = FirestoreDataSeed.members.map { m ->
-                        if (m.isDefault && uid.isNotBlank() && m.linkedUserUid.isBlank()) m.copy(linkedUserUid = uid) else m
-                    }.filter {
-                        !deletedIds.contains(it.id.toString()) && !deletedNames.contains(normalizeDeletedKey(it.name))
-                    }
-                    vm.repository.replaceAllMembers(mariosSeed)
-                    if (currentHouseholdId.isNotBlank() && vm.hasOwnerPermissions()) {
-                        mariosSeed.forEach { m ->
-                            vm.firestoreSyncRepo.syncMember(
-                                currentHouseholdId,
-                                FirebaseMember(m.id.toString(), currentHouseholdId, uid, m.name, m.role, m.avatarColorHex, m.voiceKeywords, m.isDefault, m.sortOrder, false, m.linkedUserUid)
-                            )
-                        }
-                    }
-                    mariosSeed
-                } else {
-                    val u = explicitUser ?: vm._currentUser.value ?: vm.auth.currentUser
-                    val p = explicitProfile ?: vm._userProfile.value
-                    val profileName = p?.displayName?.ifBlank { null }
-                        ?: "${p?.firstName ?: ""} ${p?.lastName ?: ""}".trim().ifBlank { null }
-                        ?: u?.displayName?.ifBlank { null }
-                        ?: u?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() }
-                        ?: "Εγώ"
+                val u = explicitUser ?: vm._currentUser.value ?: vm.auth.currentUser
+                val p = explicitProfile ?: vm._userProfile.value
+                val profileName = p?.displayName?.ifBlank { null }
+                    ?: "${p?.firstName ?: ""} ${p?.lastName ?: ""}".trim().ifBlank { null }
+                    ?: u?.displayName?.ifBlank { null }
+                    ?: u?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() }
+                    ?: "Εγώ"
 
-                    val defaultMember = FamilyMember(
-                        id = 1L,
-                        name = profileName,
-                        role = "Γονέας",
-                        avatarColorHex = 0xFF059669,
-                        voiceKeywords = profileName.lowercase(),
-                        isDefault = true,
-                        sortOrder = 0,
-                        linkedUserUid = uid
+                val defaultMember = FamilyMember(
+                    id = 1L,
+                    name = profileName,
+                    role = "Γονέας",
+                    avatarColorHex = 0xFF059669,
+                    voiceKeywords = profileName.lowercase(),
+                    isDefault = true,
+                    sortOrder = 0,
+                    linkedUserUid = uid
+                )
+                val list = listOf(defaultMember)
+                vm.repository.replaceAllMembers(list)
+                val canWriteStructure = StartupSafety.canSafelyWriteRemoteStructure(
+                    targetHousehold = vm._currentHousehold.value,
+                    userUid = uid,
+                    userEmail = userEmail,
+                    isMarios = false,
+                    mariosDefaultIds = emptySet()
+                )
+                if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && canWriteStructure) {
+                    vm.firestoreSyncRepo.syncMember(
+                        currentHouseholdId,
+                        FirebaseMember("1", currentHouseholdId, uid, defaultMember.name, defaultMember.role, defaultMember.avatarColorHex, defaultMember.voiceKeywords, true, 0, false, uid)
                     )
-                    val list = listOf(defaultMember)
-                    vm.repository.replaceAllMembers(list)
-                    val canWriteStructure = StartupSafety.canSafelyWriteRemoteStructure(
-                        targetHousehold = vm._currentHousehold.value,
-                        userUid = uid,
-                        userEmail = userEmail,
-                        isMarios = isMarios,
-                        mariosDefaultIds = vm.mariosDefaultHouseholdIds
-                    )
-                    if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && canWriteStructure) {
-                        vm.firestoreSyncRepo.syncMember(
-                            currentHouseholdId,
-                            FirebaseMember("1", currentHouseholdId, uid, defaultMember.name, defaultMember.role, defaultMember.avatarColorHex, defaultMember.voiceKeywords, true, 0, false, uid)
-                        )
-                    }
-                    list
                 }
+                list
             }
         }
         vm._allMembers.value = finalMembers
@@ -395,16 +372,11 @@ internal class OikoNomosStructureDelegate(
             vm.repository.replaceAllCategories(emptyList())
             emptyList()
         } else {
-            val isMarios = vm.isMariosUser()
-            val isMariosDefaultHousehold = currentHouseholdId == FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID ||
-                currentHouseholdId == "e1d4ae67-499"
-            val seedList = (if (isMarios && isMariosDefaultHousehold) {
-                FirestoreDataSeed.categories
-            } else {
-                OikoNomosViewModel.STANDARD_DEFAULT_CATEGORIES.map { it.copy(monthlyBudget = 0.0) }
-            }).filter {
-                !deletedIds.contains(it.id.toString()) && !deletedNames.contains(normalizeDeletedKey(it.name))
-            }
+            val seedList = OikoNomosViewModel.STANDARD_DEFAULT_CATEGORIES
+                .map { it.copy(monthlyBudget = 0.0) }
+                .filter {
+                    !deletedIds.contains(it.id.toString()) && !deletedNames.contains(normalizeDeletedKey(it.name))
+                }
             vm.repository.replaceAllCategories(seedList)
             if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && vm.hasOwnerPermissions()) {
                 seedList.forEach { cat ->
@@ -955,19 +927,34 @@ internal class OikoNomosStructureDelegate(
     }
 
     fun activateProFromBilling() {
-        val cur = vm._userProfile.value
-        if (cur != null) vm._userProfile.value = cur.copy(isPremium = true)
+        val wasPro = vm._isProUser.value
+        val hadPaywallOpen = vm._premiumPaywallReason.value != null
+        vm._isProUser.value = true
         vm.syncBankCatcherProEntitlement()
         vm._premiumPaywallReason.value = null
-        val uid = vm._currentUser.value?.uid ?: vm.auth.currentUser?.uid ?: return
-        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            vm.firestoreSyncRepo.setPremiumStatus(uid, true)
+        if (!wasPro && hadPaywallOpen) {
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN") "🎉 Welcome to Finsay Pro!"
+                else "🎉 Καλώς ήρθατε στο Finsay Pro!"
+            )
         }
-        vm.showSnackbar("🎉 Καλώς ήρθατε στο Finsay Pro!")
     }
 
     fun unlockPro() {
         activateProFromBilling()
+    }
+
+    fun revokePro() {
+        vm._isProUser.value = false
+        vm.syncBankCatcherProEntitlement()
+    }
+
+    fun onPurchasePending() {
+        val isEn = vm._appLanguage.value == "EN"
+        vm.showSnackbar(
+            if (isEn) "Your payment is pending confirmation from Google Play. Pro features will unlock automatically once approved."
+            else "Η πληρωμή σας εκκρεμεί επιβεβαίωσης από το Google Play. Οι λειτουργίες Pro θα ξεκλειδωθούν αυτόματα μόλις εγκριθεί."
+        )
     }
 
     fun setThemeMode(mode: String, syncToCloud: Boolean = true) {

@@ -222,7 +222,7 @@ private fun PrivacyPolicyText(lang: Localization.Language) {
         )
         LegalSection(
             title = "5. Your GDPR Rights",
-            body = "Under GDPR and Greek Law 4624/2019, you have the full right to:\n• Access your data at any time via the application.\n• Rectify and edit any inaccurate records.\n• Erasure (\"Right to be Forgotten\"): Permanently erase your local database or household records via App Settings > 'Clear All Data & Sign Out'.\n• Data Portability: Export your entire budget and expense records to CSV / Excel directly from the app."
+            body = "Under GDPR and Greek Law 4624/2019, you have the full right to:\n• Access your data at any time via the application.\n• Rectify and edit any inaccurate records.\n• Erasure (\"Right to be Forgotten\"): Permanently delete your account and all associated cloud & local data via Menu (☰) > My Profile > Delete Account.\n• Data Portability: Export your entire budget and expense records to CSV / Excel directly from the app."
         )
         LegalSection(
             title = "6. Subscriptions & Third-Party Services",
@@ -247,7 +247,7 @@ private fun PrivacyPolicyText(lang: Localization.Language) {
         )
         LegalSection(
             title = "5. Τα Δικαιώματά σας βάσει GDPR & Ν. 4624/2019",
-            body = "Έχετε πλήρη δικαιώματα:\n• Πρόσβασης και Διόρθωσης των εγγραφών σας.\n• Οριστικής Διαγραφής («Δικαίωμα στη Λήθη»): Μπορείτε να διαγράψετε άμεσα και οριστικά όλα τα τοπικά και cloud δεδομένα σας από τις «Ρυθμίσεις Εφαρμογής > Εκκαθάριση Όλων των Δεδομένων».\n• Φορητότητας Δεδομένων: Εξαγωγή του συνόλου των εξόδων σας σε αρχείο Excel / CSV οποτεδήποτε το επιθυμείτε."
+            body = "Έχετε πλήρη δικαιώματα:\n• Πρόσβασης και Διόρθωσης των εγγραφών σας.\n• Οριστικής Διαγραφής («Δικαίωμα στη Λήθη»): Μπορείτε να διαγράψετε άμεσα και οριστικά τον λογαριασμό σας καθώς και όλα τα τοπικά και cloud δεδομένα σας από το «Μενού (☰) > Το Προφίλ μου > Διαγραφή Λογαριασμού».\n• Φορητότητας Δεδομένων: Εξαγωγή του συνόλου των εξόδων σας σε αρχείο Excel / CSV οποτεδήποτε το επιθυμείτε."
         )
         LegalSection(
             title = "6. Συνδρομές & Επικοινωνία",

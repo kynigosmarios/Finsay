@@ -89,11 +89,6 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     internal val prefs = application.getSharedPreferences("oikonomos_app_prefs", Context.MODE_PRIVATE)
     internal val networkMonitor = NetworkConnectivityMonitor(application)
 
-    internal val mariosDefaultHouseholdIds = setOf(
-        com.example.data.seed.FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID,
-        "e1d4ae67-499"
-    )
-
     // Delegates
     private val authDelegate = OikoNomosAuthDelegate(this)
     private val syncDelegate = OikoNomosSyncDelegate(this)
@@ -119,6 +114,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     internal val _isAuthLoading = MutableStateFlow(false)
     val isAuthLoading = _isAuthLoading.asStateFlow()
+
+    internal val _isProUser = MutableStateFlow(false)
+    val isProUser: StateFlow<Boolean> = _isProUser.asStateFlow()
 
     internal val _currentHousehold = MutableStateFlow<Household?>(null)
     val currentHousehold = _currentHousehold.asStateFlow()
@@ -865,9 +863,6 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     // Public API (Preserved 100% + Features 1.1..4.2)
     // =========================================================================
 
-    fun isMariosUser(user: FirebaseUser? = null, email: String? = null, uid: String? = null): Boolean =
-        householdDelegate.isMariosUser(user, email, uid)
-
     fun getOrEnsureHouseholdId(user: FirebaseUser? = null): String =
         householdDelegate.getOrEnsureHouseholdId(user)
 
@@ -894,7 +889,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         householdDelegate.assignUserDefaultPayers(_currentHousehold.value?.id.orEmpty(), targetUid, listOfNotNull(memberId))
     fun assignUserDefaultPayers(householdId: String, targetUid: String, memberIds: List<Long>) =
         householdDelegate.assignUserDefaultPayers(householdId, targetUid, memberIds)
-    fun isCurrentUserPro(): Boolean = _userProfile.value?.isPremium == true || isMariosUser() || _currentHousehold.value?.isPremium == true
+    fun isCurrentUserPro(): Boolean = _isProUser.value
 
     internal fun syncBankCatcherProEntitlement() {
         val isPro = isCurrentUserPro()
@@ -919,8 +914,6 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun checkEmailVerification(onResult: (Boolean) -> Unit) = authDelegate.checkEmailVerification(onResult)
     fun resendVerificationEmail(onSuccess: () -> Unit, onError: (String) -> Unit) = authDelegate.resendVerificationEmail(onSuccess, onError)
     fun sendPasswordResetEmail(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) = authDelegate.sendPasswordResetEmail(email, onSuccess, onError)
-    fun sendPasswordResetPhoneCode(phone: String, onSuccess: (String, String, String) -> Unit, onError: (String) -> Unit) = authDelegate.sendPasswordResetPhoneCode(phone, onSuccess, onError)
-    fun verifyPasswordResetPhoneCode(phone: String, enteredCode: String, onSuccess: (String) -> Unit, onError: (String) -> Unit) = authDelegate.verifyPasswordResetPhoneCode(phone, enteredCode, onSuccess, onError)
     fun signInWithEmail(email: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) = authDelegate.signInWithEmail(email, pass, onSuccess, onError)
     fun signUpWithEmail(firstName: String, lastName: String, birthDate: String, phoneNumber: String, occupation: String, city: String, email: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) =
         authDelegate.signUpWithEmail(firstName, lastName, birthDate, phoneNumber, occupation, city, email, pass, onSuccess, onError)
@@ -1085,6 +1078,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun dismissPremiumPaywall() { _premiumPaywallReason.value = null }
     fun activateProFromBilling() = structureDelegate.activateProFromBilling()
     fun unlockPro() = structureDelegate.unlockPro()
+    fun revokePro() = structureDelegate.revokePro()
+    fun onPurchasePending() = structureDelegate.onPurchasePending()
     fun openExportReportDialog() {
         if (!isCurrentUserPro()) {
             showPremiumPaywall("export_report")

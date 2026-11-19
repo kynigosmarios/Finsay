@@ -7,7 +7,6 @@ import com.example.data.model.UserProfile
 import com.example.data.model.safeString
 import com.example.data.model.safeStringList
 import com.example.data.model.toSafeHousehold
-import com.example.data.seed.FirestoreDataSeed
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
@@ -40,13 +39,6 @@ internal class FirestoreHouseholdDelegate(
         excludedHouseholdIds: Set<String> = emptySet()
     ): List<Household> {
         val foundMap = mutableMapOf<String, Household>()
-        val cleanEmail = email.trim()
-        val isMariosAccount = cleanEmail.equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true) ||
-                uid == FirestoreDataSeed.DEFAULT_USER_UID ||
-                uid == "t5kN4RvPRugIxXUz18Fep2khSrC2" ||
-                uid == "tSLWmkXZ0MTqIKGoX3wd6HdhDw63" ||
-                uid == "jllDLLQl7VgFzOQpVIHi0wo8B013" ||
-                uid == "oA6smvWcC6QYCAKMvYdWEcmVCO43"
 
         fun parseAndAccept(doc: DocumentSnapshot): Household? = try {
             if (excludedHouseholdIds.contains(doc.id)) null
@@ -107,29 +99,6 @@ internal class FirestoreHouseholdDelegate(
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 Log.w(TAG, "getAllUserHouseholds user profile error: ${t.message}")
-            }
-        }
-
-        if (isMariosAccount) {
-            val defaultHid = FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID
-            val epixHid = "e1d4ae67-499"
-            if (!excludedHouseholdIds.contains(defaultHid) && !foundMap.containsKey(defaultHid)) {
-                foundMap[defaultHid] = Household(
-                    id = defaultHid,
-                    name = "Οικογένεια Μάριος",
-                    ownerId = uid,
-                    memberUids = listOf(uid, "t5kN4RvPRugIxXUz18Fep2khSrC2"),
-                    invitedEmails = listOf("kynigosmarios@gmail.com")
-                )
-            }
-            if (!excludedHouseholdIds.contains(epixHid) && !foundMap.containsKey(epixHid)) {
-                foundMap[epixHid] = Household(
-                    id = epixHid,
-                    name = "Επιχείρηση",
-                    ownerId = uid,
-                    memberUids = listOf(uid, "t5kN4RvPRugIxXUz18Fep2khSrC2"),
-                    invitedEmails = listOf("kynigosmarios@gmail.com")
-                )
             }
         }
 

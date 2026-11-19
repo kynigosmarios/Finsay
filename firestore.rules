@@ -53,12 +53,14 @@ service cloud.firestore {
     function isValidUserCreate(userId) {
       return isOwner(userId) &&
         (!('uid' in incoming()) || incoming().uid == userId) &&
-        (!('email' in incoming()) || incoming().email is string);
+        (!('email' in incoming()) || incoming().email is string) &&
+        (!('isPremium' in incoming()) || incoming().isPremium == false);
     }
 
     function isValidUserUpdate(userId) {
       return isOwner(userId) &&
-        (!('uid' in incoming()) || incoming().uid == userId);
+        (!('uid' in incoming()) || incoming().uid == userId) &&
+        (!('isPremium' in incoming()) || incoming().isPremium == existing().get('isPremium', false));
     }
 
     function isValidHouseholdCreate() {
@@ -68,7 +70,8 @@ service cloud.firestore {
         incoming().name.size() > 0 &&
         incoming().name.size() <= 120 &&
         incoming().memberUids is list &&
-        request.auth.uid in incoming().memberUids;
+        request.auth.uid in incoming().memberUids &&
+        (!('isPremium' in incoming()) || incoming().isPremium == false);
     }
 
     function isValidHouseholdCreatorUpdate() {
@@ -77,7 +80,8 @@ service cloud.firestore {
         incoming().name is string &&
         incoming().name.size() > 0 &&
         incoming().name.size() <= 120 &&
-        incoming().memberUids is list;
+        incoming().memberUids is list &&
+        (!('isPremium' in incoming()) || incoming().isPremium == existing().get('isPremium', false));
     }
 
     function isSelfUpdatingOwnDefaultPayer() {
@@ -110,15 +114,16 @@ service cloud.firestore {
 
     // 1. User Profile & Private Personal User Database
     match /users/{userId} {
-      // Authenticated users can read profiles (for verified-email household sharing lookup)
-      allow read: if isAuthenticated();
+      // Authenticated users can read a single profile by UID or exact lookup (limit <= 1) for household sharing
+      allow get: if isAuthenticated();
+      allow list: if isAuthenticated() && request.query.limit <= 1;
       // Only the authenticated account owner can modify or delete their own profile
       allow create: if isValidUserCreate(userId);
       allow update: if isValidUserUpdate(userId);
       allow delete: if isOwner(userId);
 
       // Personal user subcollections (expenses, incomes, categories, members, savings_goals, recurring_expenses)
-      match /{document=**} {
+      match /{subcollection}/{document=**} {
         allow read, write: if isOwner(userId);
       }
     }
@@ -192,11 +197,6 @@ service cloud.firestore {
           incoming().summaryEl is string;
         allow update, delete: if false;
       }
-    }
-
-    // 3. Phone password reset codes (6-digit temporary verification)
-    match /phone_password_resets/{phone} {
-      allow read, write: if true;
     }
   }
 }

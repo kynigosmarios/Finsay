@@ -12,7 +12,6 @@ import com.example.data.model.FirebaseIncome
 import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
-import com.example.data.seed.FirestoreDataSeed
 import com.example.reminder.BillReminderManager
 import com.example.util.HouseholdActivityNotificationManager
 import com.example.util.RecurringExpenseAutoProcessor
@@ -83,9 +82,6 @@ internal class OikoNomosSyncDelegate(
         vm.roomClearJob = vm.viewModelScope.launch(Dispatchers.IO + vm.coroutineExceptionHandler) {
             try {
                 vm.repository.clearAllData()
-                if (user != null && vm.isMariosUser(user)) {
-                    vm.repository.seedMariosDataIfEmpty()
-                }
             } catch (t: Throwable) {
                 if (t is CancellationException) throw t
                 Log.w(tag, "resetStateForUserSwitch room clear warning: ${t.message}")
@@ -97,15 +93,10 @@ internal class OikoNomosSyncDelegate(
         if (vm._currentHousehold.value != null) return
         val hid = vm.getOrEnsureHouseholdId(user)
         if (hid.isBlank()) return
-        val isMarios = vm.isMariosUser(user)
         val placeholder = Household(
             id = hid,
-            name = if (isMarios && hid == FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID) {
-                FirestoreDataSeed.DEFAULT_HOUSEHOLD_NAME
-            } else {
-                vm.prefs.getString("household_name_$hid", null)?.takeIf { it.isNotBlank() }
-                    ?: if (vm._appLanguage.value == "EN") "My Household Book" else "Το Εξοδολόγιό μου"
-            },
+            name = vm.prefs.getString("household_name_$hid", null)?.takeIf { it.isNotBlank() }
+                ?: if (vm._appLanguage.value == "EN") "My Household Book" else "Το Εξοδολόγιό μου",
             ownerId = user.uid,
             memberUids = listOf(user.uid),
             memberRoles = mapOf(user.uid to HouseholdRole.CREATOR.key)
@@ -178,7 +169,6 @@ internal class OikoNomosSyncDelegate(
                 vm._themeMode.value = profile.themeMode
             }
 
-            val isMarios = vm.isMariosUser(user, profile.email, user.uid)
             val discoveredHouseholds = vm.firestoreSyncRepo.getAllUserHouseholds(
                 uid = user.uid,
                 email = profile.email.ifBlank { user.email.orEmpty() },
@@ -188,16 +178,12 @@ internal class OikoNomosSyncDelegate(
             val activeHousehold = when {
                 discoveredHouseholds.isEmpty() -> {
                     val targetHid = profile.householdId.takeIf {
-                        StartupSafety.isHouseholdAllowedForUser(it, isMarios, vm.mariosDefaultHouseholdIds, profile.householdIds.toSet())
+                        StartupSafety.isHouseholdAllowedForUser(it, false, emptySet(), profile.householdIds.toSet())
                     } ?: vm.getOrEnsureHouseholdId(user)
                     val ensured = vm.firestoreSyncRepo.ensureHouseholdExists(
                         householdId = targetHid,
                         ownerUid = user.uid,
-                        householdName = if (isMarios && targetHid == FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID) {
-                            FirestoreDataSeed.DEFAULT_HOUSEHOLD_NAME
-                        } else {
-                            "Το Εξοδολόγιό μου"
-                        }
+                        householdName = "Το Εξοδολόγιό μου"
                     )
                     discoveredHouseholds.add(ensured)
                     ensured
@@ -221,23 +207,6 @@ internal class OikoNomosSyncDelegate(
                 .putString("last_household_id", activeHousehold.id)
                 .putString("user_household_${user.uid}", activeHousehold.id)
                 .apply()
-
-            // Seed empty households only when user has write/manage structure permission
-            if (StartupSafety.canSafelyWriteRemoteStructure(
-                    targetHousehold = activeHousehold,
-                    userUid = user.uid,
-                    userEmail = profile.email.ifBlank { user.email.orEmpty() },
-                    isMarios = isMarios,
-                    mariosDefaultIds = vm.mariosDefaultHouseholdIds
-                )
-            ) {
-                try {
-                    vm.firestoreSyncRepo.seedFirestoreIfEmpty(activeHousehold.id, user.uid, isMarios)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    Log.w(tag, "seedFirestoreIfEmpty warning: ${e.message}")
-                }
-            }
 
             vm.loadDeletedItems(activeHousehold.id)
             observeUserData(user.uid)

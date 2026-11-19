@@ -199,9 +199,6 @@ class FirestoreSyncRepository(
         city: String
     ): Result<UserProfile> = userProfileDelegate.updateUserFullProfile(uid, firstName, lastName, birthDate, phoneNumber, occupation, city)
 
-    suspend fun findUserByPhoneNumber(phone: String): UserProfile? =
-        userProfileDelegate.findUserByPhoneNumber(phone)
-
     suspend fun findUserByEmail(email: String): UserProfile? =
         userProfileDelegate.findUserByEmail(email)
 
@@ -216,15 +213,6 @@ class FirestoreSyncRepository(
 
     suspend fun updateUserProfileHouseholdIds(uid: String, householdIds: List<String>) =
         userProfileDelegate.updateUserProfileHouseholdIds(uid, householdIds)
-
-    suspend fun savePasswordResetPhoneCode(phone: String, code: String, userEmail: String) =
-        userProfileDelegate.savePasswordResetPhoneCode(phone, code, userEmail)
-
-    suspend fun getPasswordResetPhoneCode(phone: String): Pair<String, String>? =
-        userProfileDelegate.getPasswordResetPhoneCode(phone)
-
-    suspend fun setPremiumStatus(uid: String, isPremium: Boolean) =
-        userProfileDelegate.setPremiumStatus(uid, isPremium)
 
     suspend fun resolveUserProfilesByUids(uids: List<String>): Map<String, UserProfile> =
         userProfileDelegate.resolveUserProfilesByUids(uids)
@@ -327,10 +315,7 @@ class FirestoreSyncRepository(
     fun observeHouseholdActivity(householdId: String, limit: Long = 50L): Flow<List<FirebaseHouseholdActivity>> =
         transactionsDelegate.observeHouseholdActivity(householdId, limit)
 
-    // Structure (Seed, Members, Categories, Savings Goals, Recurring Expenses)
-    suspend fun seedFirestoreIfEmpty(householdId: String, userId: String, isMarios: Boolean) =
-        structureDelegate.seedFirestoreIfEmpty(householdId, userId, isMarios)
-
+    // Structure (Members, Categories, Savings Goals, Recurring Expenses)
     fun observeMembers(householdId: String): Flow<List<FirebaseMember>> =
         structureDelegate.observeMembers(householdId)
 

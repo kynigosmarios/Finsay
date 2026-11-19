@@ -6,7 +6,6 @@ import com.example.data.model.UserProfile
 import com.example.data.model.safeBoolean
 import com.example.data.model.safeString
 import com.example.data.model.toSafeUserProfile
-import com.example.data.seed.FirestoreDataSeed
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -302,47 +301,13 @@ internal class FirestoreUserProfileDelegate(
         return Result.success(finalProfile)
     }
 
-    suspend fun findUserByPhoneNumber(phone: String): UserProfile? {
-        val raw = phone.trim().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-        if (raw.isBlank()) return null
-
-        val digitsOnly = when {
-            raw.startsWith("0030") -> raw.removePrefix("0030")
-            raw.startsWith("+30") -> raw.removePrefix("+30")
-            else -> raw
-        }
-
-        val variations = listOf(raw, digitsOnly, "+30$digitsOnly", "0030$digitsOnly").distinct()
-        for (v in variations) {
-            val query = db.collection("users").whereEqualTo("phoneNumber", v).get().await()
-            if (!query.isEmpty) {
-                val profile = try { query.documents.first().toSafeUserProfile() } catch (_: Exception) { null }
-                if (profile != null) return profile
-            }
-        }
-
-        try {
-            val allUsers = db.collection("users").limit(50).get().await()
-            for (doc in allUsers.documents) {
-                val u = try { doc.toSafeUserProfile() } catch (_: Exception) { null } ?: continue
-                val uDigits = u.phoneNumber.trim().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-                    .let { if (it.startsWith("+30")) it.removePrefix("+30") else if (it.startsWith("0030")) it.removePrefix("0030") else it }
-                if (uDigits.isNotBlank() && (uDigits == digitsOnly || u.phoneNumber == raw)) {
-                    return u
-                }
-            }
-        } catch (_: Exception) {}
-
-        return null
-    }
-
     suspend fun findUserByEmail(email: String): UserProfile? {
         val clean = email.trim()
         if (clean.isBlank()) return null
         val lower = clean.lowercase()
 
         try {
-            val q1 = db.collection("users").whereEqualTo("email", clean).get().await()
+            val q1 = db.collection("users").whereEqualTo("email", clean).limit(1).get().await()
             if (!q1.isEmpty) {
                 val doc = q1.documents.first()
                 val profile = try { doc.toSafeUserProfile() } catch (_: Throwable) { null }
@@ -356,7 +321,7 @@ internal class FirestoreUserProfileDelegate(
 
         if (lower != clean) {
             try {
-                val q2 = db.collection("users").whereEqualTo("email", lower).get().await()
+                val q2 = db.collection("users").whereEqualTo("email", lower).limit(1).get().await()
                 if (!q2.isEmpty) {
                     val doc = q2.documents.first()
                     val profile = try { doc.toSafeUserProfile() } catch (_: Throwable) { null }
@@ -367,39 +332,6 @@ internal class FirestoreUserProfileDelegate(
                     }
                 }
             } catch (_: Throwable) {}
-        }
-
-        try {
-            val allUsers = db.collection("users").limit(500).get().await()
-            for (doc in allUsers.documents) {
-                val docEmail = doc.safeString("email")?.trim()
-                    ?: doc.safeString("userEmail")?.trim()
-                    ?: doc.safeString("contactEmail")?.trim()
-                    ?: continue
-                if (docEmail.equals(clean, ignoreCase = true) || docEmail.equals(lower, ignoreCase = true)) {
-                    val profile = try { doc.toSafeUserProfile() } catch (_: Throwable) { null }
-                    if (profile != null) {
-                        if (profile.uid.isBlank()) profile.uid = doc.id
-                        if (profile.email.isBlank()) profile.email = docEmail
-                        return profile
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            Log.w(TAG, "findUserByEmail scan error: ${e.message}")
-        }
-
-        if (clean.equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true)) {
-            return UserProfile(
-                uid = FirestoreDataSeed.DEFAULT_USER_UID,
-                email = FirestoreDataSeed.DEFAULT_USER_EMAIL,
-                displayName = "Μάριος Κυνηγός",
-                firstName = "Μάριος",
-                lastName = "Κυνηγός",
-                householdId = FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID,
-                householdIds = listOf(FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID, "e1d4ae67-499"),
-                isPremium = true
-            )
         }
 
         return null
@@ -426,33 +358,15 @@ internal class FirestoreUserProfileDelegate(
         var matchedDoc: DocumentSnapshot? = null
 
         try {
-            val q1 = db.collection("users").whereEqualTo("email", clean).get().await()
+            val q1 = db.collection("users").whereEqualTo("email", clean).limit(1).get().await()
             if (!q1.isEmpty) matchedDoc = q1.documents.first()
         } catch (_: Throwable) {}
 
         if (matchedDoc == null && lower != clean) {
             try {
-                val q2 = db.collection("users").whereEqualTo("email", lower).get().await()
+                val q2 = db.collection("users").whereEqualTo("email", lower).limit(1).get().await()
                 if (!q2.isEmpty) matchedDoc = q2.documents.first()
             } catch (_: Throwable) {}
-        }
-
-        if (matchedDoc == null) {
-            try {
-                val allUsers = db.collection("users").limit(500).get().await()
-                for (doc in allUsers.documents) {
-                    val docEmail = doc.safeString("email")?.trim()
-                        ?: doc.safeString("userEmail")?.trim()
-                        ?: doc.safeString("contactEmail")?.trim()
-                        ?: continue
-                    if (docEmail.equals(clean, ignoreCase = true) || docEmail.equals(lower, ignoreCase = true)) {
-                        matchedDoc = doc
-                        break
-                    }
-                }
-            } catch (e: Throwable) {
-                Log.w(TAG, "findVerifiedUserByEmail scan error: ${e.message}")
-            }
         }
 
         if (matchedDoc != null) {
@@ -481,25 +395,6 @@ internal class FirestoreUserProfileDelegate(
             }
         }
 
-        if (clean.equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true)) {
-            if (currentUserUid == FirestoreDataSeed.DEFAULT_USER_UID) {
-                return FirestoreSyncRepository.VerifiedUserLookupResult.SelfEmail
-            }
-            return FirestoreSyncRepository.VerifiedUserLookupResult.Found(
-                UserProfile(
-                    uid = FirestoreDataSeed.DEFAULT_USER_UID,
-                    email = FirestoreDataSeed.DEFAULT_USER_EMAIL,
-                    displayName = "Μάριος Κυνηγός",
-                    firstName = "Μάριος",
-                    lastName = "Κυνηγός",
-                    householdId = FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID,
-                    householdIds = listOf(FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID, "e1d4ae67-499"),
-                    isPremium = true,
-                    emailVerifiedConfirmed = true
-                )
-            )
-        }
-
         return FirestoreSyncRepository.VerifiedUserLookupResult.NotFound
     }
 
@@ -517,30 +412,6 @@ internal class FirestoreUserProfileDelegate(
             if (e is CancellationException) throw e
             Log.w(TAG, "updateUserProfileHouseholdIds notice: ${e.message}")
         }
-    }
-
-    suspend fun savePasswordResetPhoneCode(phone: String, code: String, userEmail: String) {
-        val cleanPhone = phone.trim().replace(" ", "").replace("-", "")
-        val data = mapOf(
-            "phone" to cleanPhone,
-            "code" to code,
-            "userEmail" to userEmail,
-            "createdAt" to Timestamp.now()
-        )
-        db.collection("phone_password_resets").document(cleanPhone).set(data).await()
-    }
-
-    suspend fun getPasswordResetPhoneCode(phone: String): Pair<String, String>? {
-        val cleanPhone = phone.trim().replace(" ", "").replace("-", "")
-        val doc = db.collection("phone_password_resets").document(cleanPhone).get().await()
-        if (!doc.exists()) return null
-        val code = doc.getString("code") ?: return null
-        val email = doc.getString("userEmail") ?: return null
-        return Pair(code, email)
-    }
-
-    suspend fun setPremiumStatus(uid: String, isPremium: Boolean) {
-        db.collection("users").document(uid).update("isPremium", isPremium).await()
     }
 
     suspend fun resolveUserProfilesByUids(uids: List<String>): Map<String, UserProfile> {

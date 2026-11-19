@@ -1,9 +1,11 @@
 package com.example.data.model
 
+import androidx.annotation.Keep
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.IgnoreExtraProperties
 import com.google.firebase.firestore.PropertyName
 
+@Keep
 enum class HouseholdRole(val key: String) {
     CREATOR("CREATOR"),
     EDITOR("EDITOR"),
@@ -28,6 +30,7 @@ enum class HouseholdRole(val key: String) {
     }
 }
 
+@Keep
 data class SharedHouseholdUser(
     val uid: String,
     val email: String,
@@ -35,6 +38,7 @@ data class SharedHouseholdUser(
     val role: HouseholdRole
 )
 
+@Keep
 data class ConnectedHouseholdUser(
     val uid: String,
     val email: String,
@@ -43,12 +47,14 @@ data class ConnectedHouseholdUser(
     val isCreator: Boolean = false
 )
 
+@Keep
 enum class SyncStatusState {
     SYNCING,
     SYNCED,
     OFFLINE
 }
 
+@Keep
 @IgnoreExtraProperties
 data class Household(
     var id: String = "",
@@ -67,6 +73,7 @@ data class Household(
     var updatedAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class FirebaseExpense(
     var id: String = "",
@@ -90,6 +97,7 @@ data class FirebaseExpense(
     var createdAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class UserProfile(
     var uid: String = "",
@@ -118,6 +126,7 @@ data class UserProfile(
     var updatedAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class FirebaseIncome(
     var id: String = "",
@@ -135,6 +144,7 @@ data class FirebaseIncome(
     var createdAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class FirebaseMember(
     var id: String = "",
@@ -153,6 +163,7 @@ data class FirebaseMember(
     var createdAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class FirebaseCategory(
     var id: String = "",
@@ -169,6 +180,7 @@ data class FirebaseCategory(
     var createdAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class FirebaseSavingsGoal(
     var id: String = "",
@@ -185,6 +197,7 @@ data class FirebaseSavingsGoal(
     var createdAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class FirebaseRecurringExpense(
     var id: String = "",
@@ -213,6 +226,7 @@ data class FirebaseRecurringExpense(
     var createdAt: Timestamp? = null
 )
 
+@Keep
 @IgnoreExtraProperties
 data class FirebaseHouseholdActivity(
     var id: String = "",

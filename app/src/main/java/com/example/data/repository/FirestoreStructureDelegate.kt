@@ -12,7 +12,6 @@ import com.example.data.model.toSafeCategory
 import com.example.data.model.toSafeMember
 import com.example.data.model.toSafeRecurringExpense
 import com.example.data.model.toSafeSavingsGoal
-import com.example.data.seed.FirestoreDataSeed
 import com.example.util.GreekVoiceParser
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
@@ -32,123 +31,6 @@ internal class FirestoreStructureDelegate(
 ) {
     companion object {
         private const val TAG = "FirestoreSyncRepo"
-    }
-
-    suspend fun seedFirestoreIfEmpty(householdId: String, userId: String, isMarios: Boolean) {
-        if (!isMarios) return
-        val targetHid = if (householdId.isNotBlank()) householdId else FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID
-        val targetUid = if (userId.isNotBlank()) userId else FirestoreDataSeed.DEFAULT_USER_UID
-
-        try {
-            val existingExpenses = db.collection("households").document(targetHid)
-                .collection("expenses").limit(5).get().await()
-
-            if (existingExpenses.isEmpty) {
-                Log.i(TAG, "Seeding base data to Firestore for household $targetHid and user $targetUid...")
-
-                val hDoc = db.collection("households").document(targetHid).get().await()
-                if (!hDoc.exists()) {
-                    val household = Household(
-                        id = targetHid,
-                        name = if (targetHid == "e1d4ae67-499") "Επιχείρηση" else FirestoreDataSeed.DEFAULT_HOUSEHOLD_NAME,
-                        ownerId = targetUid,
-                        inviteCode = "OIKO-7788",
-                        memberUids = listOf(targetUid, "t5kN4RvPRugIxXUz18Fep2khSrC2", "tSLWmkXZ0MTqIKGoX3wd6HdhDw63", "jllDLLQl7VgFzOQpVIHi0wo8B013", "oA6smvWcC6QYCAKMvYdWEcmVCO43"),
-                        invitedEmails = listOf("kynigosmarios@gmail.com"),
-                        createdAt = Timestamp.now()
-                    )
-                    db.collection("households").document(targetHid).set(household).await()
-                }
-
-                if (isMarios) {
-                    val bDoc = db.collection("households").document("e1d4ae67-499").get().await()
-                    if (!bDoc.exists()) {
-                        val epixeirisi = Household(
-                            id = "e1d4ae67-499",
-                            name = "Επιχείρηση",
-                            ownerId = targetUid,
-                            inviteCode = "OIKO-9922",
-                            memberUids = listOf(targetUid, "t5kN4RvPRugIxXUz18Fep2khSrC2"),
-                            invitedEmails = listOf("kynigosmarios@gmail.com"),
-                            createdAt = Timestamp.now()
-                        )
-                        db.collection("households").document("e1d4ae67-499").set(epixeirisi).await()
-                    }
-                }
-
-                FirestoreDataSeed.members.forEach { m ->
-                    val fbM = FirebaseMember(
-                        id = m.id.toString(),
-                        householdId = targetHid,
-                        userId = targetUid,
-                        name = m.name,
-                        role = m.role,
-                        avatarColorHex = m.avatarColorHex,
-                        voiceKeywords = m.voiceKeywords,
-                        isDefault = m.isDefault,
-                        sortOrder = m.sortOrder,
-                        linkedUserUid = m.linkedUserUid
-                    )
-                    db.collection("households").document(targetHid).collection("members").document(fbM.id).set(fbM)
-                    db.collection("users").document(targetUid).collection("members").document(fbM.id).set(fbM)
-                }
-
-                FirestoreDataSeed.categories.forEach { c ->
-                    val fbC = FirebaseCategory(
-                        id = c.id.toString(),
-                        householdId = targetHid,
-                        userId = targetUid,
-                        name = c.name,
-                        iconKey = c.iconKey,
-                        monthlyBudget = c.monthlyBudget,
-                        colorHex = c.colorHex,
-                        voiceKeywords = c.voiceKeywords,
-                        sortOrder = c.sortOrder,
-                        fontColorHex = c.fontColorHex
-                    )
-                    db.collection("households").document(targetHid).collection("categories").document(fbC.id).set(fbC)
-                    db.collection("users").document(targetUid).collection("categories").document(fbC.id).set(fbC)
-                }
-
-                FirestoreDataSeed.incomes.forEach { inc ->
-                    val fbInc = FirebaseIncome(
-                        id = inc.cloudId.ifBlank { "inc_${inc.id}" },
-                        householdId = targetHid,
-                        title = inc.title,
-                        amount = inc.amount,
-                        memberId = inc.memberId,
-                        memberName = inc.memberName,
-                        category = inc.category,
-                        timestamp = inc.timestamp,
-                        note = inc.note,
-                        createdByUid = targetUid,
-                        createdByName = FirestoreDataSeed.DEFAULT_USER_NAME
-                    )
-                    db.collection("households").document(targetHid).collection("incomes").document(fbInc.id).set(fbInc)
-                    db.collection("users").document(targetUid).collection("incomes").document(fbInc.id).set(fbInc)
-                }
-
-                for (chunk in FirestoreDataSeed.expenses.chunked(250)) {
-                    val batch = db.batch()
-                    for (exp in chunk) {
-                        val fbExp = exp.toFirebaseExpense(
-                            householdId = targetHid,
-                            userId = targetUid,
-                            userName = FirestoreDataSeed.DEFAULT_USER_NAME
-                        )
-                        val hRef = db.collection("households").document(targetHid).collection("expenses").document(fbExp.id)
-                        val uRef = db.collection("users").document(targetUid).collection("expenses").document(fbExp.id)
-                        batch.set(hRef, fbExp)
-                        batch.set(uRef, fbExp)
-                    }
-                    batch.commit().await()
-                }
-                Log.i(TAG, "Seeded ${FirestoreDataSeed.expenses.size} expenses to Firestore successfully!")
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.e(TAG, "Error in seedFirestoreIfEmpty", e)
-        }
     }
 
     // Household & User Members

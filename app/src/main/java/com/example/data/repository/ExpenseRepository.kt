@@ -127,26 +127,6 @@ class ExpenseRepository(
         }
     }
 
-    suspend fun seedMariosDataIfEmpty() {
-        val existingExpenses = expenseDao.getExpenseCount()
-        val existingMembers = expenseDao.getMemberCount()
-        val existingCategories = expenseDao.getCategoryCount()
-        val existingIncomes = expenseDao.getAllIncomesList().size
-
-        if (existingMembers == 0) {
-            expenseDao.insertMembers(com.example.data.seed.FirestoreDataSeed.members)
-        }
-        if (existingCategories == 0) {
-            expenseDao.insertCategories(com.example.data.seed.FirestoreDataSeed.categories)
-        }
-        if (existingIncomes == 0) {
-            expenseDao.insertIncomes(com.example.data.seed.FirestoreDataSeed.incomes)
-        }
-        if (existingExpenses == 0) {
-            expenseDao.insertExpenses(com.example.data.seed.FirestoreDataSeed.expenses)
-        }
-    }
-
     suspend fun seedStandardCategories() {
         val existing = expenseDao.getAllCategoriesList()
         val maxSort = existing.maxOfOrNull { it.sortOrder } ?: -1

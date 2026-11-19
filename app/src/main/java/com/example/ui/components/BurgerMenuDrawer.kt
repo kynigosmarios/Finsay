@@ -78,6 +78,7 @@ fun BurgerMenuDrawer(
     isOpen: Boolean,
     currentUser: FirebaseUser?,
     userProfile: UserProfile?,
+    isPro: Boolean = false,
     currentHousehold: Household?,
     currentTab: Int,
     appLanguage: String = "EL",
@@ -246,7 +247,7 @@ fun BurgerMenuDrawer(
                                     )
                                 }
 
-                            if (userProfile?.isPremium == true) {
+                            if (isPro) {
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
                                     color = Amber700.copy(alpha = 0.15f)

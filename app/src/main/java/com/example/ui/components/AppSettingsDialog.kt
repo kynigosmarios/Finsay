@@ -126,6 +126,7 @@ fun AppSettingsDialog(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var showNotificationConsentDialog by remember { mutableStateOf(false) }
     var showBankInfoDialog by remember { mutableStateOf(false) }
+    var showBankDisclosureDialog by remember { mutableStateOf(false) }
     val lang = Localization.Language.fromCode(appLanguage)
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -134,6 +135,39 @@ fun AppSettingsDialog(
     ) { isGranted ->
         if (isGranted) {
             onToggleReminder(true)
+        }
+    }
+
+    val openBankNotificationAccessSettings = {
+        val componentName = ComponentName(context, BankNotificationListenerService::class.java)
+        val openedDirect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val detailIntent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+                    putExtra(
+                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                        componentName.flattenToString()
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(detailIntent)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        } else {
+            false
+        }
+        if (!openedDirect) {
+            try {
+                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            } catch (_: Exception) {
+                onMessage(
+                    if (lang == Localization.Language.ENGLISH)
+                        "Go to Settings > Notifications > Notification access to enable Finsay"
+                    else
+                        "Μεταβείτε στις Ρυθμίσεις > Ειδοποιήσεις για ενεργοποίηση του Finsay"
+                )
+            }
         }
     }
 
@@ -412,39 +446,6 @@ fun AppSettingsDialog(
 
 
                     // Section: Ανάγνωση Τραπεζικών Push (Bank Auto-Catcher)
-                    val openBankNotificationAccessSettings = {
-                        val componentName = ComponentName(context, BankNotificationListenerService::class.java)
-                        val openedDirect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                            try {
-                                val detailIntent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
-                                    putExtra(
-                                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
-                                        componentName.flattenToString()
-                                    )
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(detailIntent)
-                                true
-                            } catch (_: Exception) {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                        if (!openedDirect) {
-                            try {
-                                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                            } catch (_: Exception) {
-                                onMessage(
-                                    if (lang == Localization.Language.ENGLISH)
-                                        "Go to Settings > Notifications > Notification access to enable Finsay"
-                                    else
-                                        "Μεταβείτε στις Ρυθμίσεις > Ειδοποιήσεις για ενεργοποίηση του Finsay"
-                                )
-                            }
-                        }
-                    }
-
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
@@ -522,11 +523,10 @@ fun AppSettingsDialog(
                                     onCheckedChange = { isChecked ->
                                         if (isChecked && !isPro) {
                                             onShowPremiumPaywall("bank_auto_catcher")
+                                        } else if (isChecked) {
+                                            showBankDisclosureDialog = true
                                         } else {
-                                            onToggleBankAutoCatcher(isChecked)
-                                            if (isChecked) {
-                                                openBankNotificationAccessSettings()
-                                            }
+                                            onToggleBankAutoCatcher(false)
                                         }
                                     },
                                     colors = SwitchDefaults.colors(
@@ -726,6 +726,81 @@ fun AppSettingsDialog(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(Localization.close(lang), color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showBankDisclosureDialog) {
+        AlertDialog(
+            onDismissRequest = { showBankDisclosureDialog = false },
+            shape = RoundedCornerShape(22.dp),
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.AccountBalance,
+                        contentDescription = null,
+                        tint = Emerald700,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (lang == Localization.Language.ENGLISH)
+                            "Notification Access Disclosure"
+                        else
+                            "Γνωστοποίηση Πρόσβασης Ειδοποιήσεων",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.5.sp
+                    )
+                }
+            },
+            text = {
+                Text(
+                    text = if (lang == Localization.Language.ENGLISH)
+                        "To automatically suggest expense entries from your card and wallet payments, Finsay requests Android Notification Access (NotificationListenerService).\n\n" +
+                            "• What is read: Strictly incoming payment push notifications from supported banking & wallet apps (Google Pay/Wallet, Eurobank, Alpha Bank, NBG, Piraeus Bank, Revolut, Payzy, Viber Pay, PayPal, Snappi) to extract only the transaction amount and merchant name.\n" +
+                            "• What is NEVER read: Personal messages, SMS, OTP codes, emails, or notifications from any other app are immediately ignored.\n" +
+                            "• Privacy: 100% of notification parsing runs locally on your device. Notification text is never uploaded, logged, or shared with third parties or advertisers.\n\n" +
+                            "By tapping \"Accept & Continue\", you agree to enable this feature and proceed to Android Notification Access settings."
+                    else
+                        "Για να σας προτείνει αυτόματα καταχώρηση εξόδων από τις πληρωμές με κάρτα ή ψηφιακό πορτοφόλι, το Finsay ζητά άδεια Πρόσβασης Ειδοποιήσεων Android (NotificationListenerService).\n\n" +
+                            "• Τι διαβάζεται: Αποκλειστικά και μόνο εισερχόμενες τραπεζικές ειδοποιήσεις πληρωμών από υποστηριζόμενες εφαρμογές (Google Pay/Wallet, Eurobank, Alpha Bank, Εθνική Τράπεζα, Πειραιώς, Revolut, Payzy, Viber Pay, PayPal, Snappi) για εξαγωγή μόνο του ποσού και του καταστήματος.\n" +
+                            "• Τι ΔΕΝ διαβάζεται ποτέ: Προσωπικά μηνύματα, SMS, κωδικοί OTP, emails ή ειδοποιήσεις από άλλες εφαρμογές αγνοούνται άμεσα.\n" +
+                            "• Ιδιωτικότητα: Η επεξεργασία γίνεται 100% τοπικά στη συσκευή σας. Το κείμενο των ειδοποιήσεων δεν αποστέλλεται και δεν κοινοποιείται ποτέ σε τρίτους ή διαφημιστές.\n\n" +
+                            "Πατώντας «Αποδοχή & Συνέχεια», συναινείτε στην ενεργοποίηση και θα μεταφερθείτε στις ρυθμίσεις Πρόσβασης Ειδοποιήσεων του Android.",
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showBankDisclosureDialog = false
+                        onToggleBankAutoCatcher(true)
+                        openBankNotificationAccessSettings()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("bank_disclosure_accept_btn")
+                ) {
+                    Text(
+                        text = if (lang == Localization.Language.ENGLISH) "Accept & Continue" else "Αποδοχή & Συνέχεια",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showBankDisclosureDialog = false },
+                    modifier = Modifier.testTag("bank_disclosure_cancel_btn")
+                ) {
+                    Text(
+                        text = Localization.cancel(lang),
+                        fontSize = 12.5.sp
+                    )
                 }
             }
         )

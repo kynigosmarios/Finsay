@@ -280,7 +280,7 @@ fun MainScreen(
     val notificationConsentCompleted by viewModel.notificationConsentCompleted.collectAsStateWithLifecycle()
     val bankAutoCatcherEnabled by viewModel.bankAutoCatcherEnabled.collectAsStateWithLifecycle()
     val legalDocumentsInitialTab by viewModel.legalDocumentsInitialTab.collectAsStateWithLifecycle()
-    val isUserPro = userProfile?.isPremium == true || currentHousehold?.isPremium == true || viewModel.isCurrentUserPro()
+    val isUserPro by viewModel.isProUser.collectAsStateWithLifecycle()
 
     val activeSubPage = when {
         legalDocumentsInitialTab != null -> InAppSubPage.LEGAL
@@ -588,6 +588,7 @@ fun MainScreen(
                 households = userHouseholds,
                 appLanguage = appLanguage,
                 isDarkTheme = isDarkTheme,
+                isPro = isUserPro,
                 currentUserId = currentUser?.uid.orEmpty(),
                 syncStatus = syncStatusState,
                 activityCount = householdActivities.size,
@@ -751,7 +752,7 @@ fun MainScreen(
                     2 -> MembersScreen(
                         members = members,
                         currentHousehold = currentHousehold,
-                        isPremium = userProfile?.isPremium == true,
+                        isPremium = isUserPro,
                         appLanguage = appLanguage,
                         canManage = canManage,
                         currentUserEmail = currentUser?.email ?: userProfile?.email ?: "",
@@ -785,6 +786,7 @@ fun MainScreen(
                     InAppSubPage.PROFILE -> UserProfileDialog(
                         currentUser = currentUser,
                         userProfile = userProfile,
+                        isPro = isUserPro,
                         expenseCount = expenses.size,
                         totalSpent = expenses.sumOf { it.amount },
                         currencySymbol = currencySymbol,
@@ -990,6 +992,7 @@ fun MainScreen(
                 isOpen = showBurgerMenu,
                 currentUser = currentUser,
                 userProfile = userProfile,
+                isPro = isUserPro,
                 currentHousehold = currentHousehold,
                 currentTab = currentTab,
                 appLanguage = appLanguage,

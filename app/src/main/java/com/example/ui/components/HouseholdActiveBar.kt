@@ -38,6 +38,7 @@ fun HouseholdActiveBar(
     onCreateNewHouseholdClick: () -> Unit,
     onSwitchClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isPro: Boolean = false,
     currentUserId: String = "",
     syncStatus: SyncStatusState = SyncStatusState.SYNCED,
     activityCount: Int = 0,
@@ -98,7 +99,7 @@ fun HouseholdActiveBar(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                if (currentHousehold?.isPremium == true) {
+                if (isPro) {
                     Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = Emerald700.copy(alpha = 0.15f)

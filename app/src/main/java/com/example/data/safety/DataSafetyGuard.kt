@@ -87,21 +87,10 @@ object DataSafetyGuard {
         return false
     }
 
-    fun isMariosUser(user: FirebaseUser?): Boolean {
-        val email = user?.email.orEmpty().trim()
-        val uid = user?.uid.orEmpty()
-        return email.equals("kynigosmarios@gmail.com", ignoreCase = true) ||
-                uid == "t5kN4RvPRugIxXUz18Fep2khSrC2" ||
-                uid == "tSLWmkXZ0MTqIKGoX3wd6HdhDw63" ||
-                uid == "jllDLLQl7VgFzOQpVIHi0wo8B013" ||
-                uid == "oA6smvWcC6QYCAKMvYdWEcmVCO43"
-    }
-
     /**
-     * Bi-directional Safety Sync:
-     * Audits and guarantees that all local categories, members, savings goals, and recurring
-     * expenses are properly saved in Firebase Firestore under both the active household
-     * and the user's personal cloud mirror.
+     * Local Cache Integrity Audit:
+     * Ensures local members and categories remain clean and deduplicated while preserving
+     * Cloud Firestore as the single source of truth for all users.
      */
     suspend fun auditAndSecureUserCloudData(
         user: FirebaseUser,
@@ -111,7 +100,6 @@ object DataSafetyGuard {
     ) {
         try {
             val userId = user.uid
-            val isMarios = isMariosUser(user)
 
             // 1. Audit & Secure Members (skip combination names and deduplicate by ID)
             val localMembers = repository.getAllMembersList()
@@ -135,129 +123,7 @@ object DataSafetyGuard {
                 }
             }
 
-            // For non-Marios users, DO NOT push local cache up to cloud during audit!
-            // Cloud is the single source of truth for all users.
-            if (!isMarios) {
-                Log.i(TAG, "Audit complete for standard user $userId. Local data clean.")
-                return
-            }
-
-            // 3. Audit & Secure Savings Goals (Marios only)
-            val localGoals = repository.getAllSavingsGoalsList()
-            if (localGoals.isNotEmpty()) {
-                localGoals.forEach { goal ->
-                    val fbGoal = FirebaseSavingsGoal(
-                        id = goal.id.toString(),
-                        householdId = activeHouseholdId,
-                        userId = userId,
-                        title = goal.title,
-                        targetAmount = goal.targetAmount,
-                        currentAmount = goal.currentAmount,
-                        deadlineDate = goal.deadlineDate,
-                        iconKey = goal.iconKey,
-                        colorHex = goal.colorHex,
-                        note = goal.note
-                    )
-                    if (activeHouseholdId.isNotBlank()) {
-                        firestoreSyncRepo.syncSavingsGoal(activeHouseholdId, fbGoal)
-                    } else {
-                        firestoreSyncRepo.syncUserSavingsGoal(userId, fbGoal)
-                    }
-                }
-                Log.d(TAG, "Secured ${localGoals.size} savings goals to cloud.")
-            }
-
-            // 4. Audit & Secure Recurring Expenses (Marios only)
-            val localRecurring = repository.getAllRecurringExpensesList()
-            if (localRecurring.isNotEmpty()) {
-                val uniqueRecurring = localRecurring.distinctBy {
-                    GreekVoiceParser.normalizeGreek(it.title.trim().lowercase())
-                }
-                uniqueRecurring.forEach { rec ->
-                    val fbRec = FirebaseRecurringExpense(
-                        id = if (rec.id > 0) "rec_${rec.id}" else rec.title,
-                        householdId = activeHouseholdId,
-                        userId = userId,
-                        title = rec.title,
-                        amount = rec.amount,
-                        categoryId = rec.categoryId,
-                        categoryName = rec.categoryName,
-                        frequency = rec.frequency,
-                        dayOfMonth = rec.dayOfMonth,
-                        reminderHour = rec.reminderHour,
-                        reminderMinute = rec.reminderMinute,
-                        splitType = rec.splitType,
-                        memberIdsCsv = rec.memberIdsCsv,
-                        memberNamesDisplay = rec.memberNamesDisplay,
-                        note = rec.note,
-                        isActive = rec.isActive,
-                        lastGeneratedMonth = rec.lastGeneratedMonth,
-                        payerMemberId = rec.payerMemberId,
-                        payerMemberName = rec.payerMemberName,
-                        payerMemberIdsCsv = rec.payerMemberIdsCsv,
-                        payerAmountsCsv = rec.payerAmountsCsv,
-                        anchorMonth = rec.anchorMonth
-                    )
-                    if (activeHouseholdId.isNotBlank()) {
-                        firestoreSyncRepo.syncRecurringExpense(activeHouseholdId, fbRec)
-                    } else {
-                        firestoreSyncRepo.syncUserRecurringExpense(userId, fbRec)
-                    }
-                }
-                Log.d(TAG, "Secured ${uniqueRecurring.size} recurring expenses to cloud.")
-            }
-
-            // 5. Audit & Secure Expenses (Marios only)
-            val localExpenses = repository.getAllExpensesList()
-            if (localExpenses.isNotEmpty()) {
-                val unsynced = localExpenses.filter { exp ->
-                    exp.cloudId.isBlank() && !exp.note.contains("Πάγια εντολή")
-                }
-                if (unsynced.isNotEmpty()) {
-                    unsynced.forEach { exp ->
-                        val fbExp = exp.toFirebaseExpense(
-                            householdId = activeHouseholdId,
-                            userId = userId,
-                            userName = user.displayName ?: "Χρήστης"
-                        )
-                        if (activeHouseholdId.isNotBlank()) {
-                            firestoreSyncRepo.syncExpense(fbExp)
-                        } else {
-                            firestoreSyncRepo.syncUserExpense(userId, fbExp)
-                        }
-                    }
-                    Log.d(TAG, "Secured ${unsynced.size} unsynced expenses to cloud.")
-                }
-            }
-
-            // 6. Audit & Secure Incomes (Marios only)
-            val localIncomes = repository.getAllIncomesList()
-            if (localIncomes.isNotEmpty()) {
-                localIncomes.forEach { inc ->
-                    val docId = inc.cloudId.ifBlank { "inc_${inc.id}" }
-                    val fbInc = com.example.data.model.FirebaseIncome(
-                        id = docId,
-                        householdId = activeHouseholdId,
-                        title = inc.title,
-                        amount = inc.amount,
-                        memberId = inc.memberId,
-                        memberName = inc.memberName,
-                        category = inc.category,
-                        timestamp = inc.timestamp,
-                        note = inc.note,
-                        createdByUid = userId,
-                        createdByName = user.displayName ?: "Χρήστης"
-                    )
-                    if (activeHouseholdId.isNotBlank()) {
-                        firestoreSyncRepo.syncIncome(fbInc)
-                    } else {
-                        firestoreSyncRepo.syncUserIncome(userId, fbInc)
-                    }
-                }
-                Log.d(TAG, "Secured ${localIncomes.size} local incomes to cloud.")
-            }
-
-            Log.i(TAG, "Audit complete. All user data is 100% mirrored in Firebase Cloud.")
+            Log.i(TAG, "Audit complete for user $userId. Local cache clean.")
         } catch (e: Exception) {
             Log.w(TAG, "Non-fatal warning during cloud data audit: ${e.message}")
         }
