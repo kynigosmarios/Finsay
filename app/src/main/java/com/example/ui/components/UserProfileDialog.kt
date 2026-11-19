@@ -5,13 +5,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -191,97 +192,89 @@ fun UserProfileDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .testTag("user_profile_dialog")
     ) {
-        Card(
+        // Page Header Card (matching Categories/Members screens)
+        Surface(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.90f)
-                .widthIn(max = 560.dp)
-                .testTag("user_profile_dialog"),
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+            tonalElevation = 1.dp
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Fixed Header (Title & Close Button)
-                Row(
+                IconButton(
+                    onClick = onDismiss,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .size(48.dp)
+                        .testTag("user_profile_back_button")
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Emerald700.copy(alpha = 0.12f),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (isEditingProfile) Icons.Default.Edit else Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = Emerald700,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (isEditingProfile) {
-                                    if (lang == Localization.Language.ENGLISH) "Edit Profile" else "Επεξεργασία Προφίλ"
-                                } else {
-                                    Localization.myProfile(lang)
-                                },
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = currentUser?.email ?: (userProfile?.email ?: ""),
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clickable { onDismiss() }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = Localization.close(lang),
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = if (lang == Localization.Language.ENGLISH) "Back" else "Επιστροφή",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = Emerald700.copy(alpha = 0.12f),
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (isEditingProfile) Icons.Default.Edit else Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Emerald700,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isEditingProfile) {
+                            if (lang == Localization.Language.ENGLISH) "Edit Profile" else "Επεξεργασία Προφίλ"
+                        } else {
+                            Localization.myProfile(lang)
+                        },
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    val headerEmail = currentUser?.email ?: (userProfile?.email ?: "")
+                    if (headerEmail.isNotBlank()) {
+                        Text(
+                            text = headerEmail,
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-
-                // Scrollable Body - smoothly scrolls all the way to the very bottom!
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+        // Scrollable Body
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
                     // 1. User Identity & Avatar Card
                     Surface(
                         shape = RoundedCornerShape(18.dp),
@@ -1110,11 +1103,8 @@ fun UserProfileDialog(
                         }
                     }
 
-                    // Generous bottom spacer so everything is 100% visible and accessible
-                    Spacer(modifier = Modifier.height(48.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                 }
-            }
-        }
     }
 
     // Delete Account Confirmation Dialog

@@ -22,7 +22,9 @@ object BillReminderManager {
     const val EXTRA_REMINDER_ID = "EXTRA_BILL_REMINDER_ID"
     const val EXTRA_REMINDER_TITLE = "EXTRA_BILL_REMINDER_TITLE"
     const val EXTRA_REMINDER_AMOUNT = "EXTRA_BILL_REMINDER_AMOUNT"
+    const val EXTRA_REMINDER_FREQUENCY = "EXTRA_BILL_REMINDER_FREQUENCY"
     const val EXTRA_REMINDER_DAY = "EXTRA_BILL_REMINDER_DAY"
+    const val EXTRA_REMINDER_ANCHOR_MONTH = "EXTRA_BILL_REMINDER_ANCHOR_MONTH"
     const val EXTRA_REMINDER_HOUR = "EXTRA_BILL_REMINDER_HOUR"
     const val EXTRA_REMINDER_MINUTE = "EXTRA_BILL_REMINDER_MINUTE"
     private const val REQUEST_CODE_BASE = 30000
@@ -53,29 +55,18 @@ object BillReminderManager {
         dayOfMonth: Int,
         hour: Int,
         minute: Int,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        frequency: String = com.example.util.RecurringScheduleHelper.FREQ_MONTHLY,
+        anchorMonth: Int = 0
     ): Long {
-        val safeDay = dayOfMonth.coerceIn(1, 31)
-        val safeHour = hour.coerceIn(0, 23)
-        val safeMinute = minute.coerceIn(0, 59)
-
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = nowMillis
-            set(Calendar.DAY_OF_MONTH, safeDay.coerceAtMost(getActualMaximum(Calendar.DAY_OF_MONTH)))
-            set(Calendar.HOUR_OF_DAY, safeHour)
-            set(Calendar.MINUTE, safeMinute)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        if (cal.timeInMillis <= nowMillis) {
-            cal.add(Calendar.MONTH, 1)
-            cal.set(Calendar.DAY_OF_MONTH, safeDay.coerceAtMost(cal.getActualMaximum(Calendar.DAY_OF_MONTH)))
-            cal.set(Calendar.HOUR_OF_DAY, safeHour)
-            cal.set(Calendar.MINUTE, safeMinute)
-            cal.set(Calendar.SECOND, 0)
-            cal.set(Calendar.MILLISECOND, 0)
-        }
-        return cal.timeInMillis
+        return com.example.util.RecurringScheduleHelper.calculateNextTriggerTimeMillis(
+            frequency = frequency,
+            dayOfMonth = dayOfMonth,
+            anchorMonth = anchorMonth,
+            hour = hour,
+            minute = minute,
+            nowMillis = nowMillis
+        )
     }
 
     fun scheduleReminder(context: Context, reminder: RecurringExpense) {
@@ -92,7 +83,9 @@ object BillReminderManager {
                 putExtra(EXTRA_REMINDER_ID, reminder.id)
                 putExtra(EXTRA_REMINDER_TITLE, reminder.title)
                 putExtra(EXTRA_REMINDER_AMOUNT, reminder.amount)
+                putExtra(EXTRA_REMINDER_FREQUENCY, reminder.frequency)
                 putExtra(EXTRA_REMINDER_DAY, reminder.dayOfMonth)
+                putExtra(EXTRA_REMINDER_ANCHOR_MONTH, reminder.anchorMonth)
                 putExtra(EXTRA_REMINDER_HOUR, reminder.reminderHour)
                 putExtra(EXTRA_REMINDER_MINUTE, reminder.reminderMinute)
             }
@@ -106,7 +99,9 @@ object BillReminderManager {
             val triggerAt = calculateNextTriggerTimeMillis(
                 dayOfMonth = reminder.dayOfMonth,
                 hour = reminder.reminderHour,
-                minute = reminder.reminderMinute
+                minute = reminder.reminderMinute,
+                frequency = reminder.frequency,
+                anchorMonth = reminder.anchorMonth
             )
 
             try {
@@ -119,7 +114,7 @@ object BillReminderManager {
                 } else {
                     alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
                 }
-                Log.d(TAG, "Scheduled reminder '${reminder.title}' (#${reminder.id}) for day ${reminder.dayOfMonth} at %02d:%02d".format(reminder.reminderHour, reminder.reminderMinute))
+                Log.d(TAG, "Scheduled reminder '${reminder.title}' (#${reminder.id}) [${reminder.frequency}] day ${reminder.dayOfMonth} at %02d:%02d".format(reminder.reminderHour, reminder.reminderMinute))
             } catch (t: Throwable) {
                 Log.w(TAG, "Failed exact alarm for reminder #${reminder.id}: ${t.message}")
                 try {
@@ -159,7 +154,9 @@ object BillReminderManager {
         reminderId: Long,
         title: String,
         amount: Double,
-        dayOfMonth: Int
+        dayOfMonth: Int,
+        frequency: String = com.example.util.RecurringScheduleHelper.FREQ_MONTHLY,
+        anchorMonth: Int = 0
     ) {
         try {
             createNotificationChannel(context)
@@ -186,8 +183,21 @@ object BillReminderManager {
                 flags
             )
 
+            val scheduleLabel = com.example.util.RecurringScheduleHelper.scheduleSummary(
+                RecurringExpense(
+                    id = reminderId,
+                    title = title,
+                    amount = amount,
+                    categoryId = 0L,
+                    categoryName = "",
+                    frequency = frequency,
+                    dayOfMonth = dayOfMonth,
+                    anchorMonth = anchorMonth
+                ),
+                com.example.util.Localization.Language.GREEK
+            )
             val notifTitle = "Υπενθύμιση: $title"
-            val notifBody = "${String.format(Locale.GERMANY, "%.2f €", amount)} • Κάθε ${dayOfMonth}η του μήνα • Πατήστε για καταγραφή"
+            val notifBody = "${String.format(Locale.GERMANY, "%.2f €", amount)} • $scheduleLabel • Πατήστε για καταγραφή"
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_oikonomos_logo_white)

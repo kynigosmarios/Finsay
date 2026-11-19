@@ -211,7 +211,7 @@ object Localization {
     fun shareReportAction(lang: Language): String = if (lang == Language.ENGLISH) "Share Report (Email / Viber / Drive)" else "Κοινοποίηση (Email / Viber / Drive)"
     fun copyCsvAction(lang: Language): String = if (lang == Language.ENGLISH) "Copy CSV text" else "Αντιγραφή κειμένου CSV"
     fun csvCopiedMessage(lang: Language): String = if (lang == Language.ENGLISH) "CSV report copied to clipboard!" else "Η αναφορά CSV αντιγράφηκε στο πρόχειρο!"
-    fun myProfile(lang: Language): String = if (lang == Language.ENGLISH) "My Profile" else "Το Προφίλ μου"
+    fun myProfile(lang: Language): String = if (lang == Language.ENGLISH) "Profile" else "Προφίλ"
     fun finsayUser(lang: Language): String = if (lang == Language.ENGLISH) "Finsay User" else "Χρήστης Finsay"
     fun freePlan(lang: Language): String = if (lang == Language.ENGLISH) "Free Plan" else "Δωρεάν Πλάνο"
     fun proSubscriber(lang: Language): String = if (lang == Language.ENGLISH) "Pro Subscriber" else "Συνδρομητής Pro"
@@ -432,4 +432,48 @@ object Localization {
     fun myHouseholdsHeader(lang: Language, count: Int): String = if (lang == Language.ENGLISH) "MY HOUSEHOLDS ($count)" else "ΤΑ ΕΞΟΔΟΛΟΓΙΑ ΜΟΥ ($count)"
     fun loadingEmail(lang: Language): String = if (lang == Language.ENGLISH) "Loading email..." else "Φόρτωση email..."
     fun registeredUserLabel(lang: Language): String = if (lang == Language.ENGLISH) "Registered user" else "Εγγεγραμμένος χρήστης"
+
+    // 1.1 Default Payer per Connected User
+    fun linkedAppUserLabel(lang: Language): String = if (lang == Language.ENGLISH) "Linked app user (default payer)" else "Συνδεδεμένος χρήστης (προεπ. πληρωτής)"
+    fun noLinkedUserLabel(lang: Language): String = if (lang == Language.ENGLISH) "None" else "Κανένας"
+    fun defaultPayerShort(lang: Language): String = if (lang == Language.ENGLISH) "Default payer" else "Προεπ. πληρωτής"
+    fun selectDefaultPayerLabel(lang: Language): String = if (lang == Language.ENGLISH) "Not set" else "Μη ορισμένος"
+
+    // 1.2 Undo Deletion Banner
+    fun undoAction(lang: Language): String = if (lang == Language.ENGLISH) "Undo" else "Αναίρεση"
+    fun deletedPrefix(lang: Language): String = if (lang == Language.ENGLISH) "Deleted:" else "Διαγράφηκε:"
+
+    // 1.3 Settle Up Now
+    fun settleNowAction(lang: Language): String = if (lang == Language.ENGLISH) "Settle now" else "Εξόφληση τώρα"
+    fun settleConfirmTitle(lang: Language): String = if (lang == Language.ENGLISH) "Confirm Settlement" else "Επιβεβαίωση Εξόφλησης"
+    fun settleConfirmMessage(lang: Language, from: String, to: String, formattedAmount: String): String =
+        if (lang == Language.ENGLISH) {
+            "Record a settlement of $formattedAmount from $from to $to?"
+        } else {
+            "Να καταχωρηθεί εξόφληση ποσού $formattedAmount από $from προς $to;"
+        }
+
+    // 1.4 Smart Category Learning & 1.5 Frequencies
+    fun learnedCategoryHint(lang: Language): String = if (lang == Language.ENGLISH) "Auto-suggested category" else "Έξυπνη πρόταση κατηγορίας"
+    fun frequencyFieldLabel(lang: Language): String = if (lang == Language.ENGLISH) "Frequency" else "Συχνότητα"
+    fun anchorMonthLabel(lang: Language): String = if (lang == Language.ENGLISH) "Start / Anchor Month" else "Μήνας αναφοράς"
+    fun weekdayLabel(lang: Language): String = if (lang == Language.ENGLISH) "Day of week" else "Ημέρα εβδομάδας"
+
+    // 2.1 Sync Status Indicator
+    fun syncingStatus(lang: Language): String = if (lang == Language.ENGLISH) "Syncing" else "Συγχρονισμός"
+    fun syncedStatus(lang: Language): String = if (lang == Language.ENGLISH) "Synced" else "Ενημερωμένο"
+    fun offlineStatus(lang: Language): String = if (lang == Language.ENGLISH) "Offline" else "Εκτός σύνδεσης"
+
+    // 3.1 Household Activity History
+    fun activityHistoryTitle(lang: Language): String = if (lang == Language.ENGLISH) "Activity History" else "Ιστορικό Κινήσεων"
+    fun noActivityYet(lang: Language): String = if (lang == Language.ENGLISH) "No recorded activity yet" else "Δεν υπάρχει ακόμη ιστορικό κινήσεων"
+
+    // 3.2 Month-over-Month Comparison & Forecast
+    fun monthlyComparisonTitle(lang: Language): String = if (lang == Language.ENGLISH) "Month-over-Month & Forecast" else "Σύγκριση & Πρόβλεψη Μήνα"
+    fun vsPreviousMonth(lang: Language): String = if (lang == Language.ENGLISH) "vs prev. month" else "έναντι προηγ. μήνα"
+    fun forecastEndOfMonthTitle(lang: Language): String = if (lang == Language.ENGLISH) "End-of-Month Projection" else "Πρόβλεψη Τέλους Μήνα"
+    fun projectedTotalLabel(lang: Language): String = if (lang == Language.ENGLISH) "Projected expenses" else "Εκτίμηση εξόδων"
+    fun remainingScheduledLabel(lang: Language): String = if (lang == Language.ENGLISH) "Upcoming standing orders" else "Υπόλοιπες πάγιες εντολές"
+    fun projectedSurplusLabel(lang: Language): String = if (lang == Language.ENGLISH) "Projected surplus" else "Εκτιμώμενο πλεόνασμα"
+    fun projectedOverBudgetLabel(lang: Language): String = if (lang == Language.ENGLISH) "Projected deficit" else "Εκτιμώμενο έλλειμμα"
 }

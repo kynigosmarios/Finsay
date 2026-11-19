@@ -383,9 +383,12 @@ fun ReminderNotificationBanner(
                                         currentReminder.reminderHour,
                                         currentReminder.reminderMinute
                                     )
+                                    val summary = com.example.util.RecurringScheduleHelper.scheduleSummary(
+                                        currentReminder,
+                                        if (isGreek) com.example.util.Localization.Language.GREEK else com.example.util.Localization.Language.ENGLISH
+                                    )
                                     Text(
-                                        text = if (isGreek) "${currentReminder.dayOfMonth}η του μήνα • $timeFormatted"
-                                        else "Day ${currentReminder.dayOfMonth} • $timeFormatted",
+                                        text = "$summary • $timeFormatted",
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,

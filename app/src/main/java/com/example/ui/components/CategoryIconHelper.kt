@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Star
@@ -56,6 +57,7 @@ object CategoryIconHelper {
             "tech", "phone" -> Icons.Default.Smartphone
             "work" -> Icons.Default.Work
             "beauty", "care" -> Icons.Default.Face
+            "savings", "goal" -> Icons.Default.Savings
             "star" -> Icons.Default.Star
             else -> Icons.Default.Category
         }
@@ -76,6 +78,7 @@ object CategoryIconHelper {
             norm.contains("διασκεδασ") || norm.contains("ψυχαγωγ") || norm.contains("ποτο") || norm.contains("σινεμα") -> getIcon("entertainment")
             norm.contains("σχολει") || norm.contains("φροντιστηρ") || norm.contains("μαθημα") -> getIcon("school")
             norm.contains("ταξιδ") || norm.contains("διακοπ") || norm.contains("ξενοδοχει") -> getIcon("flight")
+            norm.contains("αποταμιευ") || norm.contains("στοχ") || norm.contains("savings") || norm.contains("goal") -> getIcon("savings")
             else -> getIcon(iconKey ?: "other")
         }
     }
@@ -89,6 +92,7 @@ object CategoryIconHelper {
             norm.contains("βενζιν") || norm.contains("καυσιμ") || norm.contains("μετακινησ") -> Color(0xFFEA580C)
             norm.contains("υγεια") || norm.contains("φαρμακ") -> Color(0xFFEC4899)
             norm.contains("διασκεδασ") || norm.contains("ψυχαγωγ") -> Color(0xFF8B5CF6)
+            norm.contains("αποταμιευ") || norm.contains("στοχ") || norm.contains("savings") || norm.contains("goal") -> Color(0xFF059669)
             else -> Color(0xFF059669)
         }
     }
@@ -116,6 +120,7 @@ object CategoryIconHelper {
         "tech" to "Τεχνολογία / Κινητό",
         "work" to "Επαγγελματικά / Γραφείο",
         "beauty" to "Περιποίηση / Κομμωτήριο",
+        "savings" to "Αποταμίευση & Στόχοι",
         "star" to "Ειδικά / Προσωπικά",
         "other" to "Άλλα / Διάφορα"
     )

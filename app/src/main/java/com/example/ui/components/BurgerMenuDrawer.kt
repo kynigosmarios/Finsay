@@ -14,6 +14,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -83,14 +86,14 @@ fun BurgerMenuDrawer(
     onOpenSettings: () -> Unit,
     onOpenGuide: (() -> Unit)? = null,
     onOpenReminders: (() -> Unit)? = null,
+    onOpenGoals: (() -> Unit)? = null,
+    onOpenLegal: (String) -> Unit = {},
     onSignOut: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    var showLegalDialog by remember { mutableStateOf(false) }
-    var selectedLegalTab by remember { mutableStateOf("PRIVACY") }
 
     BackHandler(enabled = isOpen) {
         onDismiss()
@@ -119,7 +122,7 @@ fun BurgerMenuDrawer(
                     )
             )
 
-            // Smooth slide-in drawer from right to left covering full available height
+            // Smooth slide-in drawer spanning full height between Header and Footer
             Surface(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -147,13 +150,18 @@ fun BurgerMenuDrawer(
                 shadowElevation = 16.dp,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 18.dp)
-                ) {
-                    // Header with title and close button
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val drawerHeight = maxHeight
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = drawerHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Header with title and close button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -185,7 +193,7 @@ fun BurgerMenuDrawer(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     // User Mini Summary Header Card
                     if (currentUser != null || userProfile != null) {
@@ -203,14 +211,14 @@ fun BurgerMenuDrawer(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 UserAvatar(
                                     photoUrl = userProfile?.photoUrl?.ifBlank { null } ?: currentUser?.photoUrl?.toString(),
                                     displayName = userProfile?.displayName?.ifBlank { null } ?: currentUser?.displayName,
-                                    modifier = Modifier.size(42.dp),
-                                    fontSize = 17.sp
+                                    modifier = Modifier.size(36.dp),
+                                    fontSize = 15.sp
                                 )
 
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -233,24 +241,22 @@ fun BurgerMenuDrawer(
                                     )
                                 }
 
-                                if (userProfile?.isPremium == true) {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Amber700.copy(alpha = 0.15f)
-                                    ) {
-                                        Text(
-                                            text = "PRO",
-                                            color = Amber700,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
+                            if (userProfile?.isPremium == true) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Amber700.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = "PRO",
+                                        color = Amber700,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                     } else {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
@@ -266,16 +272,16 @@ fun BurgerMenuDrawer(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
                                     shape = CircleShape,
                                     color = Emerald700,
-                                    modifier = Modifier.size(38.dp)
+                                    modifier = Modifier.size(34.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
-                                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                     }
                                 }
 
@@ -296,57 +302,10 @@ fun BurgerMenuDrawer(
                                 }
                             }
                         }
-
-                        Spacer(modifier = Modifier.height(16.dp))
                     }
-
-
-                    // 1. Ρυθμίσεις Εφαρμογής
-                    BurgerNavigationItem(
-                        title = Localization.appSettings(lang),
-                        icon = Icons.Default.Settings,
-                        iconTint = if (isDark) Color(0xFF94A3B8) else Color(0xFF475569),
-                        iconBg = (if (isDark) Color(0xFF94A3B8) else Color(0xFF475569)).copy(alpha = if (isDark) 0.20f else 0.12f),
-                        testTag = "burger_item_settings",
-                        onClick = {
-                            onDismiss()
-                            onOpenSettings()
                         }
-                    )
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // 2. Διαχείριση Εξοδολογίων
-                    BurgerNavigationItem(
-                        title = Localization.householdManager(lang),
-                        icon = Icons.Default.MenuBook,
-                        iconTint = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7),
-                        iconBg = (if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)).copy(alpha = if (isDark) 0.20f else 0.12f),
-                        testTag = "burger_item_exodologio",
-                        onClick = {
-                            onDismiss()
-                            onOpenExodologio()
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // 3. Υπενθυμίσεις
-                    BurgerNavigationItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Reminders" else "Υπενθυμίσεις",
-                        icon = Icons.Default.NotificationsActive,
-                        iconTint = if (isDark) Color(0xFFFBBF24) else Amber700,
-                        iconBg = (if (isDark) Color(0xFFFBBF24) else Amber700).copy(alpha = if (isDark) 0.20f else 0.12f),
-                        testTag = "burger_item_reminders",
-                        onClick = {
-                            onDismiss()
-                            onOpenReminders?.invoke()
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // 4. Το Προφίλ μου
+                    // 1. Το Προφίλ μου
                     BurgerNavigationItem(
                         title = Localization.myProfile(lang),
                         icon = Icons.Default.Person,
@@ -359,10 +318,66 @@ fun BurgerMenuDrawer(
                         }
                     )
 
-                    if (onOpenGuide != null) {
-                        Spacer(modifier = Modifier.height(6.dp))
+                    // 2. Διαχείριση εξοδολογίων
+                    BurgerNavigationItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Manage Households" else "Διαχείριση εξοδολογίων",
+                        icon = Icons.Default.MenuBook,
+                        iconTint = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7),
+                        iconBg = (if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)).copy(alpha = if (isDark) 0.20f else 0.12f),
+                        testTag = "burger_item_exodologio",
+                        onClick = {
+                            onDismiss()
+                            onOpenExodologio()
+                        }
+                    )
+
+                    if (onOpenReminders != null) {
+                        // 3. Υπενθυμίσεις
                         BurgerNavigationItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Getting Started" else "Πρώτα βήματα",
+                            title = if (lang == Localization.Language.ENGLISH) "Reminders" else "Υπενθυμίσεις",
+                            icon = Icons.Default.NotificationsActive,
+                            iconTint = if (isDark) Color(0xFFFBBF24) else Amber700,
+                            iconBg = (if (isDark) Color(0xFFFBBF24) else Amber700).copy(alpha = if (isDark) 0.20f else 0.12f),
+                            testTag = "burger_item_reminders",
+                            onClick = {
+                                onDismiss()
+                                onOpenReminders()
+                            }
+                        )
+                    }
+
+                    if (onOpenGoals != null) {
+                        // 4. Στόχοι
+                        BurgerNavigationItem(
+                            title = if (lang == Localization.Language.ENGLISH) "Goals" else "Στόχοι",
+                            icon = Icons.Default.Savings,
+                            iconTint = if (isDark) Color(0xFF34D399) else Emerald700,
+                            iconBg = (if (isDark) Color(0xFF34D399) else Emerald700).copy(alpha = if (isDark) 0.20f else 0.12f),
+                            testTag = "burger_item_goals",
+                            onClick = {
+                                onDismiss()
+                                onOpenGoals()
+                            }
+                        )
+                    }
+
+                    // 5. Ρυθμίσεις
+                    BurgerNavigationItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Settings" else "Ρυθμίσεις",
+                        icon = Icons.Default.Settings,
+                        iconTint = if (isDark) Color(0xFF94A3B8) else Color(0xFF475569),
+                        iconBg = (if (isDark) Color(0xFF94A3B8) else Color(0xFF475569)).copy(alpha = if (isDark) 0.20f else 0.12f),
+                        testTag = "burger_item_settings",
+                        onClick = {
+                            onDismiss()
+                            onOpenSettings()
+                        }
+                    )
+
+                    if (onOpenGuide != null) {
+                        // 6. Οδηγίες
+                        BurgerNavigationItem(
+                            title = if (lang == Localization.Language.ENGLISH) "Guide" else "Οδηγίες",
                             icon = Icons.Default.Info,
                             iconTint = if (isDark) Color(0xFFFBBF24) else Color(0xFFD97706),
                             iconBg = (if (isDark) Color(0xFFFBBF24) else Color(0xFFD97706)).copy(alpha = if (isDark) 0.20f else 0.12f),
@@ -374,100 +389,96 @@ fun BurgerMenuDrawer(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(18.dp))
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Sign Out Option
-                    Surface(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                onDismiss()
-                                onSignOut()
-                            }
-                            .testTag("burger_menu_signout_button"),
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
+                            .padding(top = 4.dp)
                     ) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Sign Out Option
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onSignOut()
+                                }
+                                .testTag("burger_menu_signout_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.22f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Logout,
+                                    contentDescription = Localization.signOut(lang),
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = Localization.signOutAccount(lang),
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.5.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Discreet Legal Links (Terms & Conditions, Privacy Policy) pinned at bottom
                         Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.Center,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.Logout,
-                                contentDescription = Localization.signOut(lang),
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = Localization.signOutAccount(lang),
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.5.sp
+                                text = if (lang == Localization.Language.ENGLISH) "Terms of Service" else "Όροι Χρήσης",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Emerald700,
+                                textDecoration = TextDecoration.Underline,
+                                modifier = Modifier
+                                    .clickable {
+                                        onDismiss()
+                                        onOpenLegal("TERMS")
+                                    }
+                                    .testTag("terms_of_service_link")
+                            )
+                            Text(
+                                text = "  •  ",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                            Text(
+                                text = if (lang == Localization.Language.ENGLISH) "Privacy Policy" else "Πολιτική Απορρήτου",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Emerald700,
+                                textDecoration = TextDecoration.Underline,
+                                modifier = Modifier
+                                    .clickable {
+                                        onDismiss()
+                                        onOpenLegal("PRIVACY")
+                                    }
+                                    .testTag("privacy_policy_link")
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Discreet Legal Links (Terms & Conditions, Privacy Policy)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Terms of Service" else "Όροι Χρήσης",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Emerald700,
-                            textDecoration = TextDecoration.Underline,
-                            modifier = Modifier
-                                .clickable {
-                                    selectedLegalTab = "TERMS"
-                                    showLegalDialog = true
-                                }
-                                .testTag("terms_of_service_link")
-                        )
-                        Text(
-                            text = "  •  ",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Privacy Policy" else "Πολιτική Απορρήτου",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Emerald700,
-                            textDecoration = TextDecoration.Underline,
-                            modifier = Modifier
-                                .clickable {
-                                    selectedLegalTab = "PRIVACY"
-                                    showLegalDialog = true
-                                }
-                                .testTag("privacy_policy_link")
-                        )
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
         }
-    }
-
-    if (showLegalDialog) {
-        LegalDocumentsDialog(
-            initialTab = selectedLegalTab,
-            appLanguage = appLanguage,
-            onDismiss = { showLegalDialog = false }
-        )
     }
 }
 
@@ -484,6 +495,7 @@ private fun BurgerNavigationItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = 3.dp)
             .clickable { onClick() }
             .testTag(testTag),
         shape = RoundedCornerShape(14.dp),
@@ -491,20 +503,20 @@ private fun BurgerNavigationItem(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = if (subtitle != null) 12.dp else 14.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = iconBg,
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier.size(34.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -514,7 +526,7 @@ private fun BurgerNavigationItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 14.5.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )

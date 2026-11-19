@@ -90,6 +90,7 @@ fun VoiceConfirmationDialog(
     pendingExpense: ParsedVoiceExpense?,
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
+    defaultPayerMember: FamilyMember? = null,
     appLanguage: String = "EL",
     onConfirm: (
         title: String,
@@ -112,7 +113,7 @@ fun VoiceConfirmationDialog(
 
     val lang = Localization.Language.fromCode(appLanguage)
 
-    val selectedPayerIds = remember(pendingExpense, members) {
+    val selectedPayerIds = remember(pendingExpense, members, defaultPayerMember) {
         val list = mutableStateListOf<Long>()
         if (pendingExpense.payerMemberIdsCsv.isNotBlank()) {
             val ids = pendingExpense.payerMemberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
@@ -135,7 +136,9 @@ fun VoiceConfirmationDialog(
             }
         }
         if (list.isEmpty()) {
-            val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) } ?: members.firstOrNull()
+            val def = (if (!pendingExpense.hasExplicitPayer) defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } } else null)
+                ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                ?: members.firstOrNull()
             if (def != null) list.add(def.id)
         }
         list
@@ -1003,7 +1006,9 @@ fun VoiceConfirmationDialog(
                             }
 
                             val finalPayerIds = selectedPayerIds.toList().ifEmpty {
-                                val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) } ?: members.firstOrNull()
+                                val def = defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } }
+                                    ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                                    ?: members.firstOrNull()
                                 if (def != null) listOf(def.id) else emptyList()
                             }
 

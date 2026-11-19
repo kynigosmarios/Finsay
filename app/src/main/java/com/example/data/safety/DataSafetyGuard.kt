@@ -195,7 +195,8 @@ object DataSafetyGuard {
                         payerMemberId = rec.payerMemberId,
                         payerMemberName = rec.payerMemberName,
                         payerMemberIdsCsv = rec.payerMemberIdsCsv,
-                        payerAmountsCsv = rec.payerAmountsCsv
+                        payerAmountsCsv = rec.payerAmountsCsv,
+                        anchorMonth = rec.anchorMonth
                     )
                     if (activeHouseholdId.isNotBlank()) {
                         firestoreSyncRepo.syncRecurringExpense(activeHouseholdId, fbRec)

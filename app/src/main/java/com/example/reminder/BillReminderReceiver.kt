@@ -12,18 +12,23 @@ class BillReminderReceiver : BroadcastReceiver() {
         val id = intent.getLongExtra(BillReminderManager.EXTRA_REMINDER_ID, 0L)
         val title = intent.getStringExtra(BillReminderManager.EXTRA_REMINDER_TITLE).orEmpty()
         val amount = intent.getDoubleExtra(BillReminderManager.EXTRA_REMINDER_AMOUNT, 0.0)
+        val frequency = intent.getStringExtra(BillReminderManager.EXTRA_REMINDER_FREQUENCY)
+            ?: com.example.util.RecurringScheduleHelper.FREQ_MONTHLY
         val day = intent.getIntExtra(BillReminderManager.EXTRA_REMINDER_DAY, 1)
+        val anchorMonth = intent.getIntExtra(BillReminderManager.EXTRA_REMINDER_ANCHOR_MONTH, 0)
         val hour = intent.getIntExtra(BillReminderManager.EXTRA_REMINDER_HOUR, 9)
         val minute = intent.getIntExtra(BillReminderManager.EXTRA_REMINDER_MINUTE, 0)
 
-        Log.d("BillReminderReceiver", "Alarm triggered for reminder #$id: $title")
+        Log.d("BillReminderReceiver", "Alarm triggered for reminder #$id: $title [$frequency]")
         if (id > 0L && title.isNotBlank()) {
             BillReminderManager.showBillNotification(
                 context = context,
                 reminderId = id,
                 title = title,
                 amount = amount,
-                dayOfMonth = day
+                dayOfMonth = day,
+                frequency = frequency,
+                anchorMonth = anchorMonth
             )
             BillReminderManager.scheduleReminder(
                 context,
@@ -33,10 +38,12 @@ class BillReminderReceiver : BroadcastReceiver() {
                     amount = amount,
                     categoryId = 0L,
                     categoryName = "",
+                    frequency = frequency,
                     dayOfMonth = day,
                     reminderHour = hour,
                     reminderMinute = minute,
-                    isActive = true
+                    isActive = true,
+                    anchorMonth = anchorMonth
                 )
             )
         }

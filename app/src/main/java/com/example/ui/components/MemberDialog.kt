@@ -50,11 +50,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.entity.FamilyMember
+import com.example.data.model.ConnectedHouseholdUser
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
 
@@ -76,8 +78,9 @@ val MemberPalette = listOf(
 fun MemberDialog(
     memberToEdit: FamilyMember?,
     appLanguage: String = "EL",
+    connectedUsers: List<ConnectedHouseholdUser> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (id: Long, name: String, role: String, avatarColorHex: Long, voiceKeywords: String) -> Unit
+    onSave: (id: Long, name: String, role: String, avatarColorHex: Long, voiceKeywords: String, linkedUserUid: String) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
 
@@ -88,6 +91,9 @@ fun MemberDialog(
     }
     var voiceKeywords by remember(memberToEdit) {
         mutableStateOf(memberToEdit?.voiceKeywords ?: "")
+    }
+    var linkedUserUid by remember(memberToEdit) {
+        mutableStateOf(memberToEdit?.linkedUserUid ?: "")
     }
     var errorText by remember(memberToEdit) { mutableStateOf<String?>(null) }
 
@@ -275,6 +281,51 @@ fun MemberDialog(
                         maxLines = 2
                     )
 
+                    if (connectedUsers.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = Localization.linkedAppUserLabel(lang),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            FilterChip(
+                                selected = linkedUserUid.isBlank(),
+                                onClick = { linkedUserUid = "" },
+                                label = {
+                                    Text(
+                                        text = Localization.noLinkedUserLabel(lang),
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                },
+                                modifier = Modifier.testTag("member_linked_user_chip_none")
+                            )
+                            connectedUsers.forEach { user ->
+                                val label = user.email.ifBlank { user.displayName }.ifBlank { user.uid.take(8) }
+                                FilterChip(
+                                    selected = linkedUserUid == user.uid,
+                                    onClick = { linkedUserUid = user.uid },
+                                    label = {
+                                        Text(
+                                            text = label,
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    modifier = Modifier.testTag("member_linked_user_chip_${user.uid}")
+                                )
+                            }
+                        }
+                    }
+
                     if (errorText != null) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(text = errorText ?: "", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
@@ -319,7 +370,8 @@ fun MemberDialog(
                                 name.trim(),
                                 role,
                                 selectedColor,
-                                voiceKeywords.trim()
+                                voiceKeywords.trim(),
+                                linkedUserUid
                             )
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Emerald700, contentColor = Color.White),

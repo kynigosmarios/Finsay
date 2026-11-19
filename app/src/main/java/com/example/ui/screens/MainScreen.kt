@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -114,6 +115,8 @@ import com.example.ui.components.CategoryDialog
 import com.example.ui.components.ExodologioDetailsDialog
 import com.example.ui.components.ExodologioManagerDialog
 import com.example.ui.components.HouseholdActiveBar
+import com.example.ui.components.HouseholdActivityDialog
+import com.example.ui.components.LegalDocumentsDialog
 import com.example.ui.components.ExportReportDialog
 import com.example.ui.components.ManualExpenseDialog
 import com.example.ui.components.ManualIncomeDialog
@@ -123,11 +126,13 @@ import com.example.ui.components.PrivacyConsentDialog
 import com.example.ui.components.ReceiptScanDialog
 import com.example.ui.components.ReminderNotificationBanner
 import com.example.ui.components.RemindersManagerDialog
+import com.example.ui.components.UndoDeletionBanner
 import com.example.ui.components.UserAvatar
 import com.example.ui.components.PremiumPaywallDialog
 import com.example.ui.components.QuickActionChooserDialog
 import com.example.ui.components.RecurringExpenseDialog
 import com.example.ui.components.SavingsGoalDialog
+import com.example.ui.components.SavingsGoalsManagerDialog
 import com.example.ui.components.TileSettingsDialog
 import com.example.ui.components.UserProfileDialog
 import com.example.ui.components.VoiceConfirmationDialog
@@ -154,6 +159,16 @@ enum class AppTab(val title: String) {
     ANALYTICS("Στατιστικά"),
     MEMBERS("Μέλη"),
     CATEGORIES("Κατηγορίες")
+}
+
+private enum class InAppSubPage {
+    PROFILE,
+    HOUSEHOLDS,
+    REMINDERS,
+    GOALS,
+    SETTINGS,
+    GUIDE,
+    LEGAL
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -222,6 +237,12 @@ fun MainScreen(
     val isCreator by viewModel.isCurrentHouseholdCreator.collectAsStateWithLifecycle()
     val verifiedUserLookupState by viewModel.verifiedUserLookupState.collectAsStateWithLifecycle()
     val resolvedUsersByUid by viewModel.resolvedUsersByUid.collectAsStateWithLifecycle()
+    val syncStatusState by viewModel.syncStatusState.collectAsStateWithLifecycle()
+    val connectedHouseholdUsers by viewModel.connectedHouseholdUsers.collectAsStateWithLifecycle()
+    val defaultPayerMember by viewModel.defaultPayerMember.collectAsStateWithLifecycle()
+    val pendingUndoDeletion by viewModel.pendingUndoDeletion.collectAsStateWithLifecycle()
+    val householdActivities by viewModel.householdActivities.collectAsStateWithLifecycle()
+    val showActivityDialog by viewModel.showActivityDialog.collectAsStateWithLifecycle()
     val userProfile by viewModel.userProfile.collectAsStateWithLifecycle()
     val showExodologioManagerDialog by viewModel.showExodologioManagerDialog.collectAsStateWithLifecycle()
     val showBurgerMenu by viewModel.showBurgerMenu.collectAsStateWithLifecycle()
@@ -235,6 +256,7 @@ fun MainScreen(
     val pendingBankTransactions by viewModel.pendingBankTransactions.collectAsStateWithLifecycle()
     val monthlyVoiceUsage by viewModel.monthlyVoiceUsage.collectAsStateWithLifecycle()
     val showExportReportDialog by viewModel.showExportReportDialog.collectAsStateWithLifecycle()
+    val showSavingsGoalsManagerDialog by viewModel.showSavingsGoalsManagerDialog.collectAsStateWithLifecycle()
     val showSavingsGoalDialog by viewModel.showSavingsGoalDialog.collectAsStateWithLifecycle()
     val editingSavingsGoal by viewModel.editingSavingsGoal.collectAsStateWithLifecycle()
     val showRecurringExpenseDialog by viewModel.showRecurringExpenseDialog.collectAsStateWithLifecycle()
@@ -251,7 +273,26 @@ fun MainScreen(
     val showPrivacyConsentDialog by viewModel.showPrivacyConsentDialog.collectAsStateWithLifecycle()
     val notificationConsentCompleted by viewModel.notificationConsentCompleted.collectAsStateWithLifecycle()
     val bankAutoCatcherEnabled by viewModel.bankAutoCatcherEnabled.collectAsStateWithLifecycle()
+    val legalDocumentsInitialTab by viewModel.legalDocumentsInitialTab.collectAsStateWithLifecycle()
     val isUserPro = userProfile?.isPremium == true || currentHousehold?.isPremium == true || viewModel.isCurrentUserPro()
+
+    val activeSubPage = when {
+        legalDocumentsInitialTab != null -> InAppSubPage.LEGAL
+        showUserProfileDialog -> InAppSubPage.PROFILE
+        showExodologioDetailsDialog -> InAppSubPage.HOUSEHOLDS
+        canManage && showRemindersManagerDialog -> InAppSubPage.REMINDERS
+        showSavingsGoalsManagerDialog -> InAppSubPage.GOALS
+        showSettingsDialog -> InAppSubPage.SETTINGS
+        showOnboardingCarousel -> InAppSubPage.GUIDE
+        else -> null
+    }
+
+    BackHandler(enabled = activeSubPage != null && !showBurgerMenu) {
+        if (activeSubPage == InAppSubPage.HOUSEHOLDS) {
+            viewModel.clearVerifiedUserLookupState()
+        }
+        viewModel.dismissAllSubPages()
+    }
 
     val snackbarMessage by viewModel.snackbarMessage.collectAsStateWithLifecycle()
 
@@ -352,6 +393,10 @@ fun MainScreen(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
+                                if (activeSubPage == InAppSubPage.HOUSEHOLDS) {
+                                    viewModel.clearVerifiedUserLookupState()
+                                }
+                                viewModel.dismissAllSubPages()
                                 currentTab = 0
                                 viewModel.setSearchQuery("")
                                 viewModel.clearSpecialDrillDownFilter()
@@ -449,57 +494,73 @@ fun MainScreen(
                     )
                 ) {
                     NavigationBarItem(
-                        selected = currentTab == 0,
-                        onClick = { currentTab = 0 },
+                        selected = activeSubPage == null && currentTab == 0,
+                        onClick = {
+                            if (activeSubPage == InAppSubPage.HOUSEHOLDS) viewModel.clearVerifiedUserLookupState()
+                            viewModel.dismissAllSubPages()
+                            currentTab = 0
+                        },
                         icon = {
                             Icon(
-                                imageVector = if (currentTab == 0) Icons.Default.Receipt else Icons.Outlined.Receipt,
+                                imageVector = if (activeSubPage == null && currentTab == 0) Icons.Default.Receipt else Icons.Outlined.Receipt,
                                 contentDescription = com.example.util.Localization.tabExpenses(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabExpenses(lang), fontSize = 10.5.sp, fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Medium) },
+                        label = { Text(com.example.util.Localization.tabExpenses(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 0) FontWeight.Bold else FontWeight.Medium) },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_expenses")
                     )
 
                     NavigationBarItem(
-                        selected = currentTab == 1,
-                        onClick = { currentTab = 1 },
+                        selected = activeSubPage == null && currentTab == 1,
+                        onClick = {
+                            if (activeSubPage == InAppSubPage.HOUSEHOLDS) viewModel.clearVerifiedUserLookupState()
+                            viewModel.dismissAllSubPages()
+                            currentTab = 1
+                        },
                         icon = {
                             Icon(
-                                imageVector = if (currentTab == 1) Icons.Default.PieChart else Icons.Outlined.PieChart,
+                                imageVector = if (activeSubPage == null && currentTab == 1) Icons.Default.PieChart else Icons.Outlined.PieChart,
                                 contentDescription = com.example.util.Localization.tabAnalytics(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabAnalytics(lang), fontSize = 10.5.sp, fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Medium) },
+                        label = { Text(com.example.util.Localization.tabAnalytics(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 1) FontWeight.Bold else FontWeight.Medium) },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_analytics")
                     )
 
                     NavigationBarItem(
-                        selected = currentTab == 2,
-                        onClick = { currentTab = 2 },
+                        selected = activeSubPage == null && currentTab == 2,
+                        onClick = {
+                            if (activeSubPage == InAppSubPage.HOUSEHOLDS) viewModel.clearVerifiedUserLookupState()
+                            viewModel.dismissAllSubPages()
+                            currentTab = 2
+                        },
                         icon = {
                             Icon(
-                                imageVector = if (currentTab == 2) Icons.Default.Group else Icons.Outlined.Group,
+                                imageVector = if (activeSubPage == null && currentTab == 2) Icons.Default.Group else Icons.Outlined.Group,
                                 contentDescription = com.example.util.Localization.tabMembers(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabMembers(lang), fontSize = 10.5.sp, fontWeight = if (currentTab == 2) FontWeight.Bold else FontWeight.Medium) },
+                        label = { Text(com.example.util.Localization.tabMembers(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 2) FontWeight.Bold else FontWeight.Medium) },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_members")
                     )
 
                     NavigationBarItem(
-                        selected = currentTab == 3,
-                        onClick = { currentTab = 3 },
+                        selected = activeSubPage == null && currentTab == 3,
+                        onClick = {
+                            if (activeSubPage == InAppSubPage.HOUSEHOLDS) viewModel.clearVerifiedUserLookupState()
+                            viewModel.dismissAllSubPages()
+                            currentTab = 3
+                        },
                         icon = {
                             Icon(
-                                imageVector = if (currentTab == 3) Icons.Default.Category else Icons.Outlined.Category,
+                                imageVector = if (activeSubPage == null && currentTab == 3) Icons.Default.Category else Icons.Outlined.Category,
                                 contentDescription = com.example.util.Localization.tabCategories(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabCategories(lang), fontSize = 10.5.sp, fontWeight = if (currentTab == 3) FontWeight.Bold else FontWeight.Medium) },
+                        label = { Text(com.example.util.Localization.tabCategories(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 3) FontWeight.Bold else FontWeight.Medium) },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_categories")
                     )
@@ -522,6 +583,10 @@ fun MainScreen(
                 appLanguage = appLanguage,
                 isDarkTheme = isDarkTheme,
                 currentUserId = currentUser?.uid.orEmpty(),
+                syncStatus = syncStatusState,
+                activityCount = householdActivities.size,
+                onOpenActivity = { viewModel.openActivityDialog() },
+                onRefreshSync = { viewModel.refreshCloudSync() },
                 onSelectHousehold = { viewModel.switchExodologio(it) },
                 onManageHouseholdsClick = { viewModel.openExodologioDetailsDialog() },
                 onCreateNewHouseholdClick = { viewModel.openExodologioManager() },
@@ -538,8 +603,8 @@ fun MainScreen(
                 )
             }
 
-            // Bill / Expense Reminders Due Banner
-            if (activeDueReminders.isNotEmpty()) {
+            // Bill / Expense Reminders Due Banner (CREATOR/EDITOR only per RBAC 4.2)
+            if (canManage && activeDueReminders.isNotEmpty()) {
                 ReminderNotificationBanner(
                     reminders = activeDueReminders,
                     appLanguage = appLanguage,
@@ -554,11 +619,11 @@ fun MainScreen(
                     .weight(1f)
             ) {
                 Crossfade(
-                targetState = currentTab,
+                targetState = activeSubPage ?: currentTab,
                 animationSpec = tween(durationMillis = 150),
                 label = "tab_navigation_crossfade"
-            ) { tabIndex ->
-                when (tabIndex) {
+            ) { route ->
+                when (route) {
                     0 -> ExpensesScreen(
                         expenses = expenses,
                         incomes = filteredIncomes,
@@ -601,14 +666,21 @@ fun MainScreen(
                         incomes = allIncomes,
                         categories = categories,
                         members = members,
+                        recurringExpenses = recurringExpenses,
+                        savingsGoals = savingsGoals,
                         appLanguage = appLanguage,
                         isPro = isUserPro,
+                        canManageStructure = canManage,
                         onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
                         onExportReport = { viewModel.openExportReportDialog() },
                         onManageCategories = { currentTab = 3 },
+                        onOpenSavingsGoals = { viewModel.openSavingsGoalsManagerDialog() },
                         onDrillDownToHome = { request ->
                             viewModel.applyHomeDrillDown(request)
                             currentTab = 0
+                        },
+                        onSettleTransfer = { from, to, amount, ts ->
+                            viewModel.recordSettlementTransfer(from, to, amount, ts)
                         },
                         initialFilterScope = analyticsFilterScope,
                         initialPeriodKey = analyticsPeriodKey,
@@ -655,19 +727,193 @@ fun MainScreen(
                         onMoveCategoryDown = { viewModel.moveCategoryDown(it) },
                         onSeedStandardCategories = { viewModel.seedStandardCategories() }
                     )
+                    InAppSubPage.PROFILE -> UserProfileDialog(
+                        currentUser = currentUser,
+                        userProfile = userProfile,
+                        expenseCount = expenses.size,
+                        totalSpent = expenses.sumOf { it.amount },
+                        currencySymbol = currencySymbol,
+                        appLanguage = appLanguage,
+                        onSaveDisplayName = { viewModel.updateUserDisplayName(it) },
+                        onSaveFullProfile = { first, last, birth, phone, occ, city ->
+                            viewModel.updateUserFullProfile(first, last, birth, phone, occ, city)
+                        },
+                        onUpdateProfilePhoto = { viewModel.updateUserProfilePhoto(it) },
+                        onShowPremiumPaywall = { viewModel.showPremiumPaywall("profile_upgrade") },
+                        onSignOut = { viewModel.signOutUser() },
+                        onDeleteAccount = { viewModel.deleteCurrentUserAccount() },
+                        onDismiss = { viewModel.dismissUserProfileDialog() }
+                    )
+                    InAppSubPage.HOUSEHOLDS -> ExodologioDetailsDialog(
+                        currentHousehold = currentHousehold,
+                        allHouseholds = userHouseholds,
+                        isPremium = isUserPro,
+                        isOwner = isCreator,
+                        isHouseholdOwner = { viewModel.isUserCreatorOfHousehold(it) },
+                        getHouseholdRole = { viewModel.getUserRoleForHousehold(it) },
+                        lookupState = verifiedUserLookupState,
+                        resolvedUsersByUid = resolvedUsersByUid,
+                        allMembers = members,
+                        connectedUsers = connectedHouseholdUsers,
+                        onAssignDefaultPayer = { uid, mid -> viewModel.assignUserDefaultPayer(uid, mid) },
+                        onSearchUser = { email, hid -> viewModel.searchVerifiedUserForSharing(email, hid) },
+                        onClearLookup = { viewModel.clearVerifiedUserLookupState() },
+                        onAddSharedUser = { hid, user, role -> viewModel.shareHouseholdWithVerifiedUser(hid, user, role) },
+                        onChangeSharedUserRole = { hid, uid, email, role -> viewModel.updateSharedUserRole(hid, uid, email, role) },
+                        onRemoveSharedUser = { hid, uid, email -> viewModel.removeSharedUserFromHousehold(hid, uid, email) },
+                        onLeaveHousehold = { viewModel.leaveSharedHousehold(it) },
+                        appLanguage = appLanguage,
+                        currentUserId = currentUser?.uid.orEmpty(),
+                        onRenameHousehold = { viewModel.renameCurrentHousehold(it) },
+                        onRenameHouseholdById = { id, name -> viewModel.renameHousehold(id, name) },
+                        onSelectHousehold = { viewModel.switchExodologio(it) },
+                        onCreateNewHousehold = { viewModel.createNewExodologio(it) },
+                        onDeleteHousehold = { viewModel.deleteHousehold(it) },
+                        onManageMembers = {
+                            viewModel.clearVerifiedUserLookupState()
+                            viewModel.dismissAllSubPages()
+                            currentTab = 2
+                        },
+                        onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
+                        onClearExpenses = { viewModel.clearCurrentExodologioExpenses() },
+                        onDismiss = {
+                            viewModel.clearVerifiedUserLookupState()
+                            viewModel.dismissExodologioDetailsDialog()
+                        }
+                    )
+                    InAppSubPage.REMINDERS -> RemindersManagerDialog(
+                        reminders = recurringExpenses,
+                        categories = categories,
+                        members = members,
+                        defaultPayerMember = defaultPayerMember,
+                        onSuggestCategory = { m, afm -> viewModel.suggestCategoryForMerchant(m, afm) },
+                        onLearnCategory = { m, cid, cname, afm -> viewModel.learnCategoryForMerchant(m, cid, cname, afm) },
+                        appLanguage = appLanguage,
+                        onDismiss = { viewModel.dismissRemindersManagerDialog() },
+                        onSaveReminder = { id, title, amount, categoryId, categoryName, dayOfMonth, reminderHour, reminderMinute, splitType, memberIds, memberNamesDisplay, note, payerId, payerName, payerIdsCsv, payerAmountsCsv, frequency, anchorMonth ->
+                            viewModel.saveRecurringExpense(
+                                id = id,
+                                title = title,
+                                amount = amount,
+                                categoryId = categoryId,
+                                categoryName = categoryName,
+                                dayOfMonth = dayOfMonth,
+                                note = note,
+                                payerMemberId = payerId,
+                                payerMemberName = payerName,
+                                reminderHour = reminderHour,
+                                reminderMinute = reminderMinute,
+                                splitType = splitType,
+                                memberIds = memberIds,
+                                memberNamesDisplay = memberNamesDisplay,
+                                payerMemberIdsCsv = payerIdsCsv,
+                                payerAmountsCsv = payerAmountsCsv,
+                                autoRegisterIfDue = false,
+                                frequency = frequency,
+                                anchorMonth = anchorMonth
+                            )
+                        },
+                        onToggleActive = { viewModel.toggleRecurringActive(it) },
+                        onDeleteReminder = { viewModel.deleteRecurringExpense(it) },
+                        onLogExpenseNow = { viewModel.logExpenseFromReminder(it) }
+                    )
+                    InAppSubPage.GOALS -> SavingsGoalsManagerDialog(
+                        goals = savingsGoals,
+                        members = members,
+                        defaultPayerMember = defaultPayerMember,
+                        householdName = currentHousehold?.name.orEmpty(),
+                        currencySymbol = currencySymbol,
+                        canManage = canManage,
+                        appLanguage = appLanguage,
+                        onDismiss = { viewModel.dismissSavingsGoalsManagerDialog() },
+                        onOpenGoalEditor = { goal -> viewModel.openSavingsGoalDialog(goal) },
+                        onDeleteGoal = { goal -> viewModel.deleteSavingsGoal(goal) },
+                        onDepositToGoal = { goal, amount, payer, note ->
+                            viewModel.depositToGoal(goal, amount, payer, note)
+                        }
+                    )
+                    InAppSubPage.SETTINGS -> AppSettingsDialog(
+                        currentUser = currentUser,
+                        household = currentHousehold,
+                        isSyncing = isSyncing,
+                        themeMode = themeMode,
+                        appLanguage = appLanguage,
+                        launchWithChooser = launchWithChooser,
+                        userProfile = userProfile,
+                        reminderEnabled = dailyReminderEnabled,
+                        reminderHour = dailyReminderHour,
+                        reminderMinute = dailyReminderMinute,
+                        notificationConsentHandled = notificationConsentCompleted,
+                        bankAutoCatcherEnabled = bankAutoCatcherEnabled,
+                        onAcceptNotificationConsent = { viewModel.acceptNotificationConsent() },
+                        onToggleReminder = { viewModel.toggleDailyReminder(it) },
+                        onSetReminderTime = { h, m -> viewModel.setDailyReminderTime(h, m) },
+                        onToggleBankAutoCatcher = { viewModel.toggleBankAutoCatcher(it) },
+                        onThemeChange = { viewModel.setThemeMode(it) },
+                        onLanguageChange = { viewModel.setAppLanguage(it) },
+                        onToggleLaunchWithChooser = { viewModel.setLaunchWithChooser(it) },
+                        onCreateHousehold = { viewModel.createHousehold(it) },
+                        onJoinHousehold = { viewModel.joinHousehold(it) },
+                        onSignOut = { viewModel.signOutUser() },
+                        onClearAllDataAndSignOut = { viewModel.factoryResetAndSignOut() },
+                        onMessage = { viewModel.showSnackbar(it) },
+                        onDismiss = { viewModel.dismissSettingsDialog() }
+                    )
+                    InAppSubPage.GUIDE -> OnboardingCarouselDialog(
+                        appLanguage = appLanguage,
+                        onDismiss = { viewModel.dismissOnboardingCarousel() },
+                        onAddMember = if (canManage) {
+                            {
+                                viewModel.dismissOnboardingCarousel()
+                                viewModel.openMemberDialog()
+                            }
+                        } else null,
+                        onAddCategory = if (canManage) {
+                            {
+                                viewModel.dismissOnboardingCarousel()
+                                viewModel.openCategoryDialog()
+                            }
+                        } else null,
+                        onSeedCategories = if (canManage) {
+                            {
+                                viewModel.dismissOnboardingCarousel()
+                                viewModel.seedStandardCategories()
+                            }
+                        } else null
+                    )
+                    InAppSubPage.LEGAL -> LegalDocumentsDialog(
+                        initialTab = legalDocumentsInitialTab ?: "TERMS",
+                        appLanguage = appLanguage,
+                        onDismiss = { viewModel.dismissLegalDocumentsPage() }
+                    )
                 }
             }
             }
             }
 
-            // Floating Voice Mic Button positioned identically to Scaffold's FAB, underneath BurgerMenuDrawer
-            VoiceMicButton(
-                isListening = isListening,
-                onMicClick = { viewModel.openVoiceInputDialog() },
+            // 5-second Undo deletion floating banner (placed left of VoiceMicButton to prevent overlap)
+            UndoDeletionBanner(
+                pendingUndo = pendingUndoDeletion,
+                currencySymbol = currencySymbol,
+                appLanguage = appLanguage,
+                onUndo = { viewModel.undoPendingDeletion() },
+                onDismiss = { viewModel.dismissUndoDeletion() },
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(end = 16.dp, bottom = 16.dp)
+                    .align(Alignment.BottomStart)
+                    .padding(start = 12.dp, end = 84.dp, bottom = 16.dp)
+                    .zIndex(5f)
             )
+
+            // Floating Voice Mic Button positioned identically to Scaffold's FAB, underneath BurgerMenuDrawer
+            if (activeSubPage == null) {
+                VoiceMicButton(
+                    isListening = isListening,
+                    onMicClick = { viewModel.openVoiceInputDialog() },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 16.dp)
+                )
+            }
 
             // Burger Menu Drawer: slides right-to-left over ALL height between TopBar and BottomBar (covering HouseholdActiveBar & Mic)
             BurgerMenuDrawer(
@@ -678,12 +924,18 @@ fun MainScreen(
                 currentTab = currentTab,
                 appLanguage = appLanguage,
                 onLanguageChange = { viewModel.setAppLanguage(it) },
-                onSelectTab = { currentTab = it },
+                onSelectTab = {
+                    if (activeSubPage == InAppSubPage.HOUSEHOLDS) viewModel.clearVerifiedUserLookupState()
+                    viewModel.dismissAllSubPages()
+                    currentTab = it
+                },
                 onOpenProfile = { viewModel.openUserProfileDialog() },
                 onOpenExodologio = { viewModel.openExodologioDetailsDialog() },
                 onOpenSettings = { viewModel.openSettingsDialog() },
                 onOpenGuide = { viewModel.openOnboardingGuide() },
-                onOpenReminders = { viewModel.openRemindersManagerDialog() },
+                onOpenReminders = if (canManage) { { viewModel.openRemindersManagerDialog() } } else null,
+                onOpenGoals = { viewModel.openSavingsGoalsManagerDialog() },
+                onOpenLegal = { tab -> viewModel.openLegalDocumentsPage(tab) },
                 onSignOut = { viewModel.signOutUser() },
                 onDismiss = { viewModel.dismissBurgerMenu() },
                 modifier = Modifier
@@ -698,6 +950,8 @@ fun MainScreen(
         pendingExpense = pendingParsedExpense,
         categories = categories,
         members = members,
+        defaultPayerMember = defaultPayerMember,
+        appLanguage = appLanguage,
         onConfirm = { title, amount, categoryId, categoryName, timestamp, splitType, memberIds, memberNamesDisplay, prompt, payerId, payerName, payerMemberIdsCsv, payerAmountsCsv ->
             viewModel.confirmVoiceExpense(
                 title = title,
@@ -724,6 +978,10 @@ fun MainScreen(
             expenseToEdit = editingExpense,
             categories = categories,
             members = members,
+            appLanguage = appLanguage,
+            defaultPayerMember = defaultPayerMember,
+            onSuggestCategory = { m, afm -> viewModel.suggestCategoryForMerchant(m, afm) },
+            onLearnCategory = { m, cid, cname, afm -> viewModel.learnCategoryForMerchant(m, cid, cname, afm) },
             onDismiss = { viewModel.dismissManualExpenseDialog() },
             onSave = { id, title, amount, categoryId, categoryName, timestamp, splitType, memberIds, memberNamesDisplay, note, payerId, payerName, payerMemberIdsCsv, payerAmountsCsv ->
                 viewModel.saveExpense(
@@ -771,9 +1029,11 @@ fun MainScreen(
     if (showMemberDialog) {
         MemberDialog(
             memberToEdit = editingMember,
+            appLanguage = appLanguage,
+            connectedUsers = connectedHouseholdUsers,
             onDismiss = { viewModel.dismissMemberDialog() },
-            onSave = { id, name, role, avatarColorHex, voiceKeywords ->
-                viewModel.saveMember(id, name, role, avatarColorHex, voiceKeywords)
+            onSave = { id, name, role, avatarColorHex, voiceKeywords, linkedUserUid ->
+                viewModel.saveMember(id, name, role, avatarColorHex, voiceKeywords, linkedUserUid)
             }
         )
     }
@@ -803,61 +1063,6 @@ fun MainScreen(
         )
     }
 
-    // User Profile Dialog
-    if (showUserProfileDialog) {
-        UserProfileDialog(
-            currentUser = currentUser,
-            userProfile = userProfile,
-            expenseCount = expenses.size,
-            totalSpent = expenses.sumOf { it.amount },
-            currencySymbol = currencySymbol,
-            appLanguage = appLanguage,
-            onSaveDisplayName = { viewModel.updateUserDisplayName(it) },
-            onSaveFullProfile = { first, last, birth, phone, occ, city ->
-                viewModel.updateUserFullProfile(first, last, birth, phone, occ, city)
-            },
-            onUpdateProfilePhoto = { viewModel.updateUserProfilePhoto(it) },
-            onShowPremiumPaywall = { viewModel.showPremiumPaywall("profile_upgrade") },
-            onSignOut = { viewModel.signOutUser() },
-            onDeleteAccount = { viewModel.deleteCurrentUserAccount() },
-            onDismiss = { viewModel.dismissUserProfileDialog() }
-        )
-    }
-
-    // Exodologio Details Dialog (Rename, Share, Switch, Clear)
-    if (showExodologioDetailsDialog) {
-        ExodologioDetailsDialog(
-            currentHousehold = currentHousehold,
-            allHouseholds = userHouseholds,
-            isPremium = isUserPro,
-            isOwner = isCreator,
-            isHouseholdOwner = { viewModel.isUserCreatorOfHousehold(it) },
-            getHouseholdRole = { viewModel.getUserRoleForHousehold(it) },
-            lookupState = verifiedUserLookupState,
-            resolvedUsersByUid = resolvedUsersByUid,
-            onSearchUser = { email, hid -> viewModel.searchVerifiedUserForSharing(email, hid) },
-            onClearLookup = { viewModel.clearVerifiedUserLookupState() },
-            onAddSharedUser = { hid, user, role -> viewModel.shareHouseholdWithVerifiedUser(hid, user, role) },
-            onChangeSharedUserRole = { hid, uid, email, role -> viewModel.updateSharedUserRole(hid, uid, email, role) },
-            onRemoveSharedUser = { hid, uid, email -> viewModel.removeSharedUserFromHousehold(hid, uid, email) },
-            onLeaveHousehold = { viewModel.leaveSharedHousehold(it) },
-            appLanguage = appLanguage,
-            currentUserId = currentUser?.uid.orEmpty(),
-            onRenameHousehold = { viewModel.renameCurrentHousehold(it) },
-            onRenameHouseholdById = { id, name -> viewModel.renameHousehold(id, name) },
-            onSelectHousehold = { viewModel.switchExodologio(it) },
-            onCreateNewHousehold = { viewModel.createNewExodologio(it) },
-            onDeleteHousehold = { viewModel.deleteHousehold(it) },
-            onManageMembers = { currentTab = 2 },
-            onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
-            onClearExpenses = { viewModel.clearCurrentExodologioExpenses() },
-            onDismiss = {
-                viewModel.clearVerifiedUserLookupState()
-                viewModel.dismissExodologioDetailsDialog()
-            }
-        )
-    }
-
     // Exodologio Manager Dialog
     if (showExodologioManagerDialog) {
         ExodologioManagerDialog(
@@ -868,6 +1073,9 @@ fun MainScreen(
             getHouseholdRole = { viewModel.getUserRoleForHousehold(it) },
             lookupState = verifiedUserLookupState,
             resolvedUsersByUid = resolvedUsersByUid,
+            allMembers = members,
+            connectedUsers = connectedHouseholdUsers,
+            onAssignDefaultPayer = { uid, mid -> viewModel.assignUserDefaultPayer(uid, mid) },
             onSearchUser = { email, hid -> viewModel.searchVerifiedUserForSharing(email, hid) },
             onClearLookup = { viewModel.clearVerifiedUserLookupState() },
             onAddSharedUser = { hid, user, role -> viewModel.shareHouseholdWithVerifiedUser(hid, user, role) },
@@ -944,6 +1152,9 @@ fun MainScreen(
             members = members,
             isPro = isUserPro,
             appLanguage = appLanguage,
+            defaultPayerMember = defaultPayerMember,
+            onSuggestCategory = { m, afm -> viewModel.suggestCategoryForMerchant(m, afm) },
+            onLearnCategory = { m, cid, cname, afm -> viewModel.learnCategoryForMerchant(m, cid, cname, afm) },
             onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
             onExpenseConfirmed = { title, amount, category, timestamp, member, note ->
                 viewModel.saveExpense(
@@ -976,40 +1187,28 @@ fun MainScreen(
         )
     }
 
-    // Feature 5: Savings Goal Add/Edit Dialog
-    if (showSavingsGoalDialog) {
+    // Feature 5: Savings Goal Add/Edit Dialog (CREATOR/EDITOR only per RBAC 4.2)
+    if (canManage && showSavingsGoalDialog) {
         SavingsGoalDialog(
             goalToEdit = editingSavingsGoal,
+            appLanguage = appLanguage,
             onDismiss = { viewModel.dismissSavingsGoalDialog() },
-            onSave = { id, title, target, current, deadline, note ->
-                viewModel.saveSavingsGoal(id, title, target, current, deadline, note)
+            onSave = { id, title, target, current, deadline, note, recordAsExpense ->
+                viewModel.saveSavingsGoal(id, title, target, current, deadline, note, recordAsExpense)
             }
         )
     }
 
-    // Feature 2: Recurring Expense Add/Edit Dialog
-    if (showRecurringExpenseDialog) {
+    // Feature 2: Recurring Expense Add/Edit Dialog (CREATOR/EDITOR only per RBAC 4.2)
+    if (canManage && showRecurringExpenseDialog) {
         RecurringExpenseDialog(
             recurringToEdit = editingRecurringExpense,
             categories = categories,
             members = members,
+            defaultPayerMember = defaultPayerMember,
             appLanguage = appLanguage,
             onDismiss = { viewModel.dismissRecurringExpenseDialog() },
-            onSave = { id, title, amount, categoryId, categoryName, dayOfMonth, note, payerId, payerName ->
-                viewModel.saveRecurringExpense(id, title, amount, categoryId, categoryName, dayOfMonth, note, payerId, payerName)
-            }
-        )
-    }
-
-    // Reminders Management Dialog
-    if (showRemindersManagerDialog) {
-        RemindersManagerDialog(
-            reminders = recurringExpenses,
-            categories = categories,
-            members = members,
-            appLanguage = appLanguage,
-            onDismiss = { viewModel.dismissRemindersManagerDialog() },
-            onSaveReminder = { id, title, amount, categoryId, categoryName, dayOfMonth, reminderHour, reminderMinute, splitType, memberIds, memberNamesDisplay, note, payerId, payerName, payerIdsCsv, payerAmountsCsv ->
+            onSave = { id, title, amount, categoryId, categoryName, dayOfMonth, note, payerId, payerName, frequency, anchorMonth ->
                 viewModel.saveRecurringExpense(
                     id = id,
                     title = title,
@@ -1020,76 +1219,20 @@ fun MainScreen(
                     note = note,
                     payerMemberId = payerId,
                     payerMemberName = payerName,
-                    reminderHour = reminderHour,
-                    reminderMinute = reminderMinute,
-                    splitType = splitType,
-                    memberIds = memberIds,
-                    memberNamesDisplay = memberNamesDisplay,
-                    payerMemberIdsCsv = payerIdsCsv,
-                    payerAmountsCsv = payerAmountsCsv,
-                    autoRegisterIfDue = false
+                    frequency = frequency,
+                    anchorMonth = anchorMonth
                 )
-            },
-            onToggleActive = { viewModel.toggleRecurringActive(it) },
-            onDeleteReminder = { viewModel.deleteRecurringExpense(it) },
-            onLogExpenseNow = { viewModel.logExpenseFromReminder(it) }
+            }
         )
     }
 
-    // App Settings Dialog (Profile, Desktop Tile / Widget, Theme, Family Cloud Sync, Evening Reminders)
-    if (showSettingsDialog) {
-        AppSettingsDialog(
-            currentUser = currentUser,
-            household = currentHousehold,
-            isSyncing = isSyncing,
-            themeMode = themeMode,
+    // Household Activity History Dialog (Feature 3.1)
+    if (showActivityDialog) {
+        HouseholdActivityDialog(
+            activities = householdActivities,
+            currencySymbol = currencySymbol,
             appLanguage = appLanguage,
-            launchWithChooser = launchWithChooser,
-            userProfile = userProfile,
-            reminderEnabled = dailyReminderEnabled,
-            reminderHour = dailyReminderHour,
-            reminderMinute = dailyReminderMinute,
-            notificationConsentHandled = notificationConsentCompleted,
-            bankAutoCatcherEnabled = bankAutoCatcherEnabled,
-            onAcceptNotificationConsent = { viewModel.acceptNotificationConsent() },
-            onToggleReminder = { viewModel.toggleDailyReminder(it) },
-            onSetReminderTime = { h, m -> viewModel.setDailyReminderTime(h, m) },
-            onToggleBankAutoCatcher = { viewModel.toggleBankAutoCatcher(it) },
-            onThemeChange = { viewModel.setThemeMode(it) },
-            onLanguageChange = { viewModel.setAppLanguage(it) },
-            onToggleLaunchWithChooser = { viewModel.setLaunchWithChooser(it) },
-            onCreateHousehold = { viewModel.createHousehold(it) },
-            onJoinHousehold = { viewModel.joinHousehold(it) },
-            onSignOut = { viewModel.signOutUser() },
-            onClearAllDataAndSignOut = { viewModel.factoryResetAndSignOut() },
-            onMessage = { viewModel.showSnackbar(it) },
-            onDismiss = { viewModel.dismissSettingsDialog() }
-        )
-    }
-
-    // Onboarding Pop-up Carousel for New Users (Next-Next-Next with Auto-advance every 5 seconds)
-    if (showOnboardingCarousel) {
-        OnboardingCarouselDialog(
-            appLanguage = appLanguage,
-            onDismiss = { viewModel.dismissOnboardingCarousel() },
-            onAddMember = if (canManage) {
-                {
-                    viewModel.dismissOnboardingCarousel()
-                    viewModel.openMemberDialog()
-                }
-            } else null,
-            onAddCategory = if (canManage) {
-                {
-                    viewModel.dismissOnboardingCarousel()
-                    viewModel.openCategoryDialog()
-                }
-            } else null,
-            onSeedCategories = if (canManage) {
-                {
-                    viewModel.dismissOnboardingCarousel()
-                    viewModel.seedStandardCategories()
-                }
-            } else null
+            onDismiss = { viewModel.dismissActivityDialog() }
         )
     }
 

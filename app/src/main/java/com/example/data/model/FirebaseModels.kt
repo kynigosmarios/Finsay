@@ -35,6 +35,20 @@ data class SharedHouseholdUser(
     val role: HouseholdRole
 )
 
+data class ConnectedHouseholdUser(
+    val uid: String,
+    val email: String,
+    val displayName: String,
+    val role: HouseholdRole,
+    val isCreator: Boolean = false
+)
+
+enum class SyncStatusState {
+    SYNCING,
+    SYNCED,
+    OFFLINE
+}
+
 @IgnoreExtraProperties
 data class Household(
     var id: String = "",
@@ -132,6 +146,7 @@ data class FirebaseMember(
     var isDefault: Boolean = false,
     var sortOrder: Int = 0,
     var isDeleted: Boolean = false,
+    var linkedUserUid: String = "",
     var createdAt: Timestamp? = null
 )
 
@@ -189,5 +204,20 @@ data class FirebaseRecurringExpense(
     var payerMemberName: String = "",
     var payerMemberIdsCsv: String = "",
     var payerAmountsCsv: String = "",
+    var anchorMonth: Int = 0,
     var createdAt: Timestamp? = null
+)
+
+@IgnoreExtraProperties
+data class FirebaseHouseholdActivity(
+    var id: String = "",
+    var householdId: String = "",
+    var actorUid: String = "",
+    var actorName: String = "",
+    var actionType: String = "",
+    var targetType: String = "",
+    var summaryEl: String = "",
+    var summaryEn: String = "",
+    var amount: Double = 0.0,
+    var createdAt: Long = 0L
 )

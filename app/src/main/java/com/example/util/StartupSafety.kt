@@ -1,8 +1,10 @@
 package com.example.util
 
 import com.example.data.entity.Expense
+import com.example.data.entity.SavingsGoal
 import com.example.data.model.FirebaseExpense
 import com.example.data.model.FirebaseIncome
+import com.example.data.model.FirebaseSavingsGoal
 import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 
@@ -184,6 +186,147 @@ object StartupSafety {
             }
         }
         return pendingIds.keys.toSet()
+    }
+
+    data class PendingSavingsGoalMutation(
+        val cloudId: String,
+        val householdId: String,
+        val localEntity: SavingsGoal,
+        val updatedAtMs: Long
+    )
+
+    data class ResolvedSavingsGoalsResult(
+        val goals: List<SavingsGoal>,
+        val cloudIdByLocalId: Map<Long, String>
+    )
+
+    fun resolveAuthoritativeSavingsGoals(
+        activeHouseholdId: String,
+        householdGoals: List<FirebaseSavingsGoal>,
+        userGoals: List<FirebaseSavingsGoal>,
+        pendingLocalMutations: MutableMap<String, PendingSavingsGoalMutation>,
+        pendingDeletedGoals: MutableMap<String, Pair<String, Long>>,
+        nowMs: Long = System.currentTimeMillis(),
+        ttlMs: Long = 15_000L
+    ): ResolvedSavingsGoalsResult {
+        val rawRemote = if (activeHouseholdId.isNotBlank()) {
+            householdGoals.filter { sg ->
+                sg.householdId == activeHouseholdId || sg.householdId.isBlank()
+            }
+        } else {
+            userGoals
+        }
+
+        // Deduplicate remote goals by docId first
+        val uniqueRemote = rawRemote.distinctBy { sg ->
+            sg.id.ifBlank { "${sg.title.trim().lowercase()}_${sg.targetAmount}" }
+        }
+
+        val remoteCloudIds = uniqueRemote.mapNotNull { it.id.takeIf(String::isNotBlank) }.toSet()
+
+        // Prune expired tombstones or tombstones for docs that are absent past settle grace window
+        val delIter = pendingDeletedGoals.entries.iterator()
+        while (delIter.hasNext()) {
+            val entry = delIter.next()
+            val (hid, ts) = entry.value
+            val key = entry.key
+            val expired = nowMs - ts > ttlMs
+            val wrongHousehold = activeHouseholdId.isNotBlank() && hid.isNotBlank() && hid != activeHouseholdId
+            if (expired || wrongHousehold) {
+                delIter.remove()
+            } else if (!remoteCloudIds.contains(key) && nowMs - ts > 1_500L) {
+                delIter.remove()
+            }
+        }
+
+        // Prune confirmed or expired local mutations
+        val mutIter = pendingLocalMutations.entries.iterator()
+        while (mutIter.hasNext()) {
+            val entry = mutIter.next()
+            val mut = entry.value
+            val expired = nowMs - mut.updatedAtMs > ttlMs
+            val wrongHousehold = mut.householdId != activeHouseholdId
+            if (expired || wrongHousehold) {
+                mutIter.remove()
+                continue
+            }
+            val matchingRemote = uniqueRemote.find { it.id == mut.cloudId }
+            if (matchingRemote != null &&
+                matchingRemote.title == mut.localEntity.title &&
+                kotlin.math.abs(matchingRemote.targetAmount - mut.localEntity.targetAmount) < 0.005 &&
+                kotlin.math.abs(matchingRemote.currentAmount - mut.localEntity.currentAmount) < 0.005 &&
+                matchingRemote.deadlineDate == mut.localEntity.deadlineDate &&
+                matchingRemote.note == mut.localEntity.note
+            ) {
+                mutIter.remove()
+            }
+        }
+
+        val activeDeletedKeys = pendingDeletedGoals.entries
+            .filter { (_, v) -> v.first == activeHouseholdId || v.first.isBlank() }
+            .map { it.key }
+            .toSet()
+
+        val activeMutations = pendingLocalMutations.values
+            .filter { it.householdId == activeHouseholdId }
+            .associateBy { it.cloudId }
+
+        val mergedEntries = linkedMapOf<String, SavingsGoal>()
+        val usedIds = HashSet<Long>((uniqueRemote.size + activeMutations.size) * 2 + 4)
+        var nextAlloc = 1L
+        fun allocId(preferred: Long): Long {
+            if (preferred > 0L && usedIds.add(preferred)) return preferred
+            while (usedIds.contains(nextAlloc)) nextAlloc++
+            usedIds.add(nextAlloc)
+            return nextAlloc
+        }
+
+        uniqueRemote.forEach { sg ->
+            val cloudId = sg.id.ifBlank { safePositiveIdHash("${sg.title}_${sg.targetAmount}").toString() }
+            val numericPreferred = cloudId.trim().toLongOrNull()?.takeIf { it > 0L } ?: safePositiveIdHash(cloudId)
+            val deleteMatch = activeDeletedKeys.contains(cloudId) || activeDeletedKeys.contains(numericPreferred.toString())
+            if (deleteMatch) return@forEach
+
+            val localOverride = activeMutations[cloudId]
+            val entity = if (localOverride != null) {
+                val preferred = localOverride.localEntity.id.takeIf { it > 0L } ?: numericPreferred
+                localOverride.localEntity.copy(id = allocId(preferred))
+            } else {
+                SavingsGoal(
+                    id = allocId(numericPreferred),
+                    title = sg.title,
+                    targetAmount = sg.targetAmount,
+                    currentAmount = sg.currentAmount,
+                    deadlineDate = sg.deadlineDate,
+                    iconKey = sg.iconKey,
+                    colorHex = sg.colorHex,
+                    note = sg.note
+                )
+            }
+            mergedEntries[cloudId] = entity
+        }
+
+        // Include newly created in-flight goals that haven't appeared in the snapshot yet
+        activeMutations.forEach { (cloudId, mut) ->
+            if (!mergedEntries.containsKey(cloudId) && !activeDeletedKeys.contains(cloudId)) {
+                val preferred = mut.localEntity.id.takeIf { it > 0L } ?: safePositiveIdHash(cloudId)
+                mergedEntries[cloudId] = mut.localEntity.copy(id = allocId(preferred))
+            }
+        }
+
+        val cloudMap = HashMap<Long, String>(mergedEntries.size * 2)
+        mergedEntries.forEach { (cloudId, entity) ->
+            cloudMap[entity.id] = cloudId
+        }
+
+        val sortedGoals = mergedEntries.values.sortedWith(
+            compareBy<SavingsGoal> { it.title.trim().lowercase() }.thenBy { it.id }
+        )
+
+        return ResolvedSavingsGoalsResult(
+            goals = sortedGoals,
+            cloudIdByLocalId = cloudMap
+        )
     }
 }
 

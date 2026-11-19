@@ -30,6 +30,27 @@ object BankNotificationHolder {
         loadFromPrefs()
     }
 
+    fun resolveActiveHouseholdId(context: Context): String {
+        return try {
+            context.applicationContext
+                .getSharedPreferences("oikonomos_app_prefs", Context.MODE_PRIVATE)
+                .getString("last_household_id", "")
+                .orEmpty()
+                .trim()
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    fun filterForHousehold(
+        transactions: List<PendingBankTransaction>,
+        activeHouseholdId: String
+    ): List<PendingBankTransaction> {
+        val hid = activeHouseholdId.trim()
+        if (hid.isBlank()) return emptyList()
+        return transactions.filter { it.householdId.trim() == hid }
+    }
+
     fun loadFromPrefs() {
         val p = prefs ?: return
         val raw = p.getString("pending_tx_json", null) ?: return
@@ -45,7 +66,8 @@ object BankNotificationHolder {
                         merchantName = obj.getString("merchantName"),
                         amount = obj.getDouble("amount"),
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                        rawText = obj.optString("rawText", "")
+                        rawText = obj.optString("rawText", ""),
+                        householdId = obj.optString("householdId", "")
                     )
                 )
             }
@@ -66,6 +88,7 @@ object BankNotificationHolder {
                 obj.put("amount", tx.amount)
                 obj.put("timestamp", tx.timestamp)
                 obj.put("rawText", tx.rawText)
+                obj.put("householdId", tx.householdId)
                 array.put(obj)
             }
             p.edit().putString("pending_tx_json", array.toString()).apply()
@@ -97,34 +120,40 @@ object BankNotificationHolder {
         if (prefs == null && context != null) {
             init(context)
         }
+        val effectiveHid = tx.householdId.trim().ifBlank {
+            if (context != null) resolveActiveHouseholdId(context) else ""
+        }
+        val stampedTx = if (effectiveHid != tx.householdId) tx.copy(householdId = effectiveHid) else tx
+
         val current = _pendingTransactions.value.toMutableList()
 
-        // Deduplicate both identical notifications and cross-app duplicates (e.g. Google Pay + Eurobank)
+        // Deduplicate both identical notifications and cross-app duplicates within the same household
         val duplicateIndex = current.indexOfFirst { existing ->
-            val sameAmount = kotlin.math.abs(existing.amount - tx.amount) < 0.01
-            val closeInTime = kotlin.math.abs(existing.timestamp - tx.timestamp) < 120_000L
-            val sameMerchant = existing.merchantName.equals(tx.merchantName, ignoreCase = true) ||
-                existing.merchantName.contains(tx.merchantName, ignoreCase = true) ||
-                tx.merchantName.contains(existing.merchantName, ignoreCase = true)
-            val crossWalletAndBank = (existing.bankName == "Google Pay" && tx.bankName != "Google Pay") ||
-                (tx.bankName == "Google Pay" && existing.bankName != "Google Pay")
-            sameAmount && closeInTime && (sameMerchant || crossWalletAndBank)
+            val sameHousehold = existing.householdId.trim() == stampedTx.householdId.trim()
+            val sameAmount = kotlin.math.abs(existing.amount - stampedTx.amount) < 0.01
+            val closeInTime = kotlin.math.abs(existing.timestamp - stampedTx.timestamp) < 120_000L
+            val sameMerchant = existing.merchantName.equals(stampedTx.merchantName, ignoreCase = true) ||
+                existing.merchantName.contains(stampedTx.merchantName, ignoreCase = true) ||
+                stampedTx.merchantName.contains(existing.merchantName, ignoreCase = true)
+            val crossWalletAndBank = (existing.bankName == "Google Pay" && stampedTx.bankName != "Google Pay") ||
+                (stampedTx.bankName == "Google Pay" && existing.bankName != "Google Pay")
+            sameHousehold && sameAmount && closeInTime && (sameMerchant || crossWalletAndBank)
         }
 
         if (duplicateIndex >= 0) {
             val existing = current[duplicateIndex]
             val existingIsGeneric = existing.merchantName.startsWith("Συναλλαγή ")
-            val newIsRicher = !tx.merchantName.startsWith("Συναλλαγή ") &&
-                (existingIsGeneric || (tx.bankName == "Google Pay" && existing.merchantName.length < tx.merchantName.length))
+            val newIsRicher = !stampedTx.merchantName.startsWith("Συναλλαγή ") &&
+                (existingIsGeneric || (stampedTx.bankName == "Google Pay" && existing.merchantName.length < stampedTx.merchantName.length))
             if (newIsRicher) {
-                current[duplicateIndex] = existing.copy(merchantName = tx.merchantName)
+                current[duplicateIndex] = existing.copy(merchantName = stampedTx.merchantName)
                 _pendingTransactions.value = current
                 saveToPrefs()
             }
             return false
         }
 
-        current.add(0, tx)
+        current.add(0, stampedTx)
         _pendingTransactions.value = current.sortedByDescending { it.timestamp }.take(15)
         saveToPrefs()
         return true

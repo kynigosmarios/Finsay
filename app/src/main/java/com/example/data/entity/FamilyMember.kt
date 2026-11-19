@@ -12,7 +12,8 @@ data class FamilyMember(
     val avatarColorHex: Long = 0xFF059669,
     val voiceKeywords: String = "", // Comma separated: "μάριος, μπαμπάς, πατέρας"
     val isDefault: Boolean = false,
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
+    val linkedUserUid: String = ""
 ) {
     val colorHex: Long get() = avatarColorHex
 }

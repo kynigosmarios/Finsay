@@ -62,6 +62,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.entity.FamilyMember
+import com.example.data.model.ConnectedHouseholdUser
 import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
@@ -79,6 +81,9 @@ fun ExodologioManagerDialog(
     getHouseholdRole: (Household) -> HouseholdRole = { if (isHouseholdOwner(it)) HouseholdRole.CREATOR else HouseholdRole.REGISTAR },
     lookupState: OikoNomosViewModel.VerifiedUserLookupState = OikoNomosViewModel.VerifiedUserLookupState.Idle,
     resolvedUsersByUid: Map<String, UserProfile> = emptyMap(),
+    allMembers: List<FamilyMember> = emptyList(),
+    connectedUsers: List<ConnectedHouseholdUser> = emptyList(),
+    onAssignDefaultPayer: (uid: String, memberId: Long?) -> Unit = { _, _ -> },
     onSearchUser: (email: String, householdId: String) -> Unit = { _, _ -> },
     onClearLookup: () -> Unit = {},
     onAddSharedUser: (householdId: String, targetUser: UserProfile, role: HouseholdRole) -> Unit = { _, _, _ -> },
@@ -424,6 +429,9 @@ fun ExodologioManagerDialog(
                                         lookupState = lookupState,
                                         resolvedUsersByUid = resolvedUsersByUid,
                                         currentUserId = currentUserId,
+                                        allMembers = if (household.id == currentHousehold?.id) allMembers else emptyList(),
+                                        connectedUsers = connectedUsers,
+                                        onAssignDefaultPayer = onAssignDefaultPayer,
                                         onSearchUser = onSearchUser,
                                         onClearLookup = onClearLookup,
                                         onAddSharedUser = onAddSharedUser,

@@ -1,117 +1,38 @@
 package com.example.ui.screens
 
-import com.example.util.Localization
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.AllInclusive
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.FamilyRestroom
-import android.app.DatePickerDialog
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.PieChart
-import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
-import com.example.util.ExpenseReportExporter
-import java.util.Calendar
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import java.text.SimpleDateFormat
-import java.util.Date
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.TrendingUp
 import com.example.data.entity.Expense
 import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.Income
+import com.example.data.entity.RecurringExpense
+import com.example.data.entity.SavingsGoal
 import com.example.data.entity.getPayerShares
 import com.example.ui.components.BudgetAlertsCard
-import com.example.ui.components.CategoryIconHelper
-import com.example.ui.theme.Amber700
-import com.example.ui.theme.Emerald100
-import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsExpenseFilterHelper
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.GreekVoiceParser
 import com.example.util.HomeDrillDownRequest
-import com.example.util.SettleUpCalculator
+import com.example.util.Localization
+import com.example.util.SavingsGoalExpenseLinkHelper
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
 import java.util.Locale
-
-data class PieChartSlice(
-    val label: String,
-    val value: Double,
-    val color: Color,
-    val onClick: (() -> Unit)? = null
-)
 
 private data class SpendCalculationResult(
     val individualSpendMap: Map<FamilyMember, Double>,
@@ -122,158 +43,23 @@ private data class SpendCalculationResult(
     val memberSpendMap: Map<FamilyMember, Double>
 )
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun PieChartView(
-    slices: List<PieChartSlice>,
-    totalAmount: Double,
-    appLanguage: String = "EN",
-    modifier: Modifier = Modifier
-) {
-    val lang = Localization.Language.fromCode(appLanguage)
-    val total = totalAmount.coerceAtLeast(1.0)
-    val validSlices = slices.filter { it.value > 0.001 }
-
-    if (validSlices.isEmpty()) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(130.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = Localization.noExpensesRegistered(lang),
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        return
-    }
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            modifier = Modifier.size(190.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            Canvas(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                val strokeWidth = 20.dp.toPx()
-                val radius = (size.minDimension - strokeWidth) / 2
-                val centerOffset = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
-                val rect = androidx.compose.ui.geometry.Rect(
-                    centerOffset.x - radius,
-                    centerOffset.y - radius,
-                    centerOffset.x + radius,
-                    centerOffset.y + radius
-                )
-
-                // Background subtle ring track
-                drawArc(
-                    color = trackColor,
-                    startAngle = 0f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    topLeft = rect.topLeft,
-                    size = rect.size,
-                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                )
-
-                var startAngle = -90f
-                validSlices.forEach { slice ->
-                    val sweepAngle = ((slice.value / total) * 360f).toFloat()
-                    val gap = if (validSlices.size > 1) 4f else 0f
-                    val effectiveSweep = (sweepAngle - gap).coerceAtLeast(1f)
-                    drawArc(
-                        color = slice.color,
-                        startAngle = startAngle + (gap / 2),
-                        sweepAngle = effectiveSweep,
-                        useCenter = false,
-                        topLeft = rect.topLeft,
-                        size = rect.size,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
-                    )
-                    startAngle += sweepAngle
-                }
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = Localization.total(lang).uppercase(),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = String.format(Locale.US, "%.2f €", totalAmount),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            validSlices.forEach { slice ->
-                val pct = ((slice.value / total) * 100).toInt()
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .then(
-                            if (slice.onClick != null) {
-                                Modifier.clickable { slice.onClick.invoke() }
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(slice.color)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${slice.label} ($pct%): ${String.format(Locale.US, "%.2f€", slice.value)}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AnalyticsScreen(
     expenses: List<Expense>,
     incomes: List<Income> = emptyList(),
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
+    recurringExpenses: List<RecurringExpense> = emptyList(),
+    savingsGoals: List<SavingsGoal> = emptyList(),
     appLanguage: String = "EN",
     isPro: Boolean = false,
+    canManageStructure: Boolean = true,
     onShowPremiumPaywall: (String) -> Unit = {},
     onExportReport: () -> Unit = {},
     onManageCategories: () -> Unit = {},
+    onOpenSavingsGoals: () -> Unit = {},
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit = {},
+    onSettleTransfer: (FamilyMember, FamilyMember, Double, Long) -> Unit = { _, _, _, _ -> },
     initialFilterScope: String = "MONTH",
     initialPeriodKey: String = "CURRENT_MONTH",
     initialYearKey: String? = null,
@@ -284,18 +70,16 @@ fun AnalyticsScreen(
     val lang = Localization.Language.fromCode(appLanguage)
     val isGreek = lang != Localization.Language.ENGLISH
     val context = LocalContext.current
-    var splitMode by remember { mutableIntStateOf(initialSplitMode) } // 0 = Ατομικά, 1 = Γονείς + Κοινά, 2 = Ισόποσα σε όλους, 3 = Ποιος Πλήρωσε
-    var chartTypeFamily by remember { mutableIntStateOf(0) } // 0 = Μπάρες, 1 = Πίτα (Requirement 6)
-    var chartTypeMembers by remember { mutableIntStateOf(0) } // 0 = Μπάρες, 1 = Πίτα (Requirement 6)
-    var chartTypeIncome by remember { mutableIntStateOf(0) } // 0 = Μπάρες, 1 = Πίτα
+    var splitMode by remember { mutableIntStateOf(initialSplitMode) }
+    var chartTypeFamily by remember { mutableIntStateOf(0) }
+    var chartTypeMembers by remember { mutableIntStateOf(0) }
+    var chartTypeIncome by remember { mutableIntStateOf(0) }
 
-    // 3 Period Modes: Month, Year, Total (Requirement 1)
-    var filterScope by remember { mutableStateOf(initialFilterScope) } // "MONTH", "YEAR", "ALL"
+    var filterScope by remember { mutableStateOf(initialFilterScope) }
 
-    // Month Selection State
     val currentMonthKey = remember { SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date()) }
     val currentMonthLabel = remember(lang) {
-        val cal = java.util.Calendar.getInstance()
+        val cal = Calendar.getInstance()
         SimpleDateFormat("LLLL yyyy", Localization.getDateLocale(lang)).format(cal.time).replaceFirstChar { it.uppercase() }
     }
 
@@ -308,7 +92,6 @@ fun AnalyticsScreen(
         set.toList().sortedDescending()
     }
 
-    // Year Selection State
     val currentYearKey = remember { SimpleDateFormat("yyyy", Locale.getDefault()).format(Date()) }
     val availableYears = remember(expenses, incomes) {
         val set = linkedSetOf<String>()
@@ -321,8 +104,6 @@ fun AnalyticsScreen(
 
     var selectedPeriodKey by remember { mutableStateOf(initialPeriodKey) }
     var selectedYearKey by remember { mutableStateOf(initialYearKey ?: currentYearKey) }
-    var showPeriodDropdown by remember { mutableStateOf(false) }
-    var showYearDropdown by remember { mutableStateOf(false) }
 
     val activeDrillDownPeriodKey = when (filterScope) {
         "ALL" -> "ALL"
@@ -330,7 +111,7 @@ fun AnalyticsScreen(
         else -> if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
     }
 
-    androidx.compose.runtime.LaunchedEffect(filterScope, selectedPeriodKey, selectedYearKey, splitMode) {
+    LaunchedEffect(filterScope, selectedPeriodKey, selectedYearKey, splitMode) {
         onAnalyticsStateChange(filterScope, selectedPeriodKey, selectedYearKey, splitMode)
     }
 
@@ -338,7 +119,7 @@ fun AnalyticsScreen(
         return try {
             val date = SimpleDateFormat("yyyy-MM", Locale.getDefault()).parse(key) ?: Date()
             SimpleDateFormat("LLLL yyyy", Localization.getDateLocale(lang)).format(date).replaceFirstChar { it.uppercase() }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             key
         }
     }
@@ -349,7 +130,51 @@ fun AnalyticsScreen(
         else -> if (selectedPeriodKey == "CURRENT_MONTH" || selectedPeriodKey == currentMonthKey) currentMonthLabel else getMonthLabel(selectedPeriodKey)
     }
 
-    // Filter expenses and incomes by selected scope (Month, Year, Total)
+    val selectedMonthYearPair = remember(selectedPeriodKey, currentMonthKey) {
+        val effKey = if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
+        val parts = effKey.split("-")
+        val nowCal = Calendar.getInstance()
+        val year = parts.getOrNull(0)?.toIntOrNull() ?: nowCal.get(Calendar.YEAR)
+        val monthOneBased = parts.getOrNull(1)?.toIntOrNull() ?: (nowCal.get(Calendar.MONTH) + 1)
+        Pair(year, (monthOneBased - 1).coerceIn(0, 11))
+    }
+
+    val settlePeriodTimestamp = remember(filterScope, selectedPeriodKey, selectedYearKey, currentMonthKey, currentYearKey) {
+        val now = System.currentTimeMillis()
+        when (filterScope) {
+            "MONTH" -> {
+                val effKey = if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
+                if (effKey == currentMonthKey) now
+                else {
+                    try {
+                        val cal = Calendar.getInstance()
+                        cal.time = SimpleDateFormat("yyyy-MM", Locale.US).parse(effKey) ?: Date(now)
+                        cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
+                        cal.set(Calendar.HOUR_OF_DAY, 12)
+                        cal.set(Calendar.MINUTE, 0)
+                        cal.timeInMillis
+                    } catch (_: Exception) {
+                        now
+                    }
+                }
+            }
+            "YEAR" -> {
+                if (selectedYearKey == currentYearKey) now
+                else {
+                    val y = selectedYearKey.toIntOrNull() ?: Calendar.getInstance().get(Calendar.YEAR)
+                    Calendar.getInstance().apply {
+                        set(Calendar.YEAR, y)
+                        set(Calendar.MONTH, Calendar.DECEMBER)
+                        set(Calendar.DAY_OF_MONTH, 31)
+                        set(Calendar.HOUR_OF_DAY, 12)
+                        set(Calendar.MINUTE, 0)
+                    }.timeInMillis
+                }
+            }
+            else -> now
+        }
+    }
+
     val periodExpenses = remember(expenses, filterScope, selectedPeriodKey, selectedYearKey) {
         when (filterScope) {
             "ALL" -> expenses
@@ -385,7 +210,6 @@ fun AnalyticsScreen(
     val netBalance = totalIncome - totalSpend
     val savingsRate = if (totalIncome > 0) ((netBalance / totalIncome) * 100).coerceIn(-100.0, 100.0) else 0.0
 
-    // Active recorded months for scaling category budgets when viewing "YEAR" (12) or "ALL" (months of active records)
     val activeRecordedMonthsCount = remember(expenses, incomes) {
         val fmt = SimpleDateFormat("yyyy-MM", Locale.US)
         val recordedMonths = mutableSetOf<String>()
@@ -402,9 +226,8 @@ fun AnalyticsScreen(
         }
     }
 
-    // 3 Smart Universal Statistics: Daily Average, Savings Ratio, Peak Day
     val daysInActivePeriod = remember(filterScope, selectedPeriodKey, selectedYearKey, periodExpenses) {
-        val cal = java.util.Calendar.getInstance()
+        val cal = Calendar.getInstance()
         when (filterScope) {
             "ALL" -> {
                 if (periodExpenses.isEmpty()) 1 else {
@@ -416,7 +239,7 @@ fun AnalyticsScreen(
             "YEAR" -> {
                 val curYear = SimpleDateFormat("yyyy", Locale.getDefault()).format(cal.time)
                 if (selectedYearKey == curYear) {
-                    maxOf(1, cal.get(java.util.Calendar.DAY_OF_YEAR))
+                    maxOf(1, cal.get(Calendar.DAY_OF_YEAR))
                 } else {
                     val y = selectedYearKey.toIntOrNull() ?: 2026
                     try {
@@ -428,13 +251,13 @@ fun AnalyticsScreen(
             }
             else -> {
                 if (selectedPeriodKey == "CURRENT_MONTH" || selectedPeriodKey == currentMonthKey) {
-                    maxOf(1, cal.get(java.util.Calendar.DAY_OF_MONTH))
+                    maxOf(1, cal.get(Calendar.DAY_OF_MONTH))
                 } else {
                     try {
                         val date = SimpleDateFormat("yyyy-MM", Locale.US).parse(selectedPeriodKey) ?: Date()
                         cal.time = date
-                        cal.getActualMaximum(java.util.Calendar.DAY_OF_MONTH)
-                    } catch (e: Exception) {
+                        cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                    } catch (_: Exception) {
                         30
                     }
                 }
@@ -450,26 +273,22 @@ fun AnalyticsScreen(
             val peak = dayMap.maxByOrNull { entry -> entry.value.sumOf { it.amount } }
             peak?.let { entry ->
                 val daySum = entry.value.sumOf { it.amount }
-                val parsedDate = try { fmtKey.parse(entry.key) ?: Date() } catch (e: Exception) { Date() }
+                val parsedDate = try { fmtKey.parse(entry.key) ?: Date() } catch (_: Exception) { Date() }
                 val disp = SimpleDateFormat("dd MMM", Localization.getDateLocale(lang)).format(parsedDate)
                 Triple(entry.key, disp, daySum)
             }
         }
     }
 
-    // Income breakdown by Member
     val memberIncomeMap = remember(members, periodIncomes) {
         members.associateWith { member ->
             periodIncomes.filter { it.memberId == member.id }.sumOf { it.amount }
         }
     }
     val unassignedMemberIncomes = remember(members, periodIncomes) {
-        periodIncomes.filter { inc ->
-            members.none { it.id == inc.memberId }
-        }.sumOf { it.amount }
+        periodIncomes.filter { inc -> members.none { it.id == inc.memberId } }.sumOf { it.amount }
     }
 
-    // Income breakdown by Category
     val categoryIncomeMap = remember(periodIncomes) {
         periodIncomes.groupBy { it.category }
             .mapValues { entry -> entry.value.sumOf { it.amount } }
@@ -481,19 +300,15 @@ fun AnalyticsScreen(
     val kidsMembers = remember(members) { members.filter { it.role.equals("Παιδί", ignoreCase = true) } }
     val hasFamilyWithKids = remember(parentsList, kidsMembers) { parentsList.isNotEmpty() && kidsMembers.isNotEmpty() }
 
-    // Available split modes:
-    // If hasFamilyWithKids: 0 = Individual, 1 = Parents, 2 = Kids, 3 = Who Paid
-    // If NOT hasFamilyWithKids: 0 = Individual, 3 = Who Paid
     val displayedMembers = remember(splitMode, hasFamilyWithKids, members, parentsList, kidsMembers) {
         when {
-            splitMode == 3 -> members // Ποιος Πλήρωσε
-            splitMode == 1 && hasFamilyWithKids -> parentsList // Γονείς
-            splitMode == 2 && hasFamilyWithKids -> kidsMembers // Παιδιά
-            else -> members // Ατομικά
+            splitMode == 3 -> members
+            splitMode == 1 && hasFamilyWithKids -> parentsList
+            splitMode == 2 && hasFamilyWithKids -> kidsMembers
+            else -> members
         }
     }
 
-    // Spend calculations (Individual, Parents, Kids, and Payer)
     val (individualSpendMap, commonHouseholdSpend, directParentsSpend, kidsSpend, payerSpendMap, memberSpendMap) = remember(
         periodExpenses, members, displayedMembers, splitMode, hasFamilyWithKids, parentsList
     ) {
@@ -514,7 +329,6 @@ fun AnalyticsScreen(
 
         var dirParents = 0.0
         var kSpend = 0.0
-
         members.forEach { m ->
             val spend = indSpendMap[m] ?: 0.0
             if (m.role.equals("Παιδί", ignoreCase = true)) {
@@ -532,7 +346,6 @@ fun AnalyticsScreen(
                     ?: members.find { it.name.equals(share.memberName, ignoreCase = true) }
                     ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
                     ?: members.firstOrNull()
-
                 if (payer != null) {
                     pSpendMap[payer] = (pSpendMap[payer] ?: 0.0) + share.amount
                 }
@@ -555,9 +368,7 @@ fun AnalyticsScreen(
                             0.0
                         }
                     }
-                    else -> {
-                        if (members.isNotEmpty()) commonSpend / members.size else 0.0
-                    }
+                    else -> if (members.isNotEmpty()) commonSpend / members.size else 0.0
                 }
                 ind + comShare
             }
@@ -568,15 +379,21 @@ fun AnalyticsScreen(
 
     val parentsTotalSpend = directParentsSpend + commonHouseholdSpend
 
-    // 4. Category budget analysis (matched by ID or normalized Greek name)
     val categorySpendMap = remember(categories, periodExpenses) {
         categories.associateWith { cat ->
             val catNorm = GreekVoiceParser.normalizeGreek(cat.name.trim().lowercase())
             periodExpenses.filter { exp ->
                 exp.categoryId == cat.id ||
-                (exp.categoryName.isNotBlank() && GreekVoiceParser.normalizeGreek(exp.categoryName.trim().lowercase()) == catNorm)
+                    (exp.categoryName.isNotBlank() && GreekVoiceParser.normalizeGreek(exp.categoryName.trim().lowercase()) == catNorm)
             }.sumOf { it.amount }
         }
+    }
+
+    val membersWithDeficit = members.mapNotNull { m ->
+        val paid = payerSpendMap[m] ?: 0.0
+        val income = memberIncomeMap[m] ?: 0.0
+        val deficit = paid - income
+        if (deficit > 0.01 && (paid > 0.0 || income > 0.0)) Triple(m, paid, income) else null
     }
 
     LazyColumn(
@@ -586,339 +403,32 @@ fun AnalyticsScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Period Selector Bar (Month, Year, Total - Requirement 1)
         item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("analytics_month_selector_card")
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 10.dp)
-                ) {
-                    // 3 Filter Buttons: "Μήνας", "Χρονιά", "Σύνολο"
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val scopes = listOf(
-                            Triple("MONTH", if (lang == Localization.Language.ENGLISH) "Month" else "Μήνας", Icons.Default.CalendarMonth),
-                            Triple("YEAR", if (lang == Localization.Language.ENGLISH) "Year" else "Χρονιά", Icons.Default.DateRange),
-                            Triple("ALL", if (lang == Localization.Language.ENGLISH) "Total" else "Σύνολο", Icons.Default.AllInclusive)
-                        )
-
-                        scopes.forEach { (scopeKey, label, icon) ->
-                            val isSelected = filterScope == scopeKey
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) Emerald700 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { filterScope = scopeKey }
-                                    .testTag("analytics_filter_${scopeKey.lowercase()}")
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = label,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Secondary Sub-row: Selection controls depending on scope
-                    when (filterScope) {
-                        "MONTH" -> {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        val effKey = if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
-                                        try {
-                                            val cal = java.util.Calendar.getInstance().apply {
-                                                time = SimpleDateFormat("yyyy-MM", Locale.getDefault()).parse(effKey) ?: Date()
-                                                add(java.util.Calendar.MONTH, -1)
-                                            }
-                                            val prevKey = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
-                                            selectedPeriodKey = if (prevKey == currentMonthKey) "CURRENT_MONTH" else prevKey
-                                        } catch (e: Exception) {
-                                            selectedPeriodKey = "CURRENT_MONTH"
-                                        }
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronLeft,
-                                        contentDescription = "Previous Month",
-                                        tint = Emerald700
-                                    )
-                                }
-
-                                Box(contentAlignment = Alignment.Center) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Emerald700.copy(alpha = 0.09f),
-                                        border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.25f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .clickable { showPeriodDropdown = true }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.CalendarMonth,
-                                                contentDescription = null,
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = if (selectedPeriodKey == "CURRENT_MONTH" || selectedPeriodKey == currentMonthKey) currentMonthLabel else getMonthLabel(selectedPeriodKey),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.ArrowDropDown,
-                                                contentDescription = Localization.selectMonthYear(lang),
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showPeriodDropdown,
-                                        onDismissRequest = { showPeriodDropdown = false }
-                                    ) {
-                                        DropdownMenuItem(
-                                            leadingIcon = {
-                                                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Emerald700, modifier = Modifier.size(16.dp))
-                                            },
-                                            text = {
-                                                Text(
-                                                    text = "${Localization.currentMonth(lang)} ($currentMonthLabel)",
-                                                    fontWeight = if (selectedPeriodKey == "CURRENT_MONTH" || selectedPeriodKey == currentMonthKey) FontWeight.Bold else FontWeight.Normal
-                                                )
-                                            },
-                                            onClick = {
-                                                selectedPeriodKey = "CURRENT_MONTH"
-                                                showPeriodDropdown = false
-                                            }
-                                        )
-                                        availableMonths.filter { it != currentMonthKey }.forEach { monthKey ->
-                                            val label = getMonthLabel(monthKey)
-                                            DropdownMenuItem(
-                                                leadingIcon = {
-                                                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Emerald700, modifier = Modifier.size(16.dp))
-                                                },
-                                                text = {
-                                                    Text(
-                                                        text = label,
-                                                        fontWeight = if (selectedPeriodKey == monthKey) FontWeight.Bold else FontWeight.Normal
-                                                    )
-                                                },
-                                                onClick = {
-                                                    selectedPeriodKey = monthKey
-                                                    showPeriodDropdown = false
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        val effKey = if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
-                                        try {
-                                            val cal = java.util.Calendar.getInstance().apply {
-                                                time = SimpleDateFormat("yyyy-MM", Locale.getDefault()).parse(effKey) ?: Date()
-                                                add(java.util.Calendar.MONTH, 1)
-                                            }
-                                            val nextKey = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(cal.time)
-                                            selectedPeriodKey = if (nextKey == currentMonthKey) "CURRENT_MONTH" else nextKey
-                                        } catch (e: Exception) {
-                                            selectedPeriodKey = "CURRENT_MONTH"
-                                        }
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = "Next Month",
-                                        tint = Emerald700
-                                    )
-                                }
-                            }
-                        }
-                        "YEAR" -> {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        val curY = selectedYearKey.toIntOrNull() ?: currentYearKey.toInt()
-                                        selectedYearKey = (curY - 1).toString()
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronLeft,
-                                        contentDescription = "Previous Year",
-                                        tint = Emerald700
-                                    )
-                                }
-
-                                Box(contentAlignment = Alignment.Center) {
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = Emerald700.copy(alpha = 0.09f),
-                                        border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.25f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .clickable { showYearDropdown = true }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.DateRange,
-                                                contentDescription = null,
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = if (lang == Localization.Language.ENGLISH) "Year $selectedYearKey" else "Έτος $selectedYearKey",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 14.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.ArrowDropDown,
-                                                contentDescription = null,
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showYearDropdown,
-                                        onDismissRequest = { showYearDropdown = false }
-                                    ) {
-                                        availableYears.forEach { year ->
-                                            DropdownMenuItem(
-                                                leadingIcon = {
-                                                    Icon(Icons.Default.DateRange, contentDescription = null, tint = Emerald700, modifier = Modifier.size(16.dp))
-                                                },
-                                                text = {
-                                                    Text(
-                                                        text = if (lang == Localization.Language.ENGLISH) "Year $year" else "Έτος $year",
-                                                        fontWeight = if (selectedYearKey == year) FontWeight.Bold else FontWeight.Normal
-                                                    )
-                                                },
-                                                onClick = {
-                                                    selectedYearKey = year
-                                                    showYearDropdown = false
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        val curY = selectedYearKey.toIntOrNull() ?: currentYearKey.toInt()
-                                        selectedYearKey = (curY + 1).toString()
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = "Next Year",
-                                        tint = Emerald700
-                                    )
-                                }
-                            }
-                        }
-                        "ALL" -> {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Emerald700.copy(alpha = 0.08f),
-                                border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.2f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AllInclusive,
-                                        contentDescription = null,
-                                        tint = Emerald700,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (lang == Localization.Language.ENGLISH)
-                                            "All-Time Records (${periodExpenses.size} expenses, ${periodIncomes.size} incomes)"
-                                        else
-                                            "Σύνολο Όλων των Εγγραφών (${periodExpenses.size} έξοδα, ${periodIncomes.size} έσοδα)",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Emerald700
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            AnalyticsPeriodSelectorCard(
+                filterScope = filterScope,
+                selectedPeriodKey = selectedPeriodKey,
+                selectedYearKey = selectedYearKey,
+                currentMonthKey = currentMonthKey,
+                currentMonthLabel = currentMonthLabel,
+                currentYearKey = currentYearKey,
+                availableMonths = availableMonths,
+                availableYears = availableYears,
+                periodExpensesCount = periodExpenses.size,
+                periodIncomesCount = periodIncomes.size,
+                lang = lang,
+                getMonthLabel = ::getMonthLabel,
+                onFilterScopeChange = { filterScope = it },
+                onSelectedPeriodKeyChange = { selectedPeriodKey = it },
+                onSelectedYearKeyChange = { selectedYearKey = it }
+            )
         }
 
-        // Feature 3: Monthly Budget Health & Exceeded Alerts Card
         item {
             BudgetAlertsCard(
                 expenses = periodExpenses,
                 categories = categories,
                 appLanguage = appLanguage,
-                onManageBudgets = onManageCategories,
+                onManageBudgets = if (canManageStructure) onManageCategories else ({}),
                 onCategoryClick = { cat ->
                     onDrillDownToHome(
                         HomeDrillDownRequest(
@@ -931,2454 +441,162 @@ fun AnalyticsScreen(
             )
         }
 
-        // Top KPI Card with Export Excel Button
         item {
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Emerald100,
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.PieChart,
-                                        contentDescription = null,
-                                        tint = Emerald700,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = Localization.statisticalAnalysis(lang),
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = activePeriodDisplay,
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
+            AnalyticsSummaryKpiCard(
+                activePeriodDisplay = activePeriodDisplay,
+                activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                totalIncome = totalIncome,
+                totalSpend = totalSpend,
+                netBalance = netBalance,
+                savingsRate = savingsRate,
+                periodIncomesCount = periodIncomes.size,
+                periodExpensesCount = periodExpenses.size,
+                dailyAverageExpense = dailyAverageExpense,
+                peakSpendingDayInfo = peakSpendingDayInfo,
+                lang = lang,
+                onDrillDownToHome = onDrillDownToHome
+            )
+        }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Triple KPI: Incomes, Expenses, Net Balance
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable {
-                                    onDrillDownToHome(
-                                        HomeDrillDownRequest(
-                                            periodKey = activeDrillDownPeriodKey,
-                                            typeFilter = "INCOME"
-                                        )
-                                    )
-                                },
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color(0xFF10B981).copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.28f))
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp)) {
-                                Text(Localization.incomes(lang), fontSize = 11.sp, color = Color(0xFF047857), fontWeight = FontWeight.SemiBold)
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = String.format(Locale.US, "+%.2f €", totalIncome),
-                                    fontSize = 14.5.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF059669)
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = Localization.entriesCount(periodIncomes.size, lang),
-                                    fontSize = 9.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable {
-                                    onDrillDownToHome(
-                                        HomeDrillDownRequest(
-                                            periodKey = activeDrillDownPeriodKey,
-                                            typeFilter = "EXPENSE"
-                                        )
-                                    )
-                                },
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color(0xFFEF4444).copy(alpha = 0.08f),
-                            border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.22f))
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp)) {
-                                Text(Localization.expenses(lang), fontSize = 11.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = String.format(Locale.US, "%.2f €", totalSpend),
-                                    fontSize = 14.5.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFFDC2626)
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = Localization.transactionsCount(periodExpenses.size, lang),
-                                    fontSize = 9.sp,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = (if (netBalance >= 0) Color(0xFF10B981) else Color(0xFFEF4444)).copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, (if (netBalance >= 0) Color(0xFF10B981) else Color(0xFFEF4444)).copy(alpha = 0.28f))
-                        ) {
-                            Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 9.dp)) {
-                                Text(Localization.netBalanceTitle(lang), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = String.format(Locale.US, "%s%.2f €", if (netBalance >= 0) "+" else "", netBalance),
-                                    fontSize = 14.5.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = if (netBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626)
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (totalIncome > 0) Localization.savingsRateLabel(savingsRate.toInt(), lang) else Localization.balanceLabel(lang),
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    softWrap = false,
-                                    color = if (netBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // 3 Universal Smart Statistics: Daily Average, Savings Ratio, Peak Spending Day
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Metric 1: Daily Average
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Emerald700.copy(alpha = 0.12f),
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.CalendarMonth,
-                                            contentDescription = null,
-                                            tint = Emerald700,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = Localization.dailyAverageTitle(lang),
-                                    fontSize = 10.5.sp,
-                                    lineHeight = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    minLines = 2,
-                                    maxLines = 2
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = String.format(Locale.US, "%.2f €", dailyAverageExpense),
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = Localization.dailyAverageUnit(lang),
-                                    fontSize = 9.5.sp,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        // Metric 2: Savings Ratio
-                        val savingsColor = if (netBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626)
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = savingsColor.copy(alpha = 0.08f),
-                            border = BorderStroke(1.dp, savingsColor.copy(alpha = 0.22f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = savingsColor.copy(alpha = 0.12f),
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.TrendingUp,
-                                            contentDescription = null,
-                                            tint = savingsColor,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = Localization.savingsRatioTitle(lang),
-                                    fontSize = 10.5.sp,
-                                    lineHeight = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    minLines = 2,
-                                    maxLines = 2
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = if (totalIncome > 0) String.format(Locale.US, "%s%.1f%%", if (savingsRate >= 0) "+" else "", savingsRate) else "0.0%",
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = savingsColor,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = if (netBalance >= 0) Localization.withinLimit(lang) else Localization.deficitLabel(lang),
-                                    fontSize = 9.5.sp,
-                                    color = savingsColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
-                        // Metric 3: Peak Day
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(14.dp))
-                                .then(
-                                    if (peakSpendingDayInfo != null) {
-                                        Modifier.clickable {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "EXPENSE",
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = "${Localization.peakDayTitle(lang)}: ${peakSpendingDayInfo.second}",
-                                                        exactDayKey = peakSpendingDayInfo.first
-                                                    )
-                                                )
-                                            )
-                                        }
-                                    } else {
-                                        Modifier
-                                    }
-                                ),
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Color(0xFFEA580C).copy(alpha = 0.12f),
-                                    modifier = Modifier.size(26.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.ReceiptLong,
-                                            contentDescription = null,
-                                            tint = Color(0xFFEA580C),
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = Localization.peakDayTitle(lang),
-                                    fontSize = 10.5.sp,
-                                    lineHeight = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    minLines = 2,
-                                    maxLines = 2
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = peakSpendingDayInfo?.let { String.format(Locale.US, "%.0f €", it.third) } ?: "-",
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1
-                                )
-                                Text(
-                                    text = peakSpendingDayInfo?.second ?: Localization.noPeakDay(lang),
-                                    fontSize = 9.5.sp,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
+        if (filterScope == "MONTH") {
+            item {
+                AnalyticsMonthForecastCard(
+                    allExpenses = expenses,
+                    allIncomes = incomes,
+                    recurringExpenses = recurringExpenses,
+                    selectedYear = selectedMonthYearPair.first,
+                    selectedMonthZeroIndexed = selectedMonthYearPair.second,
+                    lang = lang
+                )
             }
         }
 
-        // Section: Έσοδα Μελών Οικογένειας & Κατηγορίες Εσόδων
         item {
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f).padding(end = 8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFF10B981).copy(alpha = 0.15f),
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.TrendingUp,
-                                        contentDescription = null,
-                                        tint = Color(0xFF059669),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = Localization.familyIncome(lang),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        // Bar vs Pie icon-only toggle
-                        ChartTypeToggle(
-                            selectedType = chartTypeIncome,
-                            onSelectType = { chartTypeIncome = it },
-                            activeColor = Color(0xFF059669),
-                            appLanguage = appLanguage
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    if (periodIncomes.isEmpty()) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = Localization.noIncomesYet(lang),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = Localization.registerIncomeHint(lang),
-                                    fontSize = 11.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                        }
-                    } else {
-                        val safeTotalIncome = totalIncome.coerceAtLeast(1.0)
-
-                        if (chartTypeIncome == 1) {
-                            // Pie Chart for Member Incomes
-                            val incomeSlices = members.mapNotNull { m ->
-                                val inc = memberIncomeMap[m] ?: 0.0
-                                if (inc > 0.001) {
-                                    PieChartSlice(
-                                        label = m.name,
-                                        value = inc,
-                                        color = Color(m.avatarColorHex),
-                                        onClick = {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "INCOME",
-                                                    memberId = m.id,
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = "${Localization.income(lang)}: ${m.name}",
-                                                        exactMemberId = m.id
-                                                    )
-                                                )
-                                            )
-                                        }
-                                    )
-                                } else null
-                            } + if (unassignedMemberIncomes > 0.001) {
-                                listOf(
-                                    PieChartSlice(
-                                        label = Localization.commonOther(lang),
-                                        value = unassignedMemberIncomes,
-                                        color = Color(0xFF10B981),
-                                        onClick = {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "INCOME",
-                                                    memberId = -1L,
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = Localization.commonOtherIncome(lang),
-                                                        exactMemberId = -1L
-                                                    )
-                                                )
-                                            )
-                                        }
-                                    )
-                                )
-                            } else emptyList()
-
-                            PieChartView(
-                                slices = incomeSlices,
-                                totalAmount = totalIncome,
-                                appLanguage = appLanguage
-                            )
-                        } else {
-                            // Bar List for Member Incomes
-                            val maxIncome = (memberIncomeMap.values + unassignedMemberIncomes).maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
-
-                            members.forEach { member ->
-                                val inc = memberIncomeMap[member] ?: 0.0
-                                val percent = ((inc / safeTotalIncome) * 100).toInt()
-                                val progress = (inc / maxIncome).toFloat().coerceIn(0f, 1f)
-                                val avatarColor = Color(member.avatarColorHex)
-
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "INCOME",
-                                                    memberId = member.id,
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = "${Localization.income(lang)}: ${member.name}",
-                                                        exactMemberId = member.id
-                                                    )
-                                                )
-                                            )
-                                        }
-                                        .padding(vertical = 6.dp, horizontal = 2.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .background(avatarColor),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = member.name.take(1),
-                                                    color = Color.White,
-                                                    fontSize = 12.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text(
-                                                    text = member.name,
-                                                    fontSize = 13.5.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                                Text(
-                                                    text = "${Localization.translateRole(member.role, lang)} • ${Localization.percentOfTotalIncome(percent, lang)}",
-                                                    fontSize = 10.5.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-
-                                        Text(
-                                            text = String.format(Locale.US, "+%.2f €", inc),
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = if (inc > 0) Color(0xFF059669) else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    LinearProgressIndicator(
-                                        progress = { progress },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(CircleShape),
-                                        color = if (inc > 0) avatarColor else Color.Transparent,
-                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                }
-                            }
-
-                            if (unassignedMemberIncomes > 0.01) {
-                                val unassignedPct = ((unassignedMemberIncomes / safeTotalIncome) * 100).toInt()
-                                val unassignedProgress = (unassignedMemberIncomes / maxIncome).toFloat().coerceIn(0f, 1f)
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .clickable {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "INCOME",
-                                                    memberId = -1L,
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = Localization.commonOtherIncome(lang),
-                                                        exactMemberId = -1L
-                                                    )
-                                                )
-                                            )
-                                        }
-                                        .padding(vertical = 6.dp, horizontal = 2.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(0xFF10B981)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Person,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text(
-                                                    text = Localization.commonOtherIncome(lang),
-                                                    fontSize = 13.5.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                                Text(
-                                                    text = Localization.unassignedMemberIncome(unassignedPct, lang),
-                                                    fontSize = 10.5.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                        }
-
-                                        Text(
-                                            text = String.format(Locale.US, "+%.2f €", unassignedMemberIncomes),
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Black,
-                                            color = Color(0xFF059669)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    LinearProgressIndicator(
-                                        progress = { unassignedProgress },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(6.dp)
-                                            .clip(CircleShape),
-                                        color = Color(0xFF10B981),
-                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                }
-                            }
-                        }
-
-                        // Categories of Income breakdown
-                        if (categoryIncomeMap.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(14.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Text(
-                                text = Localization.incomeSourcesByCategory(lang),
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                categoryIncomeMap.forEach { (catName, amount) ->
-                                    val catPct = ((amount / safeTotalIncome) * 100).toInt()
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = Color(0xFF059669).copy(alpha = 0.10f),
-                                        border = BorderStroke(1.dp, Color(0xFF059669).copy(alpha = 0.25f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .clickable {
-                                                onDrillDownToHome(
-                                                    HomeDrillDownRequest(
-                                                        periodKey = activeDrillDownPeriodKey,
-                                                        typeFilter = "INCOME",
-                                                        specialFilter = AnalyticsSpecialFilter(
-                                                            badgeLabel = "${Localization.income(lang)}: ${Localization.translateCategory(catName, lang)}",
-                                                            incomeCategory = catName
-                                                        )
-                                                    )
-                                                )
-                                            }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = Localization.translateCategory(catName, lang),
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF047857)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = String.format(Locale.US, "+%.2f€ (%d%%)", amount, catPct),
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Color(0xFF059669)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Section: Deficit Alert if any member paid more in expenses than declared income
-        val membersWithDeficit = members.mapNotNull { m ->
-            val paid = payerSpendMap[m] ?: 0.0
-            val income = memberIncomeMap[m] ?: 0.0
-            val deficit = paid - income
-            if (deficit > 0.01 && (paid > 0.0 || income > 0.0)) {
-                Triple(m, paid, income)
-            } else null
+            AnalyticsFamilyIncomeCard(
+                periodIncomes = periodIncomes,
+                members = members,
+                memberIncomeMap = memberIncomeMap,
+                unassignedMemberIncomes = unassignedMemberIncomes,
+                categoryIncomeMap = categoryIncomeMap,
+                totalIncome = totalIncome,
+                chartTypeIncome = chartTypeIncome,
+                activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                appLanguage = appLanguage,
+                lang = lang,
+                onSelectChartTypeIncome = { chartTypeIncome = it },
+                onDrillDownToHome = onDrillDownToHome
+            )
         }
 
         if (membersWithDeficit.isNotEmpty()) {
             item {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.45f)),
-                    modifier = Modifier.fillMaxWidth().testTag("members_deficit_alert_card")
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFEF4444).copy(alpha = 0.14f),
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Error,
-                                        contentDescription = null,
-                                        tint = Color(0xFFDC2626),
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = Localization.memberIncomeDeficitTitle(lang),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFDC2626)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            membersWithDeficit.forEach { (m, paid, income) ->
-                                val deficit = paid - income
-                                Surface(
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = Color(0xFFFEF2F2),
-                                    border = BorderStroke(1.dp, Color(0xFFFCA5A5).copy(alpha = 0.5f)),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.weight(1f, fill = false)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(32.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color(m.avatarColorHex)),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = m.name.take(1),
-                                                    color = Color.White,
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(10.dp))
-                                            Column {
-                                                Text(
-                                                    text = m.name,
-                                                    fontSize = 13.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF991B1B)
-                                                )
-                                                Text(
-                                                    text = "Έσοδα: ${String.format(Locale.US, "%.1f€", income)} • Έξοδα: ${String.format(Locale.US, "%.1f€", paid)}",
-                                                    fontSize = 11.sp,
-                                                    color = Color(0xFFB91C1C)
-                                                )
-                                            }
-                                        }
-
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = Color(0xFFDC2626)
-                                        ) {
-                                            Text(
-                                                text = "-${String.format(Locale.US, "%.2f €", deficit)}",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color.White,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                AnalyticsMemberDeficitAlertCard(
+                    membersWithDeficit = membersWithDeficit,
+                    lang = lang
+                )
             }
         }
 
-        // Section: Γονείς vs Παιδιά vs Κοινό (ΜΟΝΟ αν υπάρχουν γονείς και παιδιά)
         if (hasFamilyWithKids) {
             item {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f).padding(end = 8.dp)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = Color(0xFF0284C7).copy(alpha = 0.12f),
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.FamilyRestroom,
-                                            contentDescription = null,
-                                            tint = Color(0xFF0284C7),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    text = Localization.expenseDistribution(lang),
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            // Bar vs Pie icon-only toggle
-                            ChartTypeToggle(
-                                selectedType = chartTypeFamily,
-                                onSelectType = { chartTypeFamily = it },
-                                activeColor = Emerald700,
-                                appLanguage = appLanguage
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        val safeTotal = totalSpend.coerceAtLeast(1.0)
-                        val parentsPercent = ((parentsTotalSpend / safeTotal) * 100).toInt()
-                        val kidsPercent = ((kidsSpend / safeTotal) * 100).toInt()
-
-                        if (chartTypeFamily == 1) {
-                            // Pie Chart View
-                            PieChartView(
-                                slices = listOf(
-                                    PieChartSlice(
-                                        label = Localization.parents(lang),
-                                        value = parentsTotalSpend,
-                                        color = Color(0xFF0284C7),
-                                        onClick = {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "EXPENSE",
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = Localization.parents(lang),
-                                                        roleGroupFilter = "PARENTS"
-                                                    )
-                                                )
-                                            )
-                                        }
-                                    ),
-                                    PieChartSlice(
-                                        label = Localization.children(lang),
-                                        value = kidsSpend,
-                                        color = Color(0xFF10B981),
-                                        onClick = {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "EXPENSE",
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = Localization.children(lang),
-                                                        roleGroupFilter = "KIDS"
-                                                    )
-                                                )
-                                            )
-                                        }
-                                    )
-                                ),
-                                totalAmount = totalSpend,
-                                appLanguage = appLanguage
-                            )
-                        } else {
-                            // Stacked visual bar
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(12.dp)
-                                    .clip(CircleShape)
-                            ) {
-                                if (parentsTotalSpend > 0) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(parentsTotalSpend.toFloat().coerceAtLeast(0.001f))
-                                            .fillMaxSize()
-                                            .background(Color(0xFF0284C7))
-                                            .clickable {
-                                                onDrillDownToHome(
-                                                    HomeDrillDownRequest(
-                                                        periodKey = activeDrillDownPeriodKey,
-                                                        typeFilter = "EXPENSE",
-                                                        specialFilter = AnalyticsSpecialFilter(
-                                                            badgeLabel = Localization.parents(lang),
-                                                            roleGroupFilter = "PARENTS"
-                                                        )
-                                                    )
-                                                )
-                                            }
-                                    )
-                                }
-                                if (kidsSpend > 0) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(kidsSpend.toFloat().coerceAtLeast(0.001f))
-                                            .fillMaxSize()
-                                            .background(Color(0xFF10B981))
-                                            .clickable {
-                                                onDrillDownToHome(
-                                                    HomeDrillDownRequest(
-                                                        periodKey = activeDrillDownPeriodKey,
-                                                        typeFilter = "EXPENSE",
-                                                        specialFilter = AnalyticsSpecialFilter(
-                                                            badgeLabel = Localization.children(lang),
-                                                            roleGroupFilter = "KIDS"
-                                                        )
-                                                    )
-                                                )
-                                            }
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
-                            // Legend and figures
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceAround
-                            ) {
-                                // Parents
-                                Column(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "EXPENSE",
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = Localization.parents(lang),
-                                                        roleGroupFilter = "PARENTS"
-                                                    )
-                                                )
-                                            )
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF0284C7)))
-                                        Spacer(modifier = Modifier.width(5.dp))
-                                        Text("${Localization.parents(lang)} ($parentsPercent%)", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = String.format(Locale.US, "%.2f €", parentsTotalSpend),
-                                        fontSize = 13.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF0284C7)
-                                    )
-                                }
-
-                                // Kids
-                                Column(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            onDrillDownToHome(
-                                                HomeDrillDownRequest(
-                                                    periodKey = activeDrillDownPeriodKey,
-                                                    typeFilter = "EXPENSE",
-                                                    specialFilter = AnalyticsSpecialFilter(
-                                                        badgeLabel = Localization.children(lang),
-                                                        roleGroupFilter = "KIDS"
-                                                    )
-                                                )
-                                            )
-                                        }
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF10B981)))
-                                        Spacer(modifier = Modifier.width(5.dp))
-                                        Text("${Localization.children(lang)} ($kidsPercent%)", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                                    }
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = String.format(Locale.US, "%.2f €", kidsSpend),
-                                        fontSize = 13.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF10B981)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                AnalyticsFamilyVsKidsCard(
+                    parentsTotalSpend = parentsTotalSpend,
+                    kidsSpend = kidsSpend,
+                    totalSpend = totalSpend,
+                    chartTypeFamily = chartTypeFamily,
+                    activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                    appLanguage = appLanguage,
+                    lang = lang,
+                    onSelectChartTypeFamily = { chartTypeFamily = it },
+                    onDrillDownToHome = onDrillDownToHome
+                )
             }
 
-            // Dedicated Card: Έξοδα Γονέων για τα Παιδιά
             item {
-                Card(
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    border = BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth().testTag("kids_spending_highlight_card")
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f, fill = false)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = Color(0xFF6366F1).copy(alpha = 0.12f),
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.FamilyRestroom,
-                                            contentDescription = null,
-                                            tint = Color(0xFF4F46E5),
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Parents' Expenses for Children" else "Έξοδα Γονέων για τα Παιδιά",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFF4F46E5).copy(alpha = 0.10f)
-                            ) {
-                                Text(
-                                    text = String.format(Locale.US, "%.2f €", kidsSpend),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF4338CA),
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Per-child breakdown
-                        if (kidsMembers.isEmpty()) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = Localization.noKidsRegisteredHint(lang),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(14.dp)
-                                )
-                            }
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                kidsMembers.forEach { kid ->
-                                    val kidSpend = individualSpendMap[kid] ?: 0.0
-                                    val kidPercent = if (kidsSpend > 0) (kidSpend / kidsSpend).toFloat().coerceIn(0f, 1f) else 0f
-                                    val kidColor = Color(kid.avatarColorHex)
-
-                                    Surface(
-                                        shape = RoundedCornerShape(14.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .clickable {
-                                                onDrillDownToHome(
-                                                    HomeDrillDownRequest(
-                                                        periodKey = activeDrillDownPeriodKey,
-                                                        typeFilter = "EXPENSE",
-                                                        memberId = kid.id,
-                                                        specialFilter = AnalyticsSpecialFilter(
-                                                            badgeLabel = kid.name,
-                                                            exactMemberId = kid.id
-                                                        )
-                                                    )
-                                                )
-                                            }
-                                    ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(30.dp)
-                                                            .clip(CircleShape)
-                                                            .background(kidColor),
-                                                        contentAlignment = Alignment.Center
-                                                    ) {
-                                                        Text(
-                                                            text = kid.name.take(1),
-                                                            color = Color.White,
-                                                            fontSize = 12.sp,
-                                                            fontWeight = FontWeight.Bold
-                                                        )
-                                                    }
-                                                    Spacer(modifier = Modifier.width(10.dp))
-                                                    Column {
-                                                        Text(
-                                                            text = kid.name,
-                                                            fontSize = 13.5.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.onSurface
-                                                        )
-                                                        Text(
-                                                            text = if (lang == Localization.Language.ENGLISH) "100% Covered by parents" else "🛡️ 100% Κάλυψη από γονείς",
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Medium,
-                                                            color = Emerald700
-                                                        )
-                                                    }
-                                                }
-
-                                                Text(
-                                                    text = String.format(Locale.US, "%.2f €", kidSpend),
-                                                    fontSize = 14.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-
-                                            if (kidsSpend > 0) {
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                                LinearProgressIndicator(
-                                                    progress = { kidPercent },
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(5.dp)
-                                                        .clip(CircleShape),
-                                                    color = kidColor,
-                                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                AnalyticsParentsForKidsCard(
+                    kidsMembers = kidsMembers,
+                    individualSpendMap = individualSpendMap,
+                    kidsSpend = kidsSpend,
+                    activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                    lang = lang,
+                    onDrillDownToHome = onDrillDownToHome
+                )
             }
         }
 
-        // Section: Καταμερισμός ανά Μέλος Οικογένειας
         item {
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = Localization.breakdownByMember(lang),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f).padding(end = 8.dp)
-                        )
-
-                        // Bar vs Pie icon-only toggle
-                        ChartTypeToggle(
-                            selectedType = chartTypeMembers,
-                            onSelectType = { chartTypeMembers = it },
-                            activeColor = Emerald700,
-                            appLanguage = appLanguage
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Mode selection modern segmented pill control:
-                    // If family with parents & kids: Individual (0), Parents (1), Kids (2), Who Paid (3)
-                    // Otherwise: Individual (0), Who Paid (3)
-                    val availableModes = if (hasFamilyWithKids) {
-                        listOf(
-                            0 to Localization.individualMode(lang),
-                            1 to Localization.parentsMode(lang),
-                            2 to Localization.kidsMode(lang),
-                            3 to (if (lang == Localization.Language.ENGLISH) "Who Paid" else "Ποιος Πλήρωσε")
-                        )
-                    } else {
-                        listOf(
-                            0 to Localization.individualMode(lang),
-                            3 to (if (lang == Localization.Language.ENGLISH) "Who Paid" else "Ποιος Πλήρωσε")
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(modifier = Modifier.padding(3.dp)) {
-                            availableModes.forEach { (modeIndex, title) ->
-                                val isSelected = splitMode == modeIndex
-                                val bgColor by animateColorAsState(
-                                    targetValue = if (isSelected) Emerald700 else Color.Transparent,
-                                    animationSpec = tween(220),
-                                    label = "split_tab_bg_$modeIndex"
-                                )
-                                val textColor by animateColorAsState(
-                                    targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    animationSpec = tween(220),
-                                    label = "split_tab_text_$modeIndex"
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(11.dp),
-                                    color = bgColor,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { splitMode = modeIndex }
-                                        .testTag("split_mode_tab_$modeIndex")
-                                ) {
-                                    Text(
-                                        text = title,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = textColor,
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                        modifier = Modifier.padding(vertical = 8.dp),
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    val triggerMemberBreakdownDrillDown: (com.example.data.entity.FamilyMember) -> Unit = { member ->
-                        val req = when (splitMode) {
-                            3 -> HomeDrillDownRequest(
-                                periodKey = activeDrillDownPeriodKey,
-                                typeFilter = "EXPENSE",
-                                specialFilter = AnalyticsSpecialFilter(
-                                    badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${member.name}",
-                                    payerMemberId = member.id
-                                )
-                            )
-                            2 -> HomeDrillDownRequest(
-                                periodKey = activeDrillDownPeriodKey,
-                                typeFilter = "EXPENSE",
-                                memberId = member.id,
-                                specialFilter = AnalyticsSpecialFilter(
-                                    badgeLabel = member.name,
-                                    exactMemberId = member.id
-                                )
-                            )
-                            else -> HomeDrillDownRequest(
-                                periodKey = activeDrillDownPeriodKey,
-                                typeFilter = "EXPENSE",
-                                memberId = member.id
-                            )
-                        }
-                        onDrillDownToHome(req)
-                    }
-
-                    if (displayedMembers.isEmpty()) {
-                        Text(
-                            text = if (splitMode == 2) Localization.noKidsRegisteredHint(lang) else Localization.noMembersInCategoryHint(lang),
-                            fontSize = 12.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    } else if (chartTypeMembers == 1) {
-                        // Pie Chart View for members
-                        val memberSlices = displayedMembers.map { m ->
-                            PieChartSlice(
-                                label = m.name,
-                                value = memberSpendMap[m] ?: 0.0,
-                                color = Color(m.avatarColorHex),
-                                onClick = { triggerMemberBreakdownDrillDown(m) }
-                            )
-                        }
-
-                        val displayedTotal = memberSpendMap.values.sum()
-                        PieChartView(
-                            slices = memberSlices,
-                            totalAmount = displayedTotal,
-                            appLanguage = appLanguage
-                        )
-                    } else {
-                        // Bar View for members
-                        val safeMax = memberSpendMap.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
-
-                        displayedMembers.forEach { member ->
-                            val spend = memberSpendMap[member] ?: 0.0
-                            val ind = individualSpendMap[member] ?: 0.0
-                            val com = (spend - ind).coerceAtLeast(0.0)
-                            val progress = (spend / safeMax).toFloat().coerceIn(0f, 1f)
-                            val avatarColor = Color(member.avatarColorHex)
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { triggerMemberBreakdownDrillDown(member) }
-                                    .padding(vertical = 7.dp, horizontal = 2.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(28.dp)
-                                                .clip(CircleShape)
-                                                .background(avatarColor),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text(
-                                                text = member.name.take(1),
-                                                color = Color.White,
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    text = member.name,
-                                                    fontSize = 13.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                                val mPaid = payerSpendMap[member] ?: 0.0
-                                                val mInc = memberIncomeMap[member] ?: 0.0
-                                                if (mPaid > mInc && (mPaid > 0.0 || mInc > 0.0)) {
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Surface(
-                                                        shape = RoundedCornerShape(4.dp),
-                                                        color = Color(0xFFEF4444).copy(alpha = 0.12f)
-                                                    ) {
-                                                        Text(
-                                                            text = Localization.expensesExceedIncomeTag(lang),
-                                                            fontSize = 9.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Color(0xFFDC2626),
-                                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                            val subtitle = when (splitMode) {
-                                                3 -> if (lang == Localization.Language.ENGLISH) "Total paid: ${String.format(Locale.US, "%.2f €", spend)}" else "Πλήρωσε συνολικά: ${String.format(Locale.US, "%.2f €", spend)}"
-                                                0 -> if (com > 0.01) {
-                                                    if (lang == Localization.Language.ENGLISH) "Direct: ${String.format(Locale.US, "%.1f€", ind)} • Shared: ${String.format(Locale.US, "%.1f€", com)}"
-                                                    else "Ατομικά: ${String.format(Locale.US, "%.1f€", ind)} • Κοινό: ${String.format(Locale.US, "%.1f€", com)}"
-                                                } else {
-                                                    Localization.translateRole(member.role, lang)
-                                                }
-                                                else -> Localization.translateRole(member.role, lang)
-                                            }
-                                            Text(
-                                                text = subtitle,
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-
-                                    Text(
-                                        text = String.format(Locale.US, "%.2f €", spend),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(6.dp))
-
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(6.dp)
-                                        .clip(CircleShape),
-                                    color = avatarColor,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            AnalyticsMembersBreakdownCard(
+                displayedMembers = displayedMembers,
+                memberSpendMap = memberSpendMap,
+                individualSpendMap = individualSpendMap,
+                payerSpendMap = payerSpendMap,
+                memberIncomeMap = memberIncomeMap,
+                hasFamilyWithKids = hasFamilyWithKids,
+                splitMode = splitMode,
+                chartTypeMembers = chartTypeMembers,
+                activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                appLanguage = appLanguage,
+                isGreek = isGreek,
+                lang = lang,
+                onSplitModeChange = { splitMode = it },
+                onChartTypeMembersChange = { chartTypeMembers = it },
+                onDrillDownToHome = onDrillDownToHome
+            )
         }
 
-        // Section: Έλεγχος Budgets ανά Κατηγορία
         item {
-            Card(
-                shape = RoundedCornerShape(22.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Emerald100,
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.AccountBalanceWallet,
-                                        contentDescription = null,
-                                        tint = Emerald700,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = Localization.budgetMonitoring(lang),
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+            AnalyticsCategoryBudgetsCard(
+                categories = categories,
+                categorySpendMap = categorySpendMap,
+                budgetMultiplier = budgetMultiplier,
+                filterScope = filterScope,
+                activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                lang = lang,
+                onDrillDownToHome = onDrillDownToHome
+            )
+        }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = Localization.categoriesCount(categories.size, lang),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (budgetMultiplier > 1) {
-                                val scopeSubtitle = if (filterScope == "YEAR") {
-                                    if (lang == Localization.Language.ENGLISH) "Yearly (x12 months)" else "Ετήσιο (x12 μήνες)"
-                                } else {
-                                    if (lang == Localization.Language.ENGLISH) "Total (x$budgetMultiplier months)" else "Σύνολο (x$budgetMultiplier μήνες)"
-                                }
-                                Text(
-                                    text = scopeSubtitle,
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Emerald700
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    val activeCategories = categories
-                        .filter { (categorySpendMap[it] ?: 0.0) > 0.01 || it.monthlyBudget > 0.01 }
-                        .sortedWith(
-                            compareByDescending<ExpenseCategory> { cat ->
-                                val spent = categorySpendMap[cat] ?: 0.0
-                                val budget = cat.monthlyBudget * budgetMultiplier
-                                if (budget > 0.0) spent / budget else 0.0
-                            }.thenByDescending { categorySpendMap[it] ?: 0.0 }
-                        )
-                    val displayedCats = if (activeCategories.isNotEmpty()) {
-                        activeCategories
-                    } else {
-                        categories.sortedWith(
-                            compareByDescending<ExpenseCategory> { cat ->
-                                val spent = categorySpendMap[cat] ?: 0.0
-                                val budget = cat.monthlyBudget * budgetMultiplier
-                                if (budget > 0.0) spent / budget else 0.0
-                            }.thenByDescending { categorySpendMap[it] ?: 0.0 }
-                        ).take(6)
-                    }
-
-                    if (displayedCats.isEmpty()) {
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "No expenses recorded for this period." else "Δεν υπάρχουν καταγεγραμμένα έξοδα για αυτή την περίοδο.",
-                            fontSize = 12.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        )
-                    } else {
-                        displayedCats.forEach { cat ->
-                            val spent = categorySpendMap[cat] ?: 0.0
-                            val budget = cat.monthlyBudget * budgetMultiplier
-                            val ratio = if (budget > 0) spent / budget else 0.0
-                            val progress = ratio.toFloat().coerceIn(0f, 1f)
-
-                            val isExact = budget > 0 && (Math.abs(spent - budget) < 0.05 || (ratio >= 0.999 && ratio <= 1.001))
-                            val isExceeded = budget > 0 && spent > budget + 0.05
-                            val isWarning = budget > 0 && !isExact && !isExceeded && ratio >= 0.75
-
-                            val statusText = when {
-                                budget <= 0 -> "${String.format(Locale.US, "%.2f", spent)} €"
-                                isExceeded -> Localization.exceededBudget(lang)
-                                isWarning -> Localization.warningBudget(lang)
-                                else -> Localization.withinLimit(lang)
-                            }
-
-                            val barColor = when {
-                                isExceeded -> Color(0xFFEF4444)
-                                isWarning -> Color(0xFFF59E0B)
-                                else -> Emerald700
-                            }
-
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        onDrillDownToHome(
-                                            HomeDrillDownRequest(
-                                                periodKey = activeDrillDownPeriodKey,
-                                                typeFilter = "EXPENSE",
-                                                categoryId = cat.id
-                                            )
-                                        )
-                                    }
-                                    .padding(vertical = 5.dp, horizontal = 2.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(26.dp)
-                                                .clip(RoundedCornerShape(7.dp))
-                                                .background(Color(cat.colorHex).copy(alpha = 0.15f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = CategoryIconHelper.getIcon(cat.iconKey),
-                                                contentDescription = null,
-                                                tint = Color(cat.colorHex),
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = Localization.translateCategory(cat.name, lang),
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (budget > 0) {
-                                            val budgetFormatted = if (budget % 1.0 == 0.0) String.format(Locale.US, "%.0f€", budget) else String.format(Locale.US, "%.2f€", budget)
-                                            Text(
-                                                text = "${String.format(Locale.US, "%.2f€", spent)} / $budgetFormatted",
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = barColor.copy(alpha = 0.12f)
-                                            ) {
-                                                Text(
-                                                    text = "${(ratio * 100).toInt()}%",
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = barColor,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        } else {
-                                            Text(
-                                                text = String.format(Locale.US, "%.2f €", spent),
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Emerald700
-                                            )
-                                        }
-                                    }
-                                }
-
-                                if (budget > 0) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    LinearProgressIndicator(
-                                        progress = { progress },
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(5.dp)
-                                            .clip(CircleShape),
-                                        color = barColor,
-                                        trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+        val hasPeriodGoalDeposits = periodExpenses.any { SavingsGoalExpenseLinkHelper.isGoalDepositExpense(it) }
+        if (savingsGoals.isNotEmpty() || hasPeriodGoalDeposits) {
+            item {
+                AnalyticsSavingsGoalsCard(
+                    savingsGoals = savingsGoals,
+                    periodExpenses = periodExpenses,
+                    categories = categories,
+                    activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                    lang = lang,
+                    onOpenSavingsGoals = onOpenSavingsGoals,
+                    onDrillDownToHome = onDrillDownToHome
+                )
             }
         }
 
-        // Section: Εκκαθάριση Εξόδων (Expense Settle-Up) - ALWAYS expanded, without toggle arrow, no subtitle
         if (members.size >= 2) {
             item {
-                val isGreek = lang != Localization.Language.ENGLISH
-                val clipboardManager = LocalClipboardManager.current
-                val settleUpResult = remember(periodExpenses, members) {
-                    SettleUpCalculator.calculate(periodExpenses, members)
-                }
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("settle_up_analytics_card"),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(18.dp)
-                    ) {
-                        // Header with icon, title and status pill (no arrow button, no subtitle "Ποιος χρωστάει σε ποιον")
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.primaryContainer,
-                                    modifier = Modifier.size(38.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.SwapHoriz,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = if (isGreek) "Εκκαθάριση Εξόδων" else "Expense Settle-Up",
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Emerald700.copy(alpha = 0.12f)
-                                    ) {
-                                        Text(
-                                            text = if (settleUpResult.isBalanced) (if (isGreek) "ΙΣΟΣΚΕΛΙΣΜΕΝΟ" else "BALANCED") else "${settleUpResult.transfers.size} ${if (isGreek) "μεταφορές" else "transfers"}",
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (settleUpResult.isBalanced) Emerald700 else Amber700,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        // Transfers list / balanced message
-                        Spacer(modifier = Modifier.height(12.dp))
-                        if (settleUpResult.transfers.isEmpty()) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Emerald700.copy(alpha = 0.08f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = if (isGreek) "✅ Όλα τα μερίδια είναι τακτοποιημένα!" else "✅ All member shares are balanced!",
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Emerald700,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
-                                )
-                            }
-                        } else {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                settleUpResult.transfers.forEach { t ->
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = Amber700.copy(alpha = 0.08f),
-                                        border = BorderStroke(1.dp, Amber700.copy(alpha = 0.25f)),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .clickable {
-                                                val hasDirectPairExpenses = periodExpenses.any { exp ->
-                                                    AnalyticsExpenseFilterHelper.matchesPayer(exp, t.toMember.id, members) &&
-                                                        AnalyticsExpenseFilterHelper.resolveSettleUpBeneficiaries(exp, members)
-                                                            .any { it.id == t.fromMember.id }
-                                                }
-                                                onDrillDownToHome(
-                                                    HomeDrillDownRequest(
-                                                        periodKey = activeDrillDownPeriodKey,
-                                                        typeFilter = "EXPENSE",
-                                                        specialFilter = if (hasDirectPairExpenses) {
-                                                            AnalyticsSpecialFilter(
-                                                                badgeLabel = "${t.toMember.name} ➔ ${t.fromMember.name}",
-                                                                payerMemberId = t.toMember.id,
-                                                                debtorMemberId = t.fromMember.id
-                                                            )
-                                                        } else {
-                                                            AnalyticsSpecialFilter(
-                                                                badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${t.toMember.name}",
-                                                                payerMemberId = t.toMember.id
-                                                            )
-                                                        }
-                                                    )
-                                                )
-                                            }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "👉 ${t.fromMember.name} ➔ ${t.toMember.name}",
-                                                fontSize = 12.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = String.format(Locale.GERMANY, "%.2f €", t.amount),
-                                                fontSize = 13.5.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = Amber700
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Detailed breakdown (permanently open)
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = if (isGreek) "Ανάλυση ανά Μέλος:" else "Per-Member Breakdown:",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        settleUpResult.memberSummaries.forEach { s ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable {
-                                        onDrillDownToHome(
-                                            HomeDrillDownRequest(
-                                                periodKey = activeDrillDownPeriodKey,
-                                                typeFilter = "EXPENSE",
-                                                specialFilter = AnalyticsSpecialFilter(
-                                                    badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${s.member.name}",
-                                                    payerMemberId = s.member.id
-                                                )
-                                            )
-                                        )
-                                    }
-                                    .padding(vertical = 4.dp, horizontal = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color(s.member.avatarColorHex),
-                                        modifier = Modifier.size(10.dp)
-                                    ) {}
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = s.member.name,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "${if (isGreek) "Πλήρωσε:" else "Paid:"} ${String.format(Locale.GERMANY, "%.0f€", s.totalPaid)} | ${if (isGreek) "Μερίδιο:" else "Share:"} ${String.format(Locale.GERMANY, "%.0f€", s.totalShare)}",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    val isPositive = s.netBalance > 0.01
-                                    val isNegative = s.netBalance < -0.01
-                                    Text(
-                                        text = when {
-                                            isPositive -> "+${String.format(Locale.GERMANY, "%.2f €", s.netBalance)}"
-                                            isNegative -> "-${String.format(Locale.GERMANY, "%.2f €", kotlin.math.abs(s.netBalance))}"
-                                            else -> "0,00 €"
-                                        },
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = when {
-                                            isPositive -> Emerald700
-                                            isNegative -> MaterialTheme.colorScheme.error
-                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        OutlinedButton(
-                            onClick = {
-                                val text = SettleUpCalculator.formatSummaryText(settleUpResult, if (isGreek) "Εξοδολόγιο" else "Household", isGreek)
-                                clipboardManager.setText(AnnotatedString(text))
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(38.dp)
-                                .testTag("copy_settle_up_analytics_button"),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isGreek) "Αντιγραφή Εκκαθάρισης για Κοινοποίηση" else "Copy Settlement Summary",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
+                AnalyticsSettleUpCard(
+                    periodExpenses = periodExpenses,
+                    members = members,
+                    activeDrillDownPeriodKey = activeDrillDownPeriodKey,
+                    settlePeriodTimestamp = settlePeriodTimestamp,
+                    lang = lang,
+                    isGreek = isGreek,
+                    onDrillDownToHome = onDrillDownToHome,
+                    onSettleTransfer = onSettleTransfer
+                )
             }
         }
 
-        // Data Export Card (Requirement 5)
         item {
-            var exportPeriodIndex by remember { mutableIntStateOf(0) } // 0 = Τρέχων Μήνας, 1 = Προηγούμενος, 2 = Διάστημα, 3 = Όλα
-            var exportRangeStart by remember {
-                val cal = Calendar.getInstance().apply {
-                    add(Calendar.DAY_OF_MONTH, -30)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                mutableLongStateOf(cal.timeInMillis)
-            }
-            var exportRangeEnd by remember {
-                val cal = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, 23)
-                    set(Calendar.MINUTE, 59)
-                    set(Calendar.SECOND, 59)
-                    set(Calendar.MILLISECOND, 999)
-                }
-                mutableLongStateOf(cal.timeInMillis)
-            }
-            var selectedExportCategoryId by remember { mutableStateOf<Long?>(null) }
-            var selectedExportMemberId by remember { mutableStateOf<Long?>(null) }
-            var showCategoryDropdown by remember { mutableStateOf(false) }
-            var showMemberDropdown by remember { mutableStateOf(false) }
-
-            val dateSdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
-
-            // Filter expenses based on user selection
-            val filteredExportExpenses = remember(
-                expenses,
-                exportPeriodIndex,
-                exportRangeStart,
-                exportRangeEnd,
-                selectedExportCategoryId,
-                selectedExportMemberId
-            ) {
-                expenses.filter { exp ->
-                    val matchesPeriod = when (exportPeriodIndex) {
-                        0 -> {
-                            val cal = Calendar.getInstance()
-                            val curYear = cal.get(Calendar.YEAR)
-                            val curMonth = cal.get(Calendar.MONTH)
-                            val expCal = Calendar.getInstance().apply { timeInMillis = exp.timestamp }
-                            expCal.get(Calendar.YEAR) == curYear && expCal.get(Calendar.MONTH) == curMonth
-                        }
-                        1 -> {
-                            val cal = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
-                            val prevYear = cal.get(Calendar.YEAR)
-                            val prevMonth = cal.get(Calendar.MONTH)
-                            val expCal = Calendar.getInstance().apply { timeInMillis = exp.timestamp }
-                            expCal.get(Calendar.YEAR) == prevYear && expCal.get(Calendar.MONTH) == prevMonth
-                        }
-                        2 -> exp.timestamp in exportRangeStart..exportRangeEnd
-                        else -> true
-                    }
-                    val matchesCategory = selectedExportCategoryId == null || exp.categoryId == selectedExportCategoryId
-                    val matchesMember = selectedExportMemberId == null ||
-                            exp.payerMemberId == selectedExportMemberId ||
-                            exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }.contains(selectedExportMemberId)
-
-                    matchesPeriod && matchesCategory && matchesMember
-                }
-            }
-
-            val exportPeriodTitle = when (exportPeriodIndex) {
-                0 -> if (isGreek) "Τρέχων Μήνας" else "Current Month"
-                1 -> if (isGreek) "Προηγούμενος Μήνας" else "Previous Month"
-                2 -> "${dateSdf.format(exportRangeStart)} - ${dateSdf.format(exportRangeEnd)}"
-                else -> if (isGreek) "Όλα τα Έξοδα" else "All Expenses"
-            }
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("analytics_export_data_card"),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    // Header Row: Title + Pro Badge
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Emerald700.copy(alpha = 0.12f),
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.TableChart,
-                                        contentDescription = null,
-                                        tint = Emerald700,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                text = if (isGreek) "Εξαγωγή δεδομένων" else "Data Export",
-                                fontSize = 15.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            // Discreet Pro Badge
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFFF59E0B).copy(alpha = 0.16f),
-                                border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f))
-                            ) {
-                                Text(
-                                    text = "Pro",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFFD97706),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = if (isGreek) "${filteredExportExpenses.size} έξοδα" else "${filteredExportExpenses.size} items",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Minimal Period Chips Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            if (isGreek) "Τρέχων" else "Current",
-                            if (isGreek) "Προηγ." else "Prev",
-                            if (isGreek) "Διάστημα" else "Range",
-                            if (isGreek) "Όλα" else "All"
-                        ).forEachIndexed { idx, label ->
-                            val isSel = exportPeriodIndex == idx
-                            Surface(
-                                shape = RoundedCornerShape(9.dp),
-                                color = if (isSel) Emerald700 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                                border = BorderStroke(1.dp, if (isSel) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable { exportPeriodIndex = idx }
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurface,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                    modifier = Modifier.padding(vertical = 7.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    // Optional Custom Range Pickers
-                    if (exportPeriodIndex == 2) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable {
-                                        val cal = Calendar.getInstance().apply { timeInMillis = exportRangeStart }
-                                        DatePickerDialog(
-                                            context,
-                                            { _, y, m, d ->
-                                                val newCal = Calendar.getInstance().apply {
-                                                    set(y, m, d, 0, 0, 0)
-                                                    set(Calendar.MILLISECOND, 0)
-                                                }
-                                                exportRangeStart = newCal.timeInMillis
-                                            },
-                                            cal.get(Calendar.YEAR),
-                                            cal.get(Calendar.MONTH),
-                                            cal.get(Calendar.DAY_OF_MONTH)
-                                        ).show()
-                                    }
-                            ) {
-                                Text(
-                                    text = (if (isGreek) "Από: " else "From: ") + dateSdf.format(exportRangeStart),
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Emerald700,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable {
-                                        val cal = Calendar.getInstance().apply { timeInMillis = exportRangeEnd }
-                                        DatePickerDialog(
-                                            context,
-                                            { _, y, m, d ->
-                                                val newCal = Calendar.getInstance().apply {
-                                                    set(y, m, d, 23, 59, 59)
-                                                    set(Calendar.MILLISECOND, 999)
-                                                }
-                                                exportRangeEnd = newCal.timeInMillis
-                                            },
-                                            cal.get(Calendar.YEAR),
-                                            cal.get(Calendar.MONTH),
-                                            cal.get(Calendar.DAY_OF_MONTH)
-                                        ).show()
-                                    }
-                            ) {
-                                Text(
-                                    text = (if (isGreek) "Έως: " else "To: ") + dateSdf.format(exportRangeEnd),
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Emerald700,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Minimal Filter Selectors (Category + Member)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Category Filter Dropdown
-                        Box(modifier = Modifier.weight(1f)) {
-                            val catName = categories.find { it.id == selectedExportCategoryId }?.let {
-                                Localization.translateCategory(it.name, lang)
-                            } ?: if (isGreek) "Όλες οι κατηγορίες" else "All categories"
-
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showCategoryDropdown = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = catName,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = showCategoryDropdown,
-                                onDismissRequest = { showCategoryDropdown = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(if (isGreek) "Όλες οι κατηγορίες" else "All categories", fontSize = 12.sp) },
-                                    onClick = {
-                                        selectedExportCategoryId = null
-                                        showCategoryDropdown = false
-                                    }
-                                )
-                                categories.forEach { cat ->
-                                    DropdownMenuItem(
-                                        text = { Text(Localization.translateCategory(cat.name, lang), fontSize = 12.sp) },
-                                        onClick = {
-                                            selectedExportCategoryId = cat.id
-                                            showCategoryDropdown = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // Member Filter Dropdown
-                        Box(modifier = Modifier.weight(1f)) {
-                            val memName = members.find { it.id == selectedExportMemberId }?.name
-                                ?: if (isGreek) "Όλα τα μέλη" else "All members"
-
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { showMemberDropdown = true }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = memName,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-
-                            DropdownMenu(
-                                expanded = showMemberDropdown,
-                                onDismissRequest = { showMemberDropdown = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(if (isGreek) "Όλα τα μέλη" else "All members", fontSize = 12.sp) },
-                                    onClick = {
-                                        selectedExportMemberId = null
-                                        showMemberDropdown = false
-                                    }
-                                )
-                                members.forEach { mem ->
-                                    DropdownMenuItem(
-                                        text = { Text(mem.name, fontSize = 12.sp) },
-                                        onClick = {
-                                            selectedExportMemberId = mem.id
-                                            showMemberDropdown = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    // Export Action Buttons (.pdf & .csv)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        // PDF Button
-                        Button(
-                            onClick = {
-                                if (!isPro) {
-                                    onShowPremiumPaywall("export_report")
-                                } else {
-                                    val targetList = if (filteredExportExpenses.isNotEmpty()) filteredExportExpenses else expenses
-                                    val targetTitle = if (filteredExportExpenses.isNotEmpty()) exportPeriodTitle else (if (isGreek) "Όλα τα Έξοδα" else "All Expenses")
-                                    if (targetList.isEmpty()) {
-                                        Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένα έξοδα προς εξαγωγή" else "No expenses to export", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση PDF..." else "Generating and sharing PDF...", Toast.LENGTH_SHORT).show()
-                                        ExpenseReportExporter.exportPdf(context, targetList, targetTitle)
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(42.dp)
-                                .testTag("export_pdf_button")
-                        ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = ".pdf",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f))
-                        }
-
-                        // CSV Button
-                        Button(
-                            onClick = {
-                                if (!isPro) {
-                                    onShowPremiumPaywall("export_report")
-                                } else {
-                                    val targetList = if (filteredExportExpenses.isNotEmpty()) filteredExportExpenses else expenses
-                                    val targetTitle = if (filteredExportExpenses.isNotEmpty()) exportPeriodTitle else (if (isGreek) "Όλα τα Έξοδα" else "All Expenses")
-                                    if (targetList.isEmpty()) {
-                                        Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένα έξοδα προς εξαγωγή" else "No expenses to export", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση CSV..." else "Generating and sharing CSV...", Toast.LENGTH_SHORT).show()
-                                        ExpenseReportExporter.exportCsv(context, targetList, targetTitle)
-                                    }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Emerald700, contentColor = Color.White),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(42.dp)
-                                .testTag("export_csv_button")
-                        ) {
-                            Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = ".csv",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(13.dp), tint = Color.White.copy(alpha = 0.85f))
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChartTypeToggle(
-    selectedType: Int, // 0 = Bar, 1 = Pie
-    onSelectType: (Int) -> Unit,
-    activeColor: Color = Emerald700,
-    appLanguage: String = "EN",
-    modifier: Modifier = Modifier
-) {
-    val lang = Localization.Language.fromCode(appLanguage)
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-        modifier = modifier
-    ) {
-        Row(
-            modifier = Modifier.padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = RoundedCornerShape(7.dp),
-                color = if (selectedType == 0) activeColor else Color.Transparent,
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .clickable { onSelectType(0) }
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.BarChart,
-                        contentDescription = Localization.barChartView(lang),
-                        tint = if (selectedType == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
-            }
-
-            Surface(
-                shape = RoundedCornerShape(7.dp),
-                color = if (selectedType == 1) activeColor else Color.Transparent,
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .clickable { onSelectType(1) }
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.PieChart,
-                        contentDescription = Localization.pieChartView(lang),
-                        tint = if (selectedType == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
-            }
+            AnalyticsDataExportCard(
+                expenses = expenses,
+                categories = categories,
+                members = members,
+                isPro = isPro,
+                isGreek = isGreek,
+                lang = lang,
+                context = context,
+                onShowPremiumPaywall = onShowPremiumPaywall
+            )
         }
     }
 }

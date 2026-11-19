@@ -1,0 +1,912 @@
+package com.example.data.repository
+
+import android.util.Log
+import com.example.data.entity.toFirebaseExpense
+import com.example.data.model.FirebaseCategory
+import com.example.data.model.FirebaseIncome
+import com.example.data.model.FirebaseMember
+import com.example.data.model.FirebaseRecurringExpense
+import com.example.data.model.FirebaseSavingsGoal
+import com.example.data.model.Household
+import com.example.data.model.toSafeCategory
+import com.example.data.model.toSafeMember
+import com.example.data.model.toSafeRecurringExpense
+import com.example.data.model.toSafeSavingsGoal
+import com.example.data.seed.FirestoreDataSeed
+import com.example.util.GreekVoiceParser
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.snapshots
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
+import java.util.UUID
+
+internal class FirestoreStructureDelegate(
+    private val db: FirebaseFirestore,
+    private val householdDelegate: FirestoreHouseholdDelegate
+) {
+    companion object {
+        private const val TAG = "FirestoreSyncRepo"
+    }
+
+    suspend fun seedFirestoreIfEmpty(householdId: String, userId: String, isMarios: Boolean) {
+        if (!isMarios) return
+        val targetHid = if (householdId.isNotBlank()) householdId else FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID
+        val targetUid = if (userId.isNotBlank()) userId else FirestoreDataSeed.DEFAULT_USER_UID
+
+        try {
+            val existingExpenses = db.collection("households").document(targetHid)
+                .collection("expenses").limit(5).get().await()
+
+            if (existingExpenses.isEmpty) {
+                Log.i(TAG, "Seeding base data to Firestore for household $targetHid and user $targetUid...")
+
+                val hDoc = db.collection("households").document(targetHid).get().await()
+                if (!hDoc.exists()) {
+                    val household = Household(
+                        id = targetHid,
+                        name = if (targetHid == "e1d4ae67-499") "Επιχείρηση" else FirestoreDataSeed.DEFAULT_HOUSEHOLD_NAME,
+                        ownerId = targetUid,
+                        inviteCode = "OIKO-7788",
+                        memberUids = listOf(targetUid, "t5kN4RvPRugIxXUz18Fep2khSrC2", "tSLWmkXZ0MTqIKGoX3wd6HdhDw63", "jllDLLQl7VgFzOQpVIHi0wo8B013", "oA6smvWcC6QYCAKMvYdWEcmVCO43"),
+                        invitedEmails = listOf("kynigosmarios@gmail.com"),
+                        createdAt = Timestamp.now()
+                    )
+                    db.collection("households").document(targetHid).set(household).await()
+                }
+
+                if (isMarios) {
+                    val bDoc = db.collection("households").document("e1d4ae67-499").get().await()
+                    if (!bDoc.exists()) {
+                        val epixeirisi = Household(
+                            id = "e1d4ae67-499",
+                            name = "Επιχείρηση",
+                            ownerId = targetUid,
+                            inviteCode = "OIKO-9922",
+                            memberUids = listOf(targetUid, "t5kN4RvPRugIxXUz18Fep2khSrC2"),
+                            invitedEmails = listOf("kynigosmarios@gmail.com"),
+                            createdAt = Timestamp.now()
+                        )
+                        db.collection("households").document("e1d4ae67-499").set(epixeirisi).await()
+                    }
+                }
+
+                FirestoreDataSeed.members.forEach { m ->
+                    val fbM = FirebaseMember(
+                        id = m.id.toString(),
+                        householdId = targetHid,
+                        userId = targetUid,
+                        name = m.name,
+                        role = m.role,
+                        avatarColorHex = m.avatarColorHex,
+                        voiceKeywords = m.voiceKeywords,
+                        isDefault = m.isDefault,
+                        sortOrder = m.sortOrder,
+                        linkedUserUid = m.linkedUserUid
+                    )
+                    db.collection("households").document(targetHid).collection("members").document(fbM.id).set(fbM)
+                    db.collection("users").document(targetUid).collection("members").document(fbM.id).set(fbM)
+                }
+
+                FirestoreDataSeed.categories.forEach { c ->
+                    val fbC = FirebaseCategory(
+                        id = c.id.toString(),
+                        householdId = targetHid,
+                        userId = targetUid,
+                        name = c.name,
+                        iconKey = c.iconKey,
+                        monthlyBudget = c.monthlyBudget,
+                        colorHex = c.colorHex,
+                        voiceKeywords = c.voiceKeywords,
+                        sortOrder = c.sortOrder,
+                        fontColorHex = c.fontColorHex
+                    )
+                    db.collection("households").document(targetHid).collection("categories").document(fbC.id).set(fbC)
+                    db.collection("users").document(targetUid).collection("categories").document(fbC.id).set(fbC)
+                }
+
+                FirestoreDataSeed.incomes.forEach { inc ->
+                    val fbInc = FirebaseIncome(
+                        id = inc.cloudId.ifBlank { "inc_${inc.id}" },
+                        householdId = targetHid,
+                        title = inc.title,
+                        amount = inc.amount,
+                        memberId = inc.memberId,
+                        memberName = inc.memberName,
+                        category = inc.category,
+                        timestamp = inc.timestamp,
+                        note = inc.note,
+                        createdByUid = targetUid,
+                        createdByName = FirestoreDataSeed.DEFAULT_USER_NAME
+                    )
+                    db.collection("households").document(targetHid).collection("incomes").document(fbInc.id).set(fbInc)
+                    db.collection("users").document(targetUid).collection("incomes").document(fbInc.id).set(fbInc)
+                }
+
+                for (chunk in FirestoreDataSeed.expenses.chunked(250)) {
+                    val batch = db.batch()
+                    for (exp in chunk) {
+                        val fbExp = exp.toFirebaseExpense(
+                            householdId = targetHid,
+                            userId = targetUid,
+                            userName = FirestoreDataSeed.DEFAULT_USER_NAME
+                        )
+                        val hRef = db.collection("households").document(targetHid).collection("expenses").document(fbExp.id)
+                        val uRef = db.collection("users").document(targetUid).collection("expenses").document(fbExp.id)
+                        batch.set(hRef, fbExp)
+                        batch.set(uRef, fbExp)
+                    }
+                    batch.commit().await()
+                }
+                Log.i(TAG, "Seeded ${FirestoreDataSeed.expenses.size} expenses to Firestore successfully!")
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.e(TAG, "Error in seedFirestoreIfEmpty", e)
+        }
+    }
+
+    // Household & User Members
+    fun observeMembers(householdId: String): Flow<List<FirebaseMember>> {
+        if (householdId.isBlank()) return flowOf(emptyList())
+        return db.collection("households").document(householdId)
+            .collection("members")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    try { doc.toSafeMember() } catch (t: Throwable) {
+                        Log.w(TAG, "Error deserializing member ${doc.id}: ${t.message}")
+                        null
+                    }
+                }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
+            }
+            .catch { t ->
+                Log.w(TAG, "observeMembers flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    suspend fun syncMember(householdId: String, member: FirebaseMember) {
+        if (householdId.isBlank()) return
+        if (member.userId.isNotBlank()) {
+            try { householdDelegate.ensureHouseholdExists(householdId, member.userId) } catch (_: Exception) {}
+        }
+        val docId = if (member.id.isNotBlank()) member.id else UUID.randomUUID().toString()
+        val toSave = member.copy(id = docId, householdId = householdId, createdAt = Timestamp.now())
+        db.collection("households").document(householdId)
+            .collection("members").document(docId)
+            .set(toSave)
+            .await()
+    }
+
+    suspend fun deleteMember(householdId: String, memberId: String) {
+        if (householdId.isBlank() || memberId.isBlank()) return
+        db.collection("households").document(householdId)
+            .collection("members").document(memberId).delete().await()
+    }
+
+    suspend fun setMemberDeleted(householdId: String, memberId: String, memberName: String, isDeleted: Boolean) {
+        if (householdId.isBlank()) return
+        try {
+            val membersCol = db.collection("households").document(householdId).collection("members")
+            val targetNameNorm = GreekVoiceParser.normalizeGreek(memberName.trim().lowercase())
+            val snap = membersCol.get().await()
+            var matched = false
+            for (doc in snap.documents) {
+                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
+                val docId = doc.getString("id") ?: doc.id
+                if (docId == memberId || doc.id == memberId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
+                    doc.reference.update("isDeleted", isDeleted).await()
+                    matched = true
+                }
+            }
+            if (!matched && memberId.isNotBlank()) {
+                membersCol.document(memberId).set(mapOf("isDeleted" to isDeleted), SetOptions.merge()).await()
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Error setting member isDeleted in household $householdId: ${e.message}")
+        }
+    }
+
+    suspend fun permanentDeleteMemberExact(householdId: String, memberId: String, memberName: String) {
+        if (householdId.isBlank()) return
+        try {
+            val membersCol = db.collection("households").document(householdId).collection("members")
+            val targetNameNorm = GreekVoiceParser.normalizeGreek(memberName.trim().lowercase())
+            val snap = membersCol.get().await()
+            for (doc in snap.documents) {
+                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
+                val docId = doc.getString("id") ?: doc.id
+                if (docId == memberId || doc.id == memberId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
+                    doc.reference.delete().await()
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Error permanently deleting member from household $householdId: ${e.message}")
+        }
+    }
+
+    suspend fun getMembersOnce(householdId: String): List<FirebaseMember> {
+        if (householdId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("households").document(householdId).collection("members").get().await()
+            snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeMember() } catch (_: Throwable) { null }
+            }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun getUserMembersOnce(userId: String): List<FirebaseMember> {
+        if (userId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("users").document(userId).collection("members").get().await()
+            snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeMember() } catch (_: Throwable) { null }
+            }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    fun observeUserMembers(userId: String): Flow<List<FirebaseMember>> {
+        if (userId.isBlank()) return flowOf(emptyList())
+        return db.collection("users").document(userId)
+            .collection("members")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    try { doc.toSafeMember() } catch (_: Throwable) { null }
+                }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
+            }
+            .catch { t ->
+                Log.w(TAG, "observeUserMembers flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    suspend fun syncUserMember(userId: String, member: FirebaseMember) {
+        if (userId.isBlank()) return
+        val docId = if (member.id.isNotBlank()) member.id else UUID.randomUUID().toString()
+        val toSave = member.copy(id = docId, userId = userId, createdAt = Timestamp.now())
+        db.collection("users").document(userId).collection("members").document(docId).set(toSave).await()
+    }
+
+    suspend fun deleteUserMember(userId: String, memberId: String) {
+        if (userId.isBlank() || memberId.isBlank()) return
+        db.collection("users").document(userId).collection("members").document(memberId).delete().await()
+    }
+
+    // Household & User Categories
+    fun observeCategories(householdId: String): Flow<List<FirebaseCategory>> {
+        if (householdId.isBlank()) return flowOf(emptyList())
+        return db.collection("households").document(householdId)
+            .collection("categories")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    try { doc.toSafeCategory() } catch (t: Throwable) {
+                        Log.w(TAG, "Error deserializing category ${doc.id}: ${t.message}")
+                        null
+                    }
+                }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
+            }
+            .catch { t ->
+                Log.w(TAG, "observeCategories flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    suspend fun syncCategory(householdId: String, category: FirebaseCategory) {
+        if (householdId.isBlank()) return
+        if (category.userId.isNotBlank()) {
+            try { householdDelegate.ensureHouseholdExists(householdId, category.userId) } catch (_: Exception) {}
+        }
+        val docId = if (category.id.isNotBlank()) category.id else UUID.randomUUID().toString()
+        val toSave = category.copy(id = docId, householdId = householdId, createdAt = Timestamp.now())
+        db.collection("households").document(householdId).collection("categories").document(docId).set(toSave).await()
+    }
+
+    suspend fun deleteCategory(householdId: String, categoryId: String) {
+        if (householdId.isBlank() || categoryId.isBlank()) return
+        db.collection("households").document(householdId).collection("categories").document(categoryId).delete().await()
+    }
+
+    suspend fun setCategoryDeleted(householdId: String, categoryId: String, categoryName: String, isDeleted: Boolean) {
+        if (householdId.isBlank()) return
+        try {
+            val catsCol = db.collection("households").document(householdId).collection("categories")
+            val targetNameNorm = GreekVoiceParser.normalizeGreek(categoryName.trim().lowercase())
+            val snap = catsCol.get().await()
+            var matched = false
+            for (doc in snap.documents) {
+                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
+                val docId = doc.getString("id") ?: doc.id
+                if (docId == categoryId || doc.id == categoryId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
+                    doc.reference.update("isDeleted", isDeleted).await()
+                    matched = true
+                }
+            }
+            if (!matched && categoryId.isNotBlank()) {
+                catsCol.document(categoryId).set(mapOf("isDeleted" to isDeleted), SetOptions.merge()).await()
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Error setting category isDeleted in household $householdId: ${e.message}")
+        }
+    }
+
+    suspend fun permanentDeleteCategoryExact(householdId: String, categoryId: String, categoryName: String) {
+        if (householdId.isBlank()) return
+        try {
+            val catsCol = db.collection("households").document(householdId).collection("categories")
+            val targetNameNorm = GreekVoiceParser.normalizeGreek(categoryName.trim().lowercase())
+            val snap = catsCol.get().await()
+            for (doc in snap.documents) {
+                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
+                val docId = doc.getString("id") ?: doc.id
+                if (docId == categoryId || doc.id == categoryId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
+                    doc.reference.delete().await()
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Error permanently deleting category from household $householdId: ${e.message}")
+        }
+    }
+
+    suspend fun getCategoriesOnce(householdId: String): List<FirebaseCategory> {
+        if (householdId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("households").document(householdId).collection("categories").get().await()
+            snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeCategory() } catch (_: Throwable) { null }
+            }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun getUserCategoriesOnce(userId: String): List<FirebaseCategory> {
+        if (userId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("users").document(userId).collection("categories").get().await()
+            snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeCategory() } catch (_: Throwable) { null }
+            }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    fun observeUserCategories(userId: String): Flow<List<FirebaseCategory>> {
+        if (userId.isBlank()) return flowOf(emptyList())
+        return db.collection("users").document(userId)
+            .collection("categories")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    try { doc.toSafeCategory() } catch (_: Throwable) { null }
+                }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
+            }
+            .catch { t ->
+                Log.w(TAG, "observeUserCategories flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    suspend fun syncUserCategory(userId: String, category: FirebaseCategory) {
+        if (userId.isBlank()) return
+        val docId = if (category.id.isNotBlank()) category.id else UUID.randomUUID().toString()
+        val toSave = category.copy(id = docId, userId = userId, createdAt = Timestamp.now())
+        db.collection("users").document(userId).collection("categories").document(docId).set(toSave).await()
+    }
+
+    suspend fun deleteUserCategory(userId: String, categoryId: String) {
+        if (userId.isBlank() || categoryId.isBlank()) return
+        db.collection("users").document(userId).collection("categories").document(categoryId).delete().await()
+    }
+
+    // Savings Goals
+    fun observeSavingsGoals(householdId: String): Flow<List<FirebaseSavingsGoal>> {
+        if (householdId.isBlank()) return flowOf(emptyList())
+        return db.collection("households").document(householdId)
+            .collection("savings_goals")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    val obj = try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null }
+                    obj?.copy(
+                        id = doc.id,
+                        householdId = obj.householdId.ifBlank { householdId }
+                    )
+                }.sortedWith(compareBy<FirebaseSavingsGoal> { it.title.lowercase() }.thenBy { it.id })
+            }
+            .catch { t ->
+                Log.w(TAG, "observeSavingsGoals flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    fun observeUserSavingsGoals(userId: String): Flow<List<FirebaseSavingsGoal>> {
+        if (userId.isBlank()) return flowOf(emptyList())
+        return db.collection("users").document(userId)
+            .collection("savings_goals")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    val obj = try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null }
+                    obj?.copy(id = doc.id)
+                }.sortedWith(compareBy<FirebaseSavingsGoal> { it.title.lowercase() }.thenBy { it.id })
+            }
+            .catch { t ->
+                Log.w(TAG, "observeUserSavingsGoals flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    suspend fun getSavingsGoalsOnce(householdId: String): List<FirebaseSavingsGoal> {
+        if (householdId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("households").document(householdId).collection("savings_goals").get().await()
+            val list = snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+            }
+            if (list.isNotEmpty()) list else {
+                val alt = db.collection("households").document(householdId).collection("savingsGoals").get().await()
+                alt.documents.mapNotNull { doc ->
+                    try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+                }
+            }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun getUserSavingsGoalsOnce(userId: String): List<FirebaseSavingsGoal> {
+        if (userId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("users").document(userId).collection("savings_goals").get().await()
+            val list = snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+            }
+            if (list.isNotEmpty()) list else {
+                val alt = db.collection("users").document(userId).collection("savingsGoals").get().await()
+                alt.documents.mapNotNull { doc ->
+                    try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+                }
+            }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun syncSavingsGoal(householdId: String, goal: FirebaseSavingsGoal) {
+        if (householdId.isBlank()) return
+        val docId = if (goal.id.isNotBlank()) goal.id else UUID.randomUUID().toString()
+        val toSave = goal.copy(id = docId, householdId = householdId, createdAt = goal.createdAt ?: Timestamp.now())
+        db.collection("households").document(householdId).collection("savings_goals").document(docId).set(toSave).await()
+    }
+
+    suspend fun syncUserSavingsGoal(userId: String, goal: FirebaseSavingsGoal) {
+        if (userId.isBlank()) return
+        val docId = if (goal.id.isNotBlank()) goal.id else UUID.randomUUID().toString()
+        val toSave = goal.copy(id = docId, userId = userId, createdAt = goal.createdAt ?: Timestamp.now())
+        db.collection("users").document(userId).collection("savings_goals").document(docId).set(toSave).await()
+    }
+
+    suspend fun deleteSavingsGoal(householdId: String, goalId: String, title: String = "") {
+        if (householdId.isBlank()) return
+        try {
+            val hDoc = db.collection("households").document(householdId)
+            val refsToDelete = linkedSetOf<com.google.firebase.firestore.DocumentReference>()
+            if (goalId.isNotBlank()) {
+                refsToDelete.add(hDoc.collection("savings_goals").document(goalId))
+                refsToDelete.add(hDoc.collection("savingsGoals").document(goalId))
+                val byIdField = hDoc.collection("savings_goals").whereEqualTo("id", goalId).get().await()
+                byIdField.documents.forEach { refsToDelete.add(it.reference) }
+            }
+            if (title.isNotBlank()) {
+                val q1 = hDoc.collection("savings_goals").whereEqualTo("title", title).get().await()
+                q1.documents.forEach { refsToDelete.add(it.reference) }
+                val q2 = hDoc.collection("savingsGoals").whereEqualTo("title", title).get().await()
+                q2.documents.forEach { refsToDelete.add(it.reference) }
+            }
+            if (refsToDelete.isNotEmpty()) {
+                val batch = db.batch()
+                refsToDelete.forEach { batch.delete(it) }
+                batch.commit().await()
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+        }
+    }
+
+    suspend fun deleteUserSavingsGoal(userId: String, goalId: String, title: String = "") {
+        if (userId.isBlank()) return
+        try {
+            val uDoc = db.collection("users").document(userId)
+            val refsToDelete = linkedSetOf<com.google.firebase.firestore.DocumentReference>()
+            if (goalId.isNotBlank()) {
+                refsToDelete.add(uDoc.collection("savings_goals").document(goalId))
+                refsToDelete.add(uDoc.collection("savingsGoals").document(goalId))
+                val byIdField = uDoc.collection("savings_goals").whereEqualTo("id", goalId).get().await()
+                byIdField.documents.forEach { refsToDelete.add(it.reference) }
+            }
+            if (title.isNotBlank()) {
+                val q1 = uDoc.collection("savings_goals").whereEqualTo("title", title).get().await()
+                q1.documents.forEach { refsToDelete.add(it.reference) }
+                val q2 = uDoc.collection("savingsGoals").whereEqualTo("title", title).get().await()
+                q2.documents.forEach { refsToDelete.add(it.reference) }
+            }
+            if (refsToDelete.isNotEmpty()) {
+                val batch = db.batch()
+                refsToDelete.forEach { batch.delete(it) }
+                batch.commit().await()
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+        }
+    }
+
+    // Recurring Expenses
+    fun observeRecurringExpenses(householdId: String): Flow<List<FirebaseRecurringExpense>> {
+        if (householdId.isBlank()) return flowOf(emptyList())
+        return db.collection("households").document(householdId)
+            .collection("recurring_expenses")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    val obj = try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null }
+                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                    obj
+                }.sortedBy { it.title }
+            }
+            .catch { t ->
+                Log.w(TAG, "observeRecurringExpenses flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    fun observeUserRecurringExpenses(userId: String): Flow<List<FirebaseRecurringExpense>> {
+        if (userId.isBlank()) return flowOf(emptyList())
+        return db.collection("users").document(userId)
+            .collection("recurring_expenses")
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    val obj = try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null }
+                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                    obj
+                }.sortedBy { it.title }
+            }
+            .catch { t ->
+                Log.w(TAG, "observeUserRecurringExpenses flow error: ${t.message}")
+                emit(emptyList())
+            }
+    }
+
+    suspend fun getRecurringExpensesOnce(householdId: String): List<FirebaseRecurringExpense> {
+        if (householdId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("households").document(householdId).collection("recurring_expenses").get().await()
+            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+            if (list.isNotEmpty()) list else {
+                val alt = db.collection("households").document(householdId).collection("recurringExpenses").get().await()
+                alt.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+            }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun getUserRecurringExpensesOnce(userId: String): List<FirebaseRecurringExpense> {
+        if (userId.isBlank()) return emptyList()
+        return try {
+            val snapshot = db.collection("users").document(userId).collection("recurring_expenses").get().await()
+            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+            if (list.isNotEmpty()) list else {
+                val alt = db.collection("users").document(userId).collection("recurringExpenses").get().await()
+                alt.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+            }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
+
+    suspend fun syncRecurringExpense(householdId: String, recurring: FirebaseRecurringExpense) {
+        if (householdId.isBlank()) return
+        val docId = if (recurring.id.isNotBlank()) recurring.id else UUID.randomUUID().toString()
+        val toSave = recurring.copy(id = docId, householdId = householdId, createdAt = Timestamp.now())
+        db.collection("households").document(householdId).collection("recurring_expenses").document(docId).set(toSave).await()
+    }
+
+    suspend fun syncUserRecurringExpense(userId: String, recurring: FirebaseRecurringExpense) {
+        if (userId.isBlank()) return
+        val docId = if (recurring.id.isNotBlank()) recurring.id else UUID.randomUUID().toString()
+        val toSave = recurring.copy(id = docId, userId = userId, createdAt = Timestamp.now())
+        db.collection("users").document(userId).collection("recurring_expenses").document(docId).set(toSave).await()
+    }
+
+    suspend fun deleteRecurringExpense(householdId: String, recurringId: String, title: String = "") {
+        if (householdId.isBlank()) return
+        try {
+            if (recurringId.isNotBlank()) {
+                db.collection("households").document(householdId).collection("recurring_expenses").document(recurringId).delete().await()
+                db.collection("households").document(householdId).collection("recurringExpenses").document(recurringId).delete().await()
+            }
+            if (title.isNotBlank()) {
+                val q1 = db.collection("households").document(householdId).collection("recurring_expenses").whereEqualTo("title", title).get().await()
+                for (doc in q1.documents) doc.reference.delete().await()
+                val q2 = db.collection("households").document(householdId).collection("recurringExpenses").whereEqualTo("title", title).get().await()
+                for (doc in q2.documents) doc.reference.delete().await()
+            }
+        } catch (_: Exception) {}
+    }
+
+    suspend fun deleteUserRecurringExpense(userId: String, recurringId: String, title: String = "") {
+        if (userId.isBlank()) return
+        try {
+            if (recurringId.isNotBlank()) {
+                db.collection("users").document(userId).collection("recurring_expenses").document(recurringId).delete().await()
+                db.collection("users").document(userId).collection("recurringExpenses").document(recurringId).delete().await()
+            }
+            if (title.isNotBlank()) {
+                val q1 = db.collection("users").document(userId).collection("recurring_expenses").whereEqualTo("title", title).get().await()
+                for (doc in q1.documents) doc.reference.delete().await()
+                val q2 = db.collection("users").document(userId).collection("recurringExpenses").whereEqualTo("title", title).get().await()
+                for (doc in q2.documents) doc.reference.delete().await()
+            }
+        } catch (_: Exception) {}
+    }
+
+    // Cross-Scope Recovery, Clean & Batch Ordering
+    suspend fun getAllMembersAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseMember> {
+        val result = mutableListOf<FirebaseMember>()
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) result.addAll(getMembersOnce(hId))
+        if (userId.isNotBlank()) result.addAll(getUserMembersOnce(userId))
+        return result
+    }
+
+    suspend fun syncAndCleanMember(
+        householdIds: List<String>,
+        userId: String,
+        member: FirebaseMember,
+        oldName: String = ""
+    ) {
+        val canonicalDocId = member.id.ifBlank { "1" }
+        val toSave = member.copy(id = canonicalDocId, createdAt = Timestamp.now())
+
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+            try {
+                db.collection("households").document(hId)
+                    .collection("members").document(canonicalDocId)
+                    .set(toSave.copy(householdId = hId)).await()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Error syncing member to household $hId: ${e.message}")
+            }
+        }
+        if (userId.isNotBlank()) {
+            try {
+                db.collection("users").document(userId)
+                    .collection("members").document(canonicalDocId)
+                    .set(toSave.copy(userId = userId)).await()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Error syncing member to user $userId: ${e.message}")
+            }
+        }
+
+        val namesToPurge = mutableListOf<String>()
+        if (oldName.isNotBlank() && !oldName.equals(member.name, ignoreCase = true)) {
+            namesToPurge.add(oldName.trim().lowercase())
+        }
+
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+            try {
+                val snapshot = db.collection("households").document(hId).collection("members").get().await()
+                for (doc in snapshot.documents) {
+                    if (doc.id == canonicalDocId) continue
+                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
+                    val remoteIsDef = doc.getBoolean("isDefault") ?: false
+                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
+                        (canonicalDocId == "1" && remoteIsDef) ||
+                        (remoteName == member.name.trim().lowercase())
+                    ) {
+                        doc.reference.delete().await()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (userId.isNotBlank()) {
+            try {
+                val snapshot = db.collection("users").document(userId).collection("members").get().await()
+                for (doc in snapshot.documents) {
+                    if (doc.id == canonicalDocId) continue
+                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
+                    val remoteIsDef = doc.getBoolean("isDefault") ?: false
+                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
+                        (canonicalDocId == "1" && remoteIsDef) ||
+                        (remoteName == member.name.trim().lowercase())
+                    ) {
+                        doc.reference.delete().await()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    suspend fun deleteMemberFromAllScopes(memberId: String, householdIds: List<String>, userId: String, memberName: String = "") {
+        if (memberId.isBlank() && memberName.isBlank()) return
+        val targetNameNorm = memberName.trim().lowercase()
+        if (userId.isNotBlank()) {
+            try {
+                if (memberId.isNotBlank()) deleteUserMember(userId, memberId)
+                if (targetNameNorm.isNotBlank()) {
+                    val snap = db.collection("users").document(userId).collection("members").get().await()
+                    for (doc in snap.documents) {
+                        if (doc.getString("name").orEmpty().trim().lowercase() == targetNameNorm) doc.reference.delete().await()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+            try {
+                if (memberId.isNotBlank()) deleteMember(hId, memberId)
+                if (targetNameNorm.isNotBlank()) {
+                    val snap = db.collection("households").document(hId).collection("members").get().await()
+                    for (doc in snap.documents) {
+                        if (doc.getString("name").orEmpty().trim().lowercase() == targetNameNorm) doc.reference.delete().await()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    suspend fun getAllCategoriesAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseCategory> {
+        val result = mutableListOf<FirebaseCategory>()
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) result.addAll(getCategoriesOnce(hId))
+        if (userId.isNotBlank()) result.addAll(getUserCategoriesOnce(userId))
+        return result
+    }
+
+    suspend fun syncAndCleanCategory(
+        householdIds: List<String>,
+        userId: String,
+        category: FirebaseCategory,
+        oldName: String = ""
+    ) {
+        val canonicalDocId = category.id.ifBlank { UUID.randomUUID().toString() }
+        val toSave = category.copy(id = canonicalDocId, createdAt = Timestamp.now())
+
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+            try {
+                db.collection("households").document(hId)
+                    .collection("categories").document(canonicalDocId)
+                    .set(toSave.copy(householdId = hId)).await()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Error syncing category to household $hId: ${e.message}")
+            }
+        }
+        if (userId.isNotBlank()) {
+            try {
+                db.collection("users").document(userId)
+                    .collection("categories").document(canonicalDocId)
+                    .set(toSave.copy(userId = userId)).await()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Error syncing category to user $userId: ${e.message}")
+            }
+        }
+
+        val namesToPurge = mutableListOf<String>()
+        if (oldName.isNotBlank() && !oldName.equals(category.name, ignoreCase = true)) {
+            namesToPurge.add(oldName.trim().lowercase())
+        }
+
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+            try {
+                val snapshot = db.collection("households").document(hId).collection("categories").get().await()
+                for (doc in snapshot.documents) {
+                    if (doc.id == canonicalDocId) continue
+                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
+                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
+                        (remoteName == category.name.trim().lowercase())
+                    ) {
+                        doc.reference.delete().await()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        if (userId.isNotBlank()) {
+            try {
+                val snapshot = db.collection("users").document(userId).collection("categories").get().await()
+                for (doc in snapshot.documents) {
+                    if (doc.id == canonicalDocId) continue
+                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
+                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
+                        (remoteName == category.name.trim().lowercase())
+                    ) {
+                        doc.reference.delete().await()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    suspend fun deleteCategoryFromAllScopes(categoryId: String, householdIds: List<String>, userId: String) {
+        if (categoryId.isBlank()) return
+        if (userId.isNotBlank()) try { deleteUserCategory(userId, categoryId) } catch (_: Exception) {}
+        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+            try { deleteCategory(hId, categoryId) } catch (_: Exception) {}
+        }
+    }
+
+    suspend fun batchUpdateMemberSortOrder(householdIds: List<String>, userId: String, members: List<FirebaseMember>) {
+        if (members.isEmpty()) return
+        val validHouseholdIds = householdIds.filter { it.isNotBlank() }.distinct()
+        try {
+            val batch = db.batch()
+            for (m in members) {
+                val docId = m.id.ifBlank { "1" }
+                val updates = mapOf("sortOrder" to m.sortOrder, "updatedAt" to Timestamp.now())
+                for (hId in validHouseholdIds) {
+                    batch.set(db.collection("households").document(hId).collection("members").document(docId), updates, SetOptions.merge())
+                }
+                if (userId.isNotBlank()) {
+                    batch.set(db.collection("users").document(userId).collection("members").document(docId), updates, SetOptions.merge())
+                }
+            }
+            batch.commit().await()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "batchUpdateMemberSortOrder error: ${e.message}")
+        }
+    }
+
+    suspend fun batchUpdateCategorySortOrder(householdIds: List<String>, userId: String, categories: List<FirebaseCategory>) {
+        if (categories.isEmpty()) return
+        val validHouseholdIds = householdIds.filter { it.isNotBlank() }.distinct()
+        try {
+            val batch = db.batch()
+            for (c in categories) {
+                val docId = c.id.ifBlank { "1" }
+                val updates = mapOf("sortOrder" to c.sortOrder, "updatedAt" to Timestamp.now())
+                for (hId in validHouseholdIds) {
+                    batch.set(db.collection("households").document(hId).collection("categories").document(docId), updates, SetOptions.merge())
+                }
+                if (userId.isNotBlank()) {
+                    batch.set(db.collection("users").document(userId).collection("categories").document(docId), updates, SetOptions.merge())
+                }
+            }
+            batch.commit().await()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "batchUpdateCategorySortOrder error: ${e.message}")
+        }
+    }
+
+    suspend fun fetchAllHouseholdMembers(householdIds: List<String>): List<FirebaseMember> =
+        householdIds.filter { it.isNotBlank() }.distinct().flatMap { getMembersOnce(it) }
+
+    suspend fun fetchAllHouseholdCategories(householdIds: List<String>): List<FirebaseCategory> =
+        householdIds.filter { it.isNotBlank() }.distinct().flatMap { getCategoriesOnce(it) }
+
+    suspend fun fetchAllHouseholdSavingsGoals(householdIds: List<String>): List<FirebaseSavingsGoal> =
+        householdIds.flatMap { getSavingsGoalsOnce(it) }.distinctBy { it.id.ifBlank { it.title } }
+
+    suspend fun fetchAllHouseholdRecurringExpenses(householdIds: List<String>): List<FirebaseRecurringExpense> =
+        householdIds.flatMap { getRecurringExpensesOnce(it) }.distinctBy { it.id.ifBlank { it.title } }
+}

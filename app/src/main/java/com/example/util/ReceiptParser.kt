@@ -2,11 +2,7 @@ package com.example.util
 
 import com.example.data.entity.ExpenseCategory
 import com.google.mlkit.vision.text.Text
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
 import java.util.Locale
-import java.util.regex.Pattern
 
 data class ParsedReceiptData(
     val title: String,
@@ -264,7 +260,8 @@ object ReceiptParser {
         visionText: Text?,
         rawText: String,
         aadeQr: String? = null,
-        availableCategories: List<ExpenseCategory> = emptyList()
+        availableCategories: List<ExpenseCategory> = emptyList(),
+        learnedCategorySuggester: ((merchantTitle: String, merchantAfm: String) -> String?)? = null
     ): ParsedReceiptData {
         val lines = rawText.lines().map { it.trim() }.filter { it.isNotBlank() }
 
@@ -272,14 +269,14 @@ object ReceiptParser {
         val (storeName, suggestedCategory) = extractStoreName(lines, rawText, availableCategories)
 
         // 2. Extract Total Amount (STRICT: only from the right of "ΣΥΝΟΛΟ" / "Σύνολο")
-        var amount = extractTotalAmount(lines, visionText)
+        var amount = ReceiptAmountAndQrParser.extractTotalAmount(lines, visionText)
 
         // 3. Fallback amount from AADE QR if and only if OCR amount was missing (0.0)
-        var merchantAfm = extractAfm(rawText)
-        var timestamp = extractDate(rawText) ?: System.currentTimeMillis()
+        var merchantAfm = ReceiptAmountAndQrParser.extractAfm(rawText)
+        var timestamp = ReceiptAmountAndQrParser.extractDate(rawText) ?: System.currentTimeMillis()
 
         if (!aadeQr.isNullOrBlank()) {
-            val qrData = parseAadeQrInternal(aadeQr)
+            val qrData = ReceiptAmountAndQrParser.parseAadeQrInternal(aadeQr)
             if (amount <= 0.0 && qrData.amount > 0.0) {
                 amount = qrData.amount
             }
@@ -291,8 +288,13 @@ object ReceiptParser {
             }
         }
 
-        // 4. Resolve Category against availableCategories
-        val resolvedCategory = resolveCategory(suggestedCategory, availableCategories)
+        // 4. Prefer learned category when available, otherwise resolve via heuristic rules
+        val learnedCat = learnedCategorySuggester?.invoke(storeName, merchantAfm)?.takeIf { it.isNotBlank() }
+        val resolvedCategory = if (learnedCat != null) {
+            resolveCategory(learnedCat, availableCategories)
+        } else {
+            resolveCategory(suggestedCategory, availableCategories)
+        }
 
         return ParsedReceiptData(
             title = storeName,
@@ -304,9 +306,6 @@ object ReceiptParser {
         )
     }
 
-    /**
-     * Backward-compatible parseOcrText method.
-     */
     fun parseOcrText(
         text: String,
         availableCategories: List<ExpenseCategory> = emptyList()
@@ -319,14 +318,11 @@ object ReceiptParser {
         )
     }
 
-    /**
-     * Backward-compatible parseAadeQr method.
-     */
     fun parseAadeQr(
         qrText: String,
         availableCategories: List<ExpenseCategory> = emptyList()
     ): ParsedReceiptData {
-        val qrData = parseAadeQrInternal(qrText)
+        val qrData = ReceiptAmountAndQrParser.parseAadeQrInternal(qrText)
         val ocrParsed = parseOcrText(qrText, availableCategories)
         val finalAmount = if (qrData.amount > 0.0) qrData.amount else ocrParsed.amount
         val finalAfm = if (qrData.merchantAfm.isNotBlank()) qrData.merchantAfm else ocrParsed.merchantAfm
@@ -370,7 +366,7 @@ object ReceiptParser {
         val upperTopText = topLines.joinToString("\n").uppercase(Locale.ROOT)
         val upperFullText = fullText.uppercase(Locale.ROOT)
 
-        val afm = extractAfm(fullText)
+        val afm = ReceiptAmountAndQrParser.extractAfm(fullText)
         if (afm.isNotBlank()) {
             val merchantByAfm = GREEK_AFM_MERCHANTS[afm]
             if (merchantByAfm != null) {
@@ -586,389 +582,6 @@ object ReceiptParser {
                 }
             }
         }
-    }
-
-    private fun removeGreekAccents(text: String): String {
-        return text
-            .replace('ά', 'α').replace('έ', 'ε').replace('ή', 'η')
-            .replace('ί', 'ι').replace('ό', 'ο').replace('ύ', 'υ').replace('ώ', 'ω')
-            .replace('Ά', 'Α').replace('Έ', 'Ε').replace('Ή', 'Η')
-            .replace('Ί', 'Ι').replace('Ό', 'Ο').replace('Ύ', 'Υ').replace('Ώ', 'Ω')
-            .replace('ΐ', 'ι').replace('ΰ', 'υ').replace('ü', 'u').replace('ú', 'u')
-            .replace('ý', 'y')
-    }
-
-    private val SYNOLO_REGEX = Regex(
-        """(?iu)(?:(?:ΓΕΝΙΚ[ΟO0οό]|ΓΕΝ\.?|ΤΕΛΙΚ[ΟO0οό]|ΠΛΗΡΩΤΕ[ΟO0οό]|ΚΑΘΑΡ[ΟO0οό]|ΣΥΝΟΛΙΚ[ΗΟA0ηοa]|TOTAL|GRAND)\s+)?(?:[ΣςσSZE3C£Fsze]\s*[ΥυύΎΰϋYUVyuvúüýI1\u038E\u03CD\u03CE\u03C5]\s*[ΝνNVMHnvumh\u03BD]\s*[ΟοόΌO0QDo0\u03BF\u03CC]\s*[ΛλLA^4/li1I|tdk\u03BB]\s*[ΟοόΌO0QDo0\u03BF\u03CC](?:[ΝνNvn\u03BD])?|(?:Σ[Υυ]νολικ[ήηόο]|Synolik[ho])\s*(?:Αξ[ίι]α|Ποσ[όο]|Axia|Poso)?|TOTAL|T\s*O\s*T\s*A\s*L|AMOUNT\s*DUE)"""
-    )
-
-    private val PRICE_REGEX = Regex(
-        """([0-9]{1,4}(?:[.,][0-9]{3})*[.,][0-9]{2}|[0-9]+[.,][0-9]{2})"""
-    )
-
-    private fun findSynoloMatchEnd(line: String): Int? {
-        val normLine = removeGreekAccents(line).uppercase(Locale.ROOT)
-        // Disqualify discount / savings / loyalty points lines
-        if (normLine.contains("ΕΞΟΙΚΟΝΟΜ") || normLine.contains("EXOIKONOM") ||
-            normLine.contains("ΕΚΠΤΩΣ") || normLine.contains("EKPTWS") ||
-            normLine.contains("ΟΦΕΛΟΣ") || normLine.contains("OFELOS") ||
-            normLine.contains("ΚΕΡΔΟΣ") || normLine.contains("KERDOS") ||
-            normLine.contains("SAVING") || normLine.contains("DISCOUNT") ||
-            normLine.contains("POINTS") || normLine.contains("ΠΟΝΤ")
-        ) {
-            return null
-        }
-
-        val match = SYNOLO_REGEX.find(line)
-        if (match != null) {
-            val after = line.substring(match.range.last + 1).trim()
-            val normAfter = removeGreekAccents(after).uppercase(Locale.ROOT)
-            val isIgnoredModifier = normAfter.startsWith("ΤΕΜΑΧΙ") ||
-                    normAfter.startsWith("ΤΕΜ") ||
-                    normAfter.startsWith("TEMAXI") ||
-                    normAfter.startsWith("TEM") ||
-                    normAfter.startsWith("ΕΙΔΩΝ") ||
-                    normAfter.startsWith("EIDWN") ||
-                    normAfter.startsWith("ΠΟΣΟΤ") ||
-                    normAfter.startsWith("POSOT") ||
-                    normAfter.startsWith("ITEMS") ||
-                    normAfter.startsWith("QTY") ||
-                    normAfter.startsWith("PCS") ||
-                    normAfter.contains("ΕΞΟΙΚΟΝΟΜ") ||
-                    normAfter.contains("ΕΚΠΤΩΣ") ||
-                    normAfter.contains("ΟΦΕΛΟΣ") ||
-                    normAfter.contains("ΚΕΡΔΟΣ")
-            if (isIgnoredModifier) {
-                return null
-            }
-            return match.range.last + 1
-        }
-        // Also check individual words with unaccented Levenshtein distance <= 1
-        val words = line.split(Regex("\\s+"))
-        var currIdx = 0
-        for (w in words) {
-            val start = line.indexOf(w, currIdx)
-            val unaccented = removeGreekAccents(w)
-            val cleaned = unaccented.replace(Regex("[^a-zA-Zα-ωΑ-Ω0-9]"), "").uppercase(Locale.ROOT)
-            if (cleaned.length in 5..8) {
-                if (isFuzzySynolo(cleaned)) {
-                    val after = if (start >= 0) line.substring(start + w.length).trim() else ""
-                    val normAfter = removeGreekAccents(after).uppercase(Locale.ROOT)
-                    val isIgnoredModifier = normAfter.startsWith("ΤΕΜΑΧΙ") ||
-                            normAfter.startsWith("ΤΕΜ") ||
-                            normAfter.startsWith("TEMAXI") ||
-                            normAfter.startsWith("TEM") ||
-                            normAfter.startsWith("ΕΙΔΩΝ") ||
-                            normAfter.startsWith("EIDWN") ||
-                            normAfter.startsWith("ITEMS") ||
-                            normAfter.startsWith("QTY") ||
-                            normAfter.contains("ΕΞΟΙΚΟΝΟΜ") ||
-                            normAfter.contains("ΕΚΠΤΩΣ") ||
-                            normAfter.contains("ΟΦΕΛΟΣ") ||
-                            normAfter.contains("ΚΕΡΔΟΣ")
-                    if (!isIgnoredModifier) {
-                        return if (start >= 0) start + w.length else line.length
-                    }
-                }
-            }
-            if (start >= 0) {
-                currIdx = start + w.length
-            }
-        }
-        return null
-    }
-
-    private fun isFuzzySynolo(word: String): Boolean {
-        val targets = listOf(
-            "ΣΥΝΟΛΟ", "ΣΥΝΟΛΟΝ", "EYNOAO", "ZYNOAO", "SYNOAO", "SYNOLO", "TOTAL", "ΣΥΝΟΑΟ",
-            "EVVOLO", "ZVVOLO", "EVVOIO", "ZVVOIO", "SVVOLO", "EUVODO", "EVNOLO", "ZVNOLO",
-            "ZVVOTO", "EVVOTO", "ZUVOTO", "EUVOTO", "ZUVODO", "ΣΥΝΟΛΙΚΗ", "SYNOLIKH"
-        )
-        for (target in targets) {
-            if (levenshteinDistance(word, target) <= 1) {
-                return true
-            }
-        }
-        return false
-    }
-
-    private fun levenshteinDistance(s1: String, s2: String): Int {
-        val dp = Array(s1.length + 1) { IntArray(s2.length + 1) }
-        for (i in 0..s1.length) dp[i][0] = i
-        for (j in 0..s2.length) dp[0][j] = j
-        for (i in 1..s1.length) {
-            for (j in 1..s2.length) {
-                val cost = if (s1[i - 1] == s2[j - 1]) 0 else 1
-                dp[i][j] = minOf(
-                    dp[i - 1][j] + 1,
-                    dp[i][j - 1] + 1,
-                    dp[i - 1][j - 1] + cost
-                )
-            }
-        }
-        return dp[s1.length][s2.length]
-    }
-
-    /**
-     * Extracts the total amount STRICTLY from the right of the word "ΣΥΝΟΛΟ" or "Σύνολο".
-     * No other numbers from the receipt are ever used.
-     */
-    private fun extractTotalAmount(lines: List<String>, visionText: Text? = null): Double {
-        // 1. Scan lines from bottom to top for same-line total
-        for (i in lines.indices.reversed()) {
-            val line = lines[i]
-            val matchEnd = findSynoloMatchEnd(line) ?: continue
-
-            // Substring immediately to the right of "ΣΥΝΟΛΟ" / "Σύνολο"
-            val textToRight = line.substring(matchEnd).trim()
-            if (textToRight.isNotBlank()) {
-                val matches = PRICE_REGEX.findAll(textToRight).toList()
-                if (matches.isNotEmpty()) {
-                    // Take the last/rightmost price (handles VAT tables where total/gross is the rightmost column)
-                    val decimalMatch = matches.last()
-                    val parsed = parseGreekPrice(decimalMatch.value)
-                    if (parsed != null && parsed > 0.0) {
-                        return parsed
-                    }
-                }
-            }
-
-            // 2. Spatial check with visionText if available (2-column layout)
-            if (visionText != null) {
-                val spatialAmount = findPriceToTheRightSpatially(visionText)
-                if (spatialAmount != null && spatialAmount > 0.0) {
-                    return spatialAmount
-                }
-            }
-
-            // 3. Check subsequent lines (within 8 lines, skipping divider lines like "----" or "=====")
-            for (offset in 1..8) {
-                if (i + offset < lines.size) {
-                    val candidateLine = lines[i + offset].trim()
-                    // Skip divider lines
-                    if (candidateLine.replace(Regex("[-=_*]"), "").isBlank()) continue
-
-                    val upperCand = candidateLine.uppercase(Locale.ROOT)
-                    // Skip cash and change lines if looking for grand total
-                    if (upperCand.contains("ΜΕΤΡΗΤ") || upperCand.contains("METRHT") ||
-                        upperCand.contains("ΡΕΣΤ") || upperCand.contains("REST")
-                    ) {
-                        continue
-                    }
-
-                    val nextMatches = PRICE_REGEX.findAll(candidateLine).toList()
-                    if (nextMatches.isNotEmpty()) {
-                        val parsed = parseGreekPrice(nextMatches.last().value)
-                        if (parsed != null && parsed > 0.0) {
-                            return parsed
-                        }
-                    }
-                }
-            }
-        }
-
-        // If visionText was provided, try spatial search across all blocks as fallback
-        if (visionText != null) {
-            val spatialAmount = findPriceToTheRightSpatially(visionText)
-            if (spatialAmount != null && spatialAmount > 0.0) {
-                return spatialAmount
-            }
-        }
-
-        // STRICT REQUIREMENT: If not found to the right of "ΣΥΝΟΛΟ" / "Σύνολο", return 0.0
-        return 0.0
-    }
-
-    /**
-     * Inspects ML Kit bounding boxes to find the price printed to the right of "ΣΥΝΟΛΟ"
-     * on the same vertical baseline (handling 2-column printed receipts, wrinkles, folds, and slanted photos).
-     */
-    private fun findPriceToTheRightSpatially(visionText: Text): Double? {
-        data class PriceCandidate(
-            val amount: Double,
-            val rect: android.graphics.Rect
-        )
-        val allPrices = mutableListOf<PriceCandidate>()
-
-        for (block in visionText.textBlocks) {
-            for (line in block.lines) {
-                val upperLine = line.text.uppercase(Locale.ROOT)
-                // Exclude cash tendered and change lines
-                if (upperLine.contains("ΜΕΤΡΗΤ") || upperLine.contains("METRHT") ||
-                    upperLine.contains("ΡΕΣΤ") || upperLine.contains("REST") ||
-                    upperLine.contains("CHANGE")
-                ) {
-                    continue
-                }
-
-                // First check line-level elements for fine-grained bounding boxes
-                for (element in line.elements) {
-                    val box = element.boundingBox ?: continue
-                    for (match in PRICE_REGEX.findAll(element.text)) {
-                        val amt = parseGreekPrice(match.value)
-                        if (amt != null && amt > 0.0) {
-                            allPrices.add(PriceCandidate(amt, box))
-                        }
-                    }
-                }
-
-                // Also record line-level bounding box
-                val lineBox = line.boundingBox
-                if (lineBox != null) {
-                    for (match in PRICE_REGEX.findAll(line.text)) {
-                        val amt = parseGreekPrice(match.value)
-                        if (amt != null && amt > 0.0) {
-                            allPrices.add(PriceCandidate(amt, lineBox))
-                        }
-                    }
-                }
-            }
-        }
-
-        if (allPrices.isEmpty()) return null
-
-        for (block in visionText.textBlocks.reversed()) {
-            for (line in block.lines.reversed()) {
-                val matchEnd = findSynoloMatchEnd(line.text) ?: continue
-                val lineBox = line.boundingBox ?: continue
-                val lineCenterY = lineBox.centerY()
-
-                // Check if price is in line.text to the right of matchEnd
-                val textToRight = line.text.substring(matchEnd).trim()
-                if (textToRight.isNotBlank()) {
-                    val inlineMatches = PRICE_REGEX.findAll(textToRight).toList()
-                    if (inlineMatches.isNotEmpty()) {
-                        val parsed = parseGreekPrice(inlineMatches.last().value)
-                        if (parsed != null && parsed > 0.0) {
-                            return parsed
-                        }
-                    }
-                }
-
-                // Generous vertical tolerance to handle paper wrinkles and photo tilt on high-resolution cameras (up to 550px)
-                val lineToleranceY = (lineBox.height() * 8.0).toInt().coerceIn(350, 600)
-
-                // Find prices whose center is to the right of the synolo text start
-                val matchingPrices = allPrices.filter { cand ->
-                    cand.rect.centerX() > lineBox.left &&
-                    Math.abs(cand.rect.centerY() - lineCenterY) <= lineToleranceY
-                }
-
-                if (matchingPrices.isNotEmpty()) {
-                    // Pick the candidate closest vertically to the synolo line
-                    val best = matchingPrices.minByOrNull { Math.abs(it.rect.centerY() - lineCenterY) }
-                    if (best != null && best.amount > 0.0) {
-                        return best.amount
-                    }
-                }
-            }
-        }
-        return null
-    }
-
-    /**
-     * Parses Greek numbers handling decimal commas and dots.
-     */
-    private fun parseGreekPrice(raw: String): Double? {
-        val cleaned = raw
-            .replace("€", "")
-            .replace("EUR", "", ignoreCase = true)
-            .replace("ΕΥΡΩ", "", ignoreCase = true)
-            .replace(":", "")
-            .replace(" ", "")
-            .trim()
-
-        if (cleaned.isBlank()) return null
-
-        // Format 1.250,50 or 1,250.50
-        if (cleaned.contains(".") && cleaned.contains(",")) {
-            return if (cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")) {
-                cleaned.replace(".", "").replace(",", ".").toDoubleOrNull()
-            } else {
-                cleaned.replace(",", "").toDoubleOrNull()
-            }
-        }
-
-        // Single comma separator (Greek standard)
-        if (cleaned.contains(",")) {
-            return cleaned.replace(",", ".").toDoubleOrNull()
-        }
-
-        return cleaned.toDoubleOrNull()
-    }
-
-    private fun extractAfm(text: String): String {
-        val afmRegex = Regex("""(?i)(?:ΑΦΜ|Α\.Φ\.Μ\.?|TIN|VAT)[:\s]*([0-9]{9})""")
-        val match = afmRegex.find(text)
-        return match?.groupValues?.get(1) ?: ""
-    }
-
-    private fun extractDate(text: String): Long? {
-        val datePatterns = listOf(
-            Pattern.compile("([0-3]?[0-9])[/.\\-]([0-1]?[0-9])[/.\\-](20[2-3][0-9])"),
-            Pattern.compile("([0-3]?[0-9])[/.\\-]([0-1]?[0-9])[/.\\-]([2-3][0-9])")
-        )
-
-        for (pattern in datePatterns) {
-            val matcher = pattern.matcher(text)
-            if (matcher.find()) {
-                val day = matcher.group(1)?.toIntOrNull() ?: continue
-                val month = matcher.group(2)?.toIntOrNull() ?: continue
-                var year = matcher.group(3)?.toIntOrNull() ?: continue
-                if (year < 100) year += 2000
-
-                if (day in 1..31 && month in 1..12 && year in 2020..2030) {
-                    val cal = Calendar.getInstance()
-                    cal.set(Calendar.YEAR, year)
-                    cal.set(Calendar.MONTH, month - 1)
-                    cal.set(Calendar.DAY_OF_MONTH, day)
-                    return cal.timeInMillis
-                }
-            }
-        }
-        return null
-    }
-
-    private data class InternalQrData(
-        val amount: Double = 0.0,
-        val merchantAfm: String = "",
-        val timestamp: Long = 0L
-    )
-
-    private fun parseAadeQrInternal(qrText: String): InternalQrData {
-        var amount = 0.0
-        var merchantAfm = ""
-        var timestamp = 0L
-
-        // Match amount in QR string (e.g. amount=14.50 or val=14.50 or poso=14,50 or tot=14.50)
-        val amountRegex = Regex("(?:amount|poso|total|sum|val|tot|price)=([0-9]+(?:[.,][0-9]{1,2})?)", RegexOption.IGNORE_CASE)
-        val amountMatch = amountRegex.find(qrText)
-        if (amountMatch != null) {
-            val raw = amountMatch.groupValues[1].replace(',', '.')
-            amount = raw.toDoubleOrNull() ?: 0.0
-        }
-
-        // Match AFM in QR string (e.g. tin=094123456 or afm=094123456)
-        val afmRegex = Regex("(?:tin|afm|vat)=([0-9]{9})", RegexOption.IGNORE_CASE)
-        val afmMatch = afmRegex.find(qrText)
-        if (afmMatch != null) {
-            merchantAfm = afmMatch.groupValues[1]
-        }
-
-        // Match date in QR string
-        val dateRegex = Regex("(?:date|d)=([0-9]{4}[-]?[0-9]{2}[-]?[0-9]{2})", RegexOption.IGNORE_CASE)
-        val dateMatch = dateRegex.find(qrText)
-        if (dateMatch != null) {
-            val dStr = dateMatch.groupValues[1].replace("-", "")
-            if (dStr.length == 8) {
-                try {
-                    val sdf = SimpleDateFormat("yyyyMMdd", Locale.ROOT)
-                    timestamp = sdf.parse(dStr)?.time ?: 0L
-                } catch (_: Exception) {}
-            }
-        }
-
-        return InternalQrData(amount, merchantAfm, timestamp)
     }
 
     private fun resolveCategory(

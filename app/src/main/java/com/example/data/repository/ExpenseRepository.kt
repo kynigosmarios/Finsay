@@ -85,10 +85,9 @@ class ExpenseRepository(
     suspend fun insertSavingsGoal(goal: SavingsGoal): Long = expenseDao.insertSavingsGoal(goal)
     suspend fun insertSavingsGoals(goals: List<SavingsGoal>) = expenseDao.insertSavingsGoals(goals)
     suspend fun replaceAllSavingsGoals(goals: List<SavingsGoal>) {
-        expenseDao.deleteAllSavingsGoals()
-        if (goals.isNotEmpty()) {
-            expenseDao.insertSavingsGoals(goals)
-        }
+        val existing = expenseDao.getAllSavingsGoalsList()
+        if (existing == goals) return
+        expenseDao.replaceAllSavingsGoalsTransaction(goals)
     }
     suspend fun updateSavingsGoal(goal: SavingsGoal) = expenseDao.updateSavingsGoal(goal)
     suspend fun deleteSavingsGoal(goal: SavingsGoal) = expenseDao.deleteSavingsGoal(goal)

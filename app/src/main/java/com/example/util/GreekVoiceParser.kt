@@ -21,7 +21,8 @@ data class ParsedVoiceExpense(
     val memberIdsCsv: String = "",
     val payerMemberIdsCsv: String = "",
     val payerAmountsCsv: String = "",
-    val note: String = ""
+    val note: String = "",
+    val hasExplicitPayer: Boolean = false
 )
 
 object GreekVoiceParser {
@@ -724,7 +725,8 @@ object GreekVoiceParser {
         val displayName: String,
         val payerIdsCsv: String,
         val payerAmountsCsv: String,
-        val payers: List<FamilyMember>
+        val payers: List<FamilyMember>,
+        val hasExplicitPayer: Boolean = false
     )
 
     /**
@@ -823,7 +825,8 @@ object GreekVoiceParser {
     fun parse(
         prompt: String,
         categories: List<ExpenseCategory>,
-        allMembers: List<FamilyMember>
+        allMembers: List<FamilyMember>,
+        preferredDefaultPayer: FamilyMember? = null
     ): ParsedVoiceExpense {
         val norm = normalizeGreek(prompt)
 
@@ -839,7 +842,8 @@ object GreekVoiceParser {
         val (payerResult, beneficiaryInfo, consumedMemberWords) = extractPayerAndBeneficiaries(
             cleanedNorm = cleanedNorm,
             allMembers = allMembers,
-            amount = amount
+            amount = amount,
+            preferredDefaultPayer = preferredDefaultPayer
         )
         val (splitType, matchedMembers, memberDisplay) = beneficiaryInfo
 
@@ -875,7 +879,8 @@ object GreekVoiceParser {
             payerMemberIdsCsv = payerResult.payerIdsCsv,
             payerAmountsCsv = payerResult.payerAmountsCsv,
             memberIdsCsv = matchedMembers.joinToString(",") { it.id.toString() },
-            note = title
+            note = title,
+            hasExplicitPayer = payerResult.hasExplicitPayer
         )
     }
 
@@ -955,16 +960,18 @@ object GreekVoiceParser {
     private fun extractPayerAndBeneficiaries(
         cleanedNorm: String,
         allMembers: List<FamilyMember>,
-        amount: Double
+        amount: Double,
+        preferredDefaultPayer: FamilyMember? = null
     ): Triple<ParsedPayerResult, Triple<String, List<FamilyMember>, String>, Set<String>> {
-        val defaultParent = allMembers.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+        val defaultParent = preferredDefaultPayer?.takeIf { pref -> allMembers.any { it.id == pref.id } }
+            ?: allMembers.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
             ?: allMembers.firstOrNull()
         val defaultPayerId = defaultParent?.id ?: 0L
         val defaultPayerName = defaultParent?.name ?: ""
 
         val consumedWords = mutableSetOf<String>()
 
-        fun buildPayerResult(payers: List<FamilyMember>): ParsedPayerResult {
+        fun buildPayerResult(payers: List<FamilyMember>, isExplicit: Boolean): ParsedPayerResult {
             val list = if (payers.isNotEmpty()) payers else listOfNotNull(defaultParent)
             val primary = list.firstOrNull()
             val primaryId = primary?.id ?: defaultPayerId
@@ -976,7 +983,7 @@ object GreekVoiceParser {
             val idsCsv = list.joinToString(",") { it.id.toString() }
             val splitAmt = if (list.isNotEmpty()) amount / list.size else amount
             val amountsCsv = list.joinToString(",") { "${it.id}:${String.format(Locale.US, "%.2f", splitAmt)}" }
-            return ParsedPayerResult(primaryId, displayName, idsCsv, amountsCsv, list)
+            return ParsedPayerResult(primaryId, displayName, idsCsv, amountsCsv, list, hasExplicitPayer = isExplicit)
         }
 
         // 6.2 Payer trigger prefixes: "πληρώθηκε από", "πλήρωσε ο", "πλήρωσε η", "πλήρωσαν οι", "πλήρωσε", "paid by"
@@ -1051,8 +1058,9 @@ object GreekVoiceParser {
                 consumedWords.addAll(pMatch.matchedWords)
             }
 
-            val finalPayers = if (matchedPayers.isNotEmpty()) matchedPayers else listOfNotNull(defaultParent)
-            val payerResult = buildPayerResult(finalPayers)
+            val hasExplicit = matchedPayers.isNotEmpty()
+            val finalPayers = if (hasExplicit) matchedPayers else listOfNotNull(defaultParent)
+            val payerResult = buildPayerResult(finalPayers, hasExplicit)
             val finalBeneficiaries = beneficiaryResult ?: Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
 
             return Triple(payerResult, finalBeneficiaries, consumedWords)
@@ -1072,7 +1080,8 @@ object GreekVoiceParser {
                 consumedWords.add("κι")
             }
 
-            val payerResult = buildPayerResult(matchedMembers)
+            val hasExplicit = matchedMembers.isNotEmpty()
+            val payerResult = buildPayerResult(matchedMembers, hasExplicit)
             val beneficiaryResult = if (matchedMembers.isEmpty() || matchedMembers.size == allMembers.size) {
                 Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
             } else {

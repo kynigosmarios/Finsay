@@ -203,6 +203,7 @@ fun mapMemberFromFields(
         isDefault = defVal,
         sortOrder = sort,
         isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
+        linkedUserUid = coerceSafeString(getField("linkedUserUid")) ?: existing?.linkedUserUid ?: "",
         createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
 } catch (_: Throwable) {
@@ -473,6 +474,7 @@ fun mapRecurringExpenseFromFields(
         payerMemberName = coerceSafeString(getField("payerMemberName")) ?: existing?.payerMemberName ?: "",
         payerMemberIdsCsv = coerceSafeString(getField("payerMemberIdsCsv")) ?: existing?.payerMemberIdsCsv ?: "",
         payerAmountsCsv = coerceSafeString(getField("payerAmountsCsv")) ?: existing?.payerAmountsCsv ?: "",
+        anchorMonth = (coerceSafeInt(getField("anchorMonth")) ?: existing?.anchorMonth ?: 0).coerceIn(0, 11),
         createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
 } catch (_: Throwable) {
@@ -487,4 +489,39 @@ fun DocumentSnapshot.toSafeRecurringExpense(): FirebaseRecurringExpense {
         null
     }
     return mapRecurringExpenseFromFields(docId, existing) { field -> safeGet(field) }
+}
+
+fun mapActivityFromFields(
+    docId: String,
+    existing: FirebaseHouseholdActivity? = null,
+    getField: (String) -> Any?
+): FirebaseHouseholdActivity = try {
+    val resolvedId = coerceSafeString(getField("id"))?.ifBlank { docId } ?: docId
+    val amt = coerceSafeDouble(getField("amount")) ?: existing?.amount ?: 0.0
+    val created = coerceSafeTimestampMillis(getField("createdAt")) ?: existing?.createdAt ?: 0L
+
+    (existing ?: FirebaseHouseholdActivity()).copy(
+        id = resolvedId,
+        householdId = coerceSafeString(getField("householdId")) ?: existing?.householdId ?: "",
+        actorUid = coerceSafeString(getField("actorUid")) ?: existing?.actorUid ?: "",
+        actorName = coerceSafeString(getField("actorName")) ?: existing?.actorName ?: "",
+        actionType = coerceSafeString(getField("actionType")) ?: existing?.actionType ?: "",
+        targetType = coerceSafeString(getField("targetType")) ?: existing?.targetType ?: "",
+        summaryEl = coerceSafeString(getField("summaryEl")) ?: existing?.summaryEl ?: "",
+        summaryEn = coerceSafeString(getField("summaryEn")) ?: existing?.summaryEn ?: "",
+        amount = amt,
+        createdAt = created
+    )
+} catch (_: Throwable) {
+    existing ?: FirebaseHouseholdActivity(id = docId)
+}
+
+fun DocumentSnapshot.toSafeHouseholdActivity(): FirebaseHouseholdActivity {
+    val docId = safeDocId()
+    val existing = try {
+        this.toObject(FirebaseHouseholdActivity::class.java)
+    } catch (_: Throwable) {
+        null
+    }
+    return mapActivityFromFields(docId, existing) { field -> safeGet(field) }
 }

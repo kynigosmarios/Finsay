@@ -10,7 +10,8 @@ data class PendingBankTransaction(
     val merchantName: String,
     val amount: Double,
     val timestamp: Long = System.currentTimeMillis(),
-    val rawText: String = ""
+    val rawText: String = "",
+    val householdId: String = ""
 )
 
 object BankNotificationParser {

@@ -231,4 +231,75 @@ test("Outsider cannot read or write any household data", async () => {
   await assertFails(hRef.collection("expenses").doc("e_x").set({ title: "Bad", amount: 1 }));
   await assertFails(hRef.collection("members").doc("m_x").set({ name: "Bad" }));
   await assertFails(hRef.collection("categories").doc("c_x").set({ name: "Bad" }));
+  await assertFails(hRef.collection("activity").get());
+  await assertFails(
+    hRef.collection("activity").doc("a_x").set({
+      actorUid: OUTSIDER_UID,
+      actionType: "EXPENSE_ADDED",
+      summaryEl: "Fake",
+    })
+  );
 });
+
+test("Savings goals and recurring expenses allow CREATOR/EDITOR writes and block REGISTAR writes", async () => {
+  await seedSharedHousehold();
+  const creatorDb = testEnv.authenticatedContext(CREATOR_UID).firestore();
+  const editorDb = testEnv.authenticatedContext(EDITOR_UID).firestore();
+  const registarDb = testEnv.authenticatedContext(REGISTAR_UID).firestore();
+
+  const creatorH = creatorDb.collection("households").doc(HOUSEHOLD_ID);
+  const editorH = editorDb.collection("households").doc(HOUSEHOLD_ID);
+  const registarH = registarDb.collection("households").doc(HOUSEHOLD_ID);
+
+  await assertSucceeds(creatorH.collection("savings_goals").doc("g1").set({ title: "Trip", targetAmount: 1000 }));
+  await assertSucceeds(editorH.collection("savings_goals").doc("g1").update({ currentAmount: 250 }));
+  await assertSucceeds(registarH.collection("savings_goals").get());
+  await assertFails(registarH.collection("savings_goals").doc("g2").set({ title: "Blocked", targetAmount: 100 }));
+  await assertFails(registarH.collection("savings_goals").doc("g1").update({ currentAmount: 500 }));
+  await assertFails(registarH.collection("savings_goals").doc("g1").delete());
+
+  await assertSucceeds(creatorH.collection("recurring_expenses").doc("r1").set({ title: "Rent", amount: 600 }));
+  await assertSucceeds(editorH.collection("recurring_expenses").doc("r1").update({ amount: 650 }));
+  await assertSucceeds(registarH.collection("recurring_expenses").get());
+  await assertFails(registarH.collection("recurring_expenses").doc("r2").set({ title: "Blocked", amount: 50 }));
+  await assertFails(registarH.collection("recurring_expenses").doc("r1").update({ amount: 700 }));
+  await assertFails(registarH.collection("recurring_expenses").doc("r1").delete());
+});
+
+test("Household activity log allows member append with matching actorUid and blocks spoofing/modification", async () => {
+  await seedSharedHousehold();
+  const registarDb = testEnv.authenticatedContext(REGISTAR_UID).firestore();
+  const editorDb = testEnv.authenticatedContext(EDITOR_UID).firestore();
+
+  const regAct = registarDb.collection("households").doc(HOUSEHOLD_ID).collection("activity");
+  const edAct = editorDb.collection("households").doc(HOUSEHOLD_ID).collection("activity");
+
+  await assertSucceeds(
+    regAct.doc("act_1").set({
+      actorUid: REGISTAR_UID,
+      actorName: "Registar User",
+      actionType: "EXPENSE_ADDED",
+      targetType: "EXPENSE",
+      summaryEl: "Καταχώρησε έξοδο Καφές",
+      summaryEn: "Added expense Coffee",
+      amount: 3.5,
+      createdAt: Date.now(),
+    })
+  );
+
+  await assertSucceeds(edAct.get());
+
+  // Spoofed actorUid rejected
+  await assertFails(
+    regAct.doc("act_spoof").set({
+      actorUid: CREATOR_UID,
+      actionType: "EXPENSE_ADDED",
+      summaryEl: "Spoof",
+    })
+  );
+
+  // Update or delete rejected (append-only)
+  await assertFails(regAct.doc("act_1").update({ summaryEl: "Tampered" }));
+  await assertFails(edAct.doc("act_1").delete());
+});
+

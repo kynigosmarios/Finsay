@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.R
 import com.example.data.model.FirebaseCategory
 import com.example.data.model.FirebaseExpense
+import com.example.data.model.FirebaseHouseholdActivity
 import com.example.data.model.FirebaseIncome
 import com.example.data.model.FirebaseMember
 import com.example.data.model.FirebaseRecurringExpense
@@ -12,41 +13,28 @@ import com.example.data.model.FirebaseSavingsGoal
 import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
-import com.example.data.model.safeBoolean
-import com.example.data.model.safeString
-import com.example.data.model.safeStringList
-import com.example.data.model.toSafeCategory
-import com.example.data.model.toSafeExpense
-import com.example.data.model.toSafeHousehold
-import com.example.data.model.toSafeIncome
-import com.example.data.model.toSafeMember
-import com.example.data.model.toSafeRecurringExpense
-import com.example.data.model.toSafeSavingsGoal
-import com.example.data.model.toSafeUserProfile
-import com.example.util.GreekVoiceParser
-import com.google.firebase.Timestamp
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
-import com.google.firebase.firestore.snapshots
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.PersistentCacheSettings
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.tasks.await
-import com.example.data.seed.FirestoreDataSeed
-import com.example.data.entity.toFirebaseExpense
-import java.util.UUID
-import kotlin.random.Random
 
 class FirestoreSyncRepository(
     private val db: FirebaseFirestore
 ) {
+    private val householdDelegate = FirestoreHouseholdDelegate(db)
+    private val userProfileDelegate = FirestoreUserProfileDelegate(db, householdDelegate).also {
+        householdDelegate.userProfileDelegate = it
+    }
+    private val transactionsDelegate = FirestoreTransactionsDelegate(db, householdDelegate)
+    private val structureDelegate = FirestoreStructureDelegate(db, householdDelegate)
+
+    sealed class VerifiedUserLookupResult {
+        data class Found(val user: UserProfile) : VerifiedUserLookupResult()
+        object NotFound : VerifiedUserLookupResult()
+        object NotVerified : VerifiedUserLookupResult()
+        object SelfEmail : VerifiedUserLookupResult()
+    }
+
     companion object {
         private const val TAG = "FirestoreSyncRepo"
 
@@ -65,12 +53,11 @@ class FirestoreSyncRepository(
             } else {
                 FirebaseFirestore.getInstance()
             }
-            // Enable Persistent Disk Cache so expenses and balances load immediately from disk on app launch
             try {
-                val diskCacheSettings = com.google.firebase.firestore.FirebaseFirestoreSettings.Builder()
+                val diskCacheSettings = FirebaseFirestoreSettings.Builder()
                     .setLocalCacheSettings(
-                        com.google.firebase.firestore.PersistentCacheSettings.newBuilder()
-                            .setSizeBytes(com.google.firebase.firestore.FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED)
+                        PersistentCacheSettings.newBuilder()
+                            .setSizeBytes(FirebaseFirestoreSettings.CACHE_SIZE_UNLIMITED)
                             .build()
                     )
                     .build()
@@ -82,279 +69,74 @@ class FirestoreSyncRepository(
         }
     }
 
-    suspend fun getAllUserHouseholds(
-        uid: String,
-        email: String,
-        excludedHouseholdIds: Set<String> = emptySet()
-    ): List<Household> {
-        val foundMap = mutableMapOf<String, Household>()
-        val cleanEmail = email.trim()
-        val isMariosAccount = cleanEmail.equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true) ||
-                uid == FirestoreDataSeed.DEFAULT_USER_UID ||
-                uid == "t5kN4RvPRugIxXUz18Fep2khSrC2" ||
-                uid == "tSLWmkXZ0MTqIKGoX3wd6HdhDw63" ||
-                uid == "jllDLLQl7VgFzOQpVIHi0wo8B013" ||
-                uid == "oA6smvWcC6QYCAKMvYdWEcmVCO43"
+    // Household Discovery & Lifecycle
+    suspend fun getAllUserHouseholds(uid: String, email: String, excludedHouseholdIds: Set<String> = emptySet()): List<Household> =
+        householdDelegate.getAllUserHouseholds(uid, email, excludedHouseholdIds)
 
-        fun parseAndAccept(doc: DocumentSnapshot): Household? = try {
-            if (excludedHouseholdIds.contains(doc.id)) null
-            else {
-                val deletedFor = doc.safeStringList("deletedForUsers") ?: emptyList()
-                if (uid.isNotBlank() && deletedFor.contains(uid)) null
-                else {
-                    val h = doc.toSafeHousehold()
-                    if (h.id.isBlank()) h.id = doc.id
-                    val rawName = doc.safeString("name")
-                    if (!rawName.isNullOrBlank()) h.name = rawName
-                    h
-                }
-            }
-        } catch (t: Throwable) {
-            Log.w(TAG, "parseAndAccept household ${doc.id} failed: ${t.message}")
-            null
-        }
+    suspend fun discoverUserHouseholds(uid: String, email: String, excludedHouseholdIds: Set<String> = emptySet()): List<String> =
+        householdDelegate.discoverUserHouseholds(uid, email, excludedHouseholdIds)
 
-        // 1. Households owned by user
-        if (uid.isNotBlank()) {
-            try {
-                val qOwner = db.collection("households").whereEqualTo("ownerId", uid).get().await()
-                for (doc in qOwner.documents) {
-                    parseAndAccept(doc)?.let { foundMap[it.id] = it }
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "getAllUserHouseholds owner error: ${t.message}")
-            }
+    suspend fun findHouseholdWithExpenses(householdIds: List<String>): String? =
+        householdDelegate.findHouseholdWithExpenses(householdIds)
 
-            // 2. Households where memberUids contains user UID
-            try {
-                val qMembers = db.collection("households").whereArrayContains("memberUids", uid).get().await()
-                for (doc in qMembers.documents) {
-                    parseAndAccept(doc)?.let { foundMap[it.id] = it }
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "getAllUserHouseholds memberUids error: ${t.message}")
-            }
-        }
+    suspend fun hasExpenses(householdId: String): Boolean =
+        householdDelegate.hasExpenses(householdId)
 
-        // 4. Check user profile's assigned householdIds
-        if (uid.isNotBlank()) {
-            try {
-                val uDoc = db.collection("users").document(uid).get().await()
-                if (uDoc.exists()) {
-                    val hid = uDoc.safeString("householdId")
-                    val hids = uDoc.safeStringList("householdIds") ?: emptyList()
-                    val allProfileHids = (listOfNotNull(hid) + hids).filter { it.isNotBlank() && !excludedHouseholdIds.contains(it) }.distinct()
-                    for (targetHid in allProfileHids) {
-                        if (!foundMap.containsKey(targetHid)) {
-                            try {
-                                val hDoc = db.collection("households").document(targetHid).get().await()
-                                if (hDoc.exists()) {
-                                    parseAndAccept(hDoc)?.let { foundMap[it.id] = it }
-                                }
-                            } catch (_: Throwable) {}
-                        }
-                    }
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "getAllUserHouseholds user profile error: ${t.message}")
-            }
-        }
+    suspend fun createHousehold(ownerUid: String, exodologioName: String): Household =
+        householdDelegate.createHousehold(ownerUid, exodologioName)
 
-        // Special Marios handling
-        if (isMariosAccount) {
-            val defaultHid = FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID
-            val epixHid = "e1d4ae67-499"
-            if (!excludedHouseholdIds.contains(defaultHid) && !foundMap.containsKey(defaultHid)) {
-                foundMap[defaultHid] = Household(
-                    id = defaultHid,
-                    name = "Οικογένεια Μάριος",
-                    ownerId = uid,
-                    memberUids = listOf(uid, "t5kN4RvPRugIxXUz18Fep2khSrC2"),
-                    invitedEmails = listOf("kynigosmarios@gmail.com")
-                )
-            }
-            if (!excludedHouseholdIds.contains(epixHid) && !foundMap.containsKey(epixHid)) {
-                foundMap[epixHid] = Household(
-                    id = epixHid,
-                    name = "Επιχείρηση",
-                    ownerId = uid,
-                    memberUids = listOf(uid, "t5kN4RvPRugIxXUz18Fep2khSrC2"),
-                    invitedEmails = listOf("kynigosmarios@gmail.com")
-                )
-            }
-        }
+    suspend fun ensureHouseholdExists(householdId: String, ownerUid: String, householdName: String = "Το Εξοδολόγιό μου"): Household =
+        householdDelegate.ensureHouseholdExists(householdId, ownerUid, householdName)
 
-        val resultList = foundMap.values.toList()
+    suspend fun fetchUserHouseholds(householdIds: List<String>, excludedHouseholdIds: Set<String> = emptySet()): List<Household> =
+        householdDelegate.fetchUserHouseholds(householdIds, excludedHouseholdIds)
 
-        // Sync all found household IDs back to the user's profile using arrayUnion
-        if (uid.isNotBlank() && resultList.isNotEmpty()) {
-            try {
-                val validIds = resultList.map { it.id }.filter { it.isNotBlank() }.distinct()
-                val userRef = db.collection("users").document(uid)
-                userRef.set(
-                    mapOf(
-                        "householdIds" to FieldValue.arrayUnion(*validIds.toTypedArray())
-                    ),
-                    SetOptions.merge()
-                ).await()
-            } catch (e: Exception) {
-                Log.w(TAG, "getAllUserHouseholds profile arrayUnion notice: ${e.message}")
-            }
-        }
+    suspend fun switchActiveHousehold(uid: String, householdId: String) =
+        householdDelegate.switchActiveHousehold(uid, householdId)
 
-        return resultList
-    }
+    suspend fun renameHousehold(householdId: String, newName: String) =
+        householdDelegate.renameHousehold(householdId, newName)
 
-    suspend fun discoverUserHouseholds(uid: String, email: String, excludedHouseholdIds: Set<String> = emptySet()): List<String> {
-        return getAllUserHouseholds(uid, email, excludedHouseholdIds).map { it.id }
-    }
+    suspend fun updateHouseholdInviteRole(householdId: String, role: String) =
+        householdDelegate.updateHouseholdInviteRole(householdId, role)
 
-    suspend fun seedFirestoreIfEmpty(householdId: String, userId: String, isMarios: Boolean) {
-        if (!isMarios) return
-        val targetHid = if (householdId.isNotBlank()) householdId else FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID
-        val targetUid = if (userId.isNotBlank()) userId else FirestoreDataSeed.DEFAULT_USER_UID
+    suspend fun joinHouseholdByCode(userUid: String, inviteCode: String, role: String? = null): Result<Household> =
+        householdDelegate.joinHouseholdByCode(userUid, inviteCode, role)
 
-        try {
-            // Check if households/{targetHid}/expenses already has data in Firestore
-            val existingExpenses = db.collection("households").document(targetHid)
-                .collection("expenses").limit(5).get().await()
+    fun observeHousehold(householdId: String): Flow<Household?> =
+        householdDelegate.observeHousehold(householdId)
 
-            if (existingExpenses.isEmpty) {
-                Log.i(TAG, "Seeding base data to Firestore for household $targetHid and user $targetUid...")
+    fun observeUserHouseholds(uid: String, email: String): Flow<List<Household>> =
+        householdDelegate.observeUserHouseholds(uid, email)
 
-                // 1. Ensure Household documents exist in Firestore
-                val hDoc = db.collection("households").document(targetHid).get().await()
-                if (!hDoc.exists()) {
-                    val household = Household(
-                        id = targetHid,
-                        name = if (targetHid == "e1d4ae67-499") "Επιχείρηση" else FirestoreDataSeed.DEFAULT_HOUSEHOLD_NAME,
-                        ownerId = targetUid,
-                        inviteCode = "OIKO-7788",
-                        memberUids = listOf(targetUid, "t5kN4RvPRugIxXUz18Fep2khSrC2", "tSLWmkXZ0MTqIKGoX3wd6HdhDw63", "jllDLLQl7VgFzOQpVIHi0wo8B013", "oA6smvWcC6QYCAKMvYdWEcmVCO43"),
-                        invitedEmails = listOf("kynigosmarios@gmail.com"),
-                        createdAt = Timestamp.now()
-                    )
-                    db.collection("households").document(targetHid).set(household).await()
-                }
+    suspend fun backfillHouseholdMemberMetadata(householdId: String, emailsByUid: Map<String, String>, namesByUid: Map<String, String>) =
+        householdDelegate.backfillHouseholdMemberMetadata(householdId, emailsByUid, namesByUid)
 
-                if (isMarios) {
-                    val bDoc = db.collection("households").document("e1d4ae67-499").get().await()
-                    if (!bDoc.exists()) {
-                        val epixeirisi = Household(
-                            id = "e1d4ae67-499",
-                            name = "Επιχείρηση",
-                            ownerId = targetUid,
-                            inviteCode = "OIKO-9922",
-                            memberUids = listOf(targetUid, "t5kN4RvPRugIxXUz18Fep2khSrC2"),
-                            invitedEmails = listOf("kynigosmarios@gmail.com"),
-                            createdAt = Timestamp.now()
-                        )
-                        db.collection("households").document("e1d4ae67-499").set(epixeirisi).await()
-                    }
-                }
+    suspend fun shareHouseholdWithUser(householdId: String, targetUser: UserProfile, role: HouseholdRole): Household? =
+        householdDelegate.shareHouseholdWithUser(householdId, targetUser, role)
 
-                // 2. Seed Members to both scopes
-                FirestoreDataSeed.members.forEach { m ->
-                    val fbM = FirebaseMember(
-                        id = m.id.toString(),
-                        householdId = targetHid,
-                        userId = targetUid,
-                        name = m.name,
-                        role = m.role,
-                        avatarColorHex = m.avatarColorHex,
-                        voiceKeywords = m.voiceKeywords,
-                        isDefault = m.isDefault,
-                        sortOrder = m.sortOrder
-                    )
-                    db.collection("households").document(targetHid).collection("members").document(fbM.id).set(fbM)
-                    db.collection("users").document(targetUid).collection("members").document(fbM.id).set(fbM)
-                }
+    suspend fun updateSharedUserRole(householdId: String, targetUid: String, targetEmail: String, newRole: HouseholdRole): Household? =
+        householdDelegate.updateSharedUserRole(householdId, targetUid, targetEmail, newRole)
 
-                // 3. Seed Categories to both scopes
-                FirestoreDataSeed.categories.forEach { c ->
-                    val fbC = FirebaseCategory(
-                        id = c.id.toString(),
-                        householdId = targetHid,
-                        userId = targetUid,
-                        name = c.name,
-                        iconKey = c.iconKey,
-                        monthlyBudget = c.monthlyBudget,
-                        colorHex = c.colorHex,
-                        voiceKeywords = c.voiceKeywords,
-                        sortOrder = c.sortOrder,
-                        fontColorHex = c.fontColorHex
-                    )
-                    db.collection("households").document(targetHid).collection("categories").document(fbC.id).set(fbC)
-                    db.collection("users").document(targetUid).collection("categories").document(fbC.id).set(fbC)
-                }
+    suspend fun removeSharedUser(householdId: String, targetUid: String, targetEmail: String): Household? =
+        householdDelegate.removeSharedUser(householdId, targetUid, targetEmail)
 
-                // 4. Seed Incomes to both scopes
-                FirestoreDataSeed.incomes.forEach { inc ->
-                    val fbInc = FirebaseIncome(
-                        id = inc.cloudId.ifBlank { "inc_${inc.id}" },
-                        householdId = targetHid,
-                        title = inc.title,
-                        amount = inc.amount,
-                        memberId = inc.memberId,
-                        memberName = inc.memberName,
-                        category = inc.category,
-                        timestamp = inc.timestamp,
-                        note = inc.note,
-                        createdByUid = targetUid,
-                        createdByName = FirestoreDataSeed.DEFAULT_USER_NAME
-                    )
-                    db.collection("households").document(targetHid).collection("incomes").document(fbInc.id).set(fbInc)
-                    db.collection("users").document(targetUid).collection("incomes").document(fbInc.id).set(fbInc)
-                }
+    suspend fun inviteMemberToHousehold(householdId: String, email: String, role: String = "REGISTAR", targetUser: UserProfile? = null) =
+        householdDelegate.inviteMemberToHousehold(householdId, email, role, targetUser)
 
-                // 5. Seed Base Expenses to both scopes using Batches
-                val batches = FirestoreDataSeed.expenses.chunked(250)
-                for (chunk in batches) {
-                    val batch = db.batch()
-                    for (exp in chunk) {
-                        val fbExp = exp.toFirebaseExpense(
-                            householdId = targetHid,
-                            userId = targetUid,
-                            userName = FirestoreDataSeed.DEFAULT_USER_NAME
-                        )
-                        val hRef = db.collection("households").document(targetHid).collection("expenses").document(fbExp.id)
-                        val uRef = db.collection("users").document(targetUid).collection("expenses").document(fbExp.id)
-                        batch.set(hRef, fbExp)
-                        batch.set(uRef, fbExp)
-                    }
-                    batch.commit().await()
-                }
-                Log.i(TAG, "Seeded ${FirestoreDataSeed.expenses.size} expenses to Firestore successfully!")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in seedFirestoreIfEmpty", e)
-        }
-    }
+    suspend fun removeMemberFromHousehold(householdId: String, email: String) =
+        householdDelegate.removeMemberFromHousehold(householdId, email)
 
-    suspend fun findHouseholdWithExpenses(householdIds: List<String>): String? {
-        for (hid in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try {
-                val snap = db.collection("households").document(hid)
-                    .collection("expenses").limit(1).get().await()
-                if (!snap.isEmpty) {
-                    return hid
-                }
-            } catch (_: Exception) {}
-        }
-        return null
-    }
+    suspend fun deleteHousehold(householdId: String, userId: String, nextHouseholdId: String? = null) =
+        householdDelegate.deleteHousehold(householdId, userId, nextHouseholdId)
 
-    suspend fun hasExpenses(householdId: String): Boolean {
-        if (householdId.isBlank()) return false
-        return try {
-            val snap = db.collection("households").document(householdId)
-                .collection("expenses").limit(1).get().await()
-            !snap.isEmpty
-        } catch (_: Exception) {
-            false
-        }
-    }
+    suspend fun leaveSharedHousehold(householdId: String, userId: String, userEmail: String) =
+        householdDelegate.leaveSharedHousehold(householdId, userId, userEmail)
 
+    suspend fun deleteUserEntireData(userId: String, householdIds: List<String> = emptyList()) =
+        householdDelegate.deleteUserEntireData(userId, householdIds)
+
+    // User Profiles
     suspend fun getOrCreateUserProfile(
         uid: String,
         email: String,
@@ -367,320 +149,27 @@ class FirestoreSyncRepository(
         city: String = "",
         authProvider: String = "",
         excludedHouseholdIds: Set<String> = emptySet()
-    ): UserProfile {
-        val userRef = db.collection("users").document(uid)
-        val snapshot = userRef.get().await()
+    ): UserProfile = userProfileDelegate.getOrCreateUserProfile(
+        uid, email, displayName, firstName, lastName, birthDate, phoneNumber, occupation, city, authProvider, excludedHouseholdIds
+    )
 
-        // Discover all households in cloud associated with this user or email
-        val discoveredHids = discoverUserHouseholds(uid, email, excludedHouseholdIds)
+    suspend fun getUserProfileOnce(uid: String): UserProfile? =
+        userProfileDelegate.getUserProfileOnce(uid)
 
-        return if (snapshot.exists()) {
-            val existing = try {
-                snapshot.toSafeUserProfile()
-            } catch (_: Throwable) {
-                null
-            } ?: UserProfile(uid = uid, email = email, displayName = displayName)
+    suspend fun savePendingUserProfile(profile: UserProfile) =
+        userProfileDelegate.savePendingUserProfile(profile)
 
-            // Respect whatever name was saved in Firestore first; only fallback to Auth displayName if blank
-            val profileDisplayName = if (existing.displayName.isNotBlank()) existing.displayName else displayName.ifBlank { "Χρήστης Finsay" }
-            val derivedFirst = if (existing.firstName.isNotBlank()) {
-                existing.firstName
-            } else if (firstName.isNotBlank()) {
-                firstName
-            } else {
-                profileDisplayName.split(" ").firstOrNull() ?: ""
-            }
+    suspend fun markEmailVerifiedConfirmed(uid: String) =
+        userProfileDelegate.markEmailVerifiedConfirmed(uid)
 
-            val derivedLast = if (existing.lastName.isNotBlank()) {
-                existing.lastName
-            } else if (lastName.isNotBlank()) {
-                lastName
-            } else {
-                val parts = profileDisplayName.split(" ")
-                if (parts.size > 1) parts.drop(1).joinToString(" ") else ""
-            }
+    suspend fun updateUserAuthProvider(uid: String, provider: String) =
+        userProfileDelegate.updateUserAuthProvider(uid, provider)
 
-            val effectiveAuthProvider = if (authProvider.isNotBlank()) {
-                authProvider
-            } else if (existing.authProvider.isNotBlank()) {
-                existing.authProvider
-            } else "password"
+    suspend fun updateUserProfileName(uid: String, newDisplayName: String) =
+        userProfileDelegate.updateUserProfileName(uid, newDisplayName)
 
-            val isMariosAccount = email.trim().equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true) ||
-                    uid == FirestoreDataSeed.DEFAULT_USER_UID ||
-                    uid == "t5kN4RvPRugIxXUz18Fep2khSrC2" ||
-                    uid == "tSLWmkXZ0MTqIKGoX3wd6HdhDw63" ||
-                    uid == "jllDLLQl7VgFzOQpVIHi0wo8B013" ||
-                    uid == "oA6smvWcC6QYCAKMvYdWEcmVCO43"
-            val rawHids = (existing.householdIds + listOf(existing.householdId) + discoveredHids)
-                .filter { it.isNotBlank() && !excludedHouseholdIds.contains(it) }
-                .distinct()
-            val allHids = rawHids
-            val cleanExistingHid = existing.householdId
-
-            // Resolve best active household:
-            val bestActiveHid = if (cleanExistingHid.isNotBlank()) {
-                val currentHasExp = try {
-                    !db.collection("households").document(cleanExistingHid).collection("expenses").limit(1).get().await().isEmpty
-                } catch (_: Exception) { false }
-                if (currentHasExp) {
-                    cleanExistingHid
-                } else {
-                    findHouseholdWithExpenses(allHids) ?: cleanExistingHid
-                }
-            } else {
-                findHouseholdWithExpenses(allHids) ?: allHids.firstOrNull() ?: ""
-            }
-
-            val finalHouseholdId = if (bestActiveHid.isNotBlank()) {
-                bestActiveHid
-            } else if (allHids.isNotEmpty()) {
-                allHids.first()
-            } else {
-                val newHousehold = createHousehold(uid, "Το Εξοδολόγιό μου")
-                newHousehold.id
-            }
-
-            val finalHouseholdIds = (allHids + finalHouseholdId).filter { it.isNotBlank() }.distinct()
-
-            val merged = existing.copy(
-                email = (if (email.isNotBlank()) email else existing.email).trim(),
-                displayName = profileDisplayName,
-                firstName = derivedFirst,
-                lastName = derivedLast,
-                birthDate = if (existing.birthDate.isNotBlank()) existing.birthDate else birthDate,
-                phoneNumber = if (existing.phoneNumber.isNotBlank()) existing.phoneNumber else phoneNumber,
-                occupation = if (existing.occupation.isNotBlank()) existing.occupation else occupation,
-                city = if (existing.city.isNotBlank()) existing.city else city,
-                householdId = finalHouseholdId,
-                householdIds = finalHouseholdIds,
-                authProvider = effectiveAuthProvider,
-                requiresEmailVerification = existing.requiresEmailVerification,
-                emailVerifiedConfirmed = existing.emailVerifiedConfirmed
-            )
-
-            // Save merged profile to Firestore with SetOptions.merge()
-            userRef.set(merged, SetOptions.merge()).await()
-            merged
-        } else {
-            val allDiscovered = discoveredHids.filter { it.isNotBlank() }.distinct()
-            val (initialHouseholdId, initialHouseholdIds) = if (allDiscovered.isNotEmpty()) {
-                val withExp = findHouseholdWithExpenses(allDiscovered) ?: allDiscovered.first()
-                Pair(withExp, allDiscovered)
-            } else {
-                val newHousehold = createHousehold(uid, "Το Εξοδολόγιό μου")
-                Pair(newHousehold.id, listOf(newHousehold.id))
-            }
-
-            val profileDisplayName = displayName.ifBlank {
-                if (firstName.isNotBlank() || lastName.isNotBlank()) "$firstName $lastName".trim() else "Χρήστης Finsay"
-            }
-            val derivedFirst = if (firstName.isNotBlank()) firstName else profileDisplayName.split(" ").firstOrNull().orEmpty()
-            val derivedLast = if (lastName.isNotBlank()) lastName else {
-                val parts = profileDisplayName.split(" ")
-                if (parts.size > 1) parts.drop(1).joinToString(" ") else ""
-            }
-
-            val newProfile = UserProfile(
-                uid = uid,
-                email = email,
-                displayName = profileDisplayName,
-                firstName = derivedFirst,
-                lastName = derivedLast,
-                birthDate = birthDate,
-                phoneNumber = phoneNumber,
-                occupation = occupation,
-                city = city,
-                householdId = initialHouseholdId,
-                householdIds = initialHouseholdIds,
-                isPremium = false,
-                authProvider = authProvider.ifBlank { "password" },
-                createdAt = Timestamp.now()
-            )
-            userRef.set(newProfile, SetOptions.merge()).await()
-            newProfile
-        }
-    }
-
-    suspend fun getUserProfileOnce(uid: String): UserProfile? {
-        if (uid.isBlank()) return null
-        return try {
-            val snapshot = db.collection("users").document(uid).get().await()
-            if (!snapshot.exists()) return null
-            snapshot.toSafeUserProfile()
-        } catch (t: Throwable) {
-            Log.w(TAG, "getUserProfileOnce error: ${t.message}")
-            null
-        }
-    }
-
-    suspend fun savePendingUserProfile(profile: UserProfile) {
-        if (profile.uid.isBlank()) return
-        db.collection("users").document(profile.uid).set(profile, SetOptions.merge()).await()
-    }
-
-    suspend fun markEmailVerifiedConfirmed(uid: String) {
-        if (uid.isBlank()) return
-        db.collection("users").document(uid).set(
-            mapOf(
-                "emailVerifiedConfirmed" to true,
-                "updatedAt" to Timestamp.now()
-            ),
-            SetOptions.merge()
-        ).await()
-    }
-
-    suspend fun updateUserAuthProvider(uid: String, provider: String) {
-        if (uid.isBlank()) return
-        db.collection("users").document(uid).set(mapOf("authProvider" to provider), SetOptions.merge()).await()
-    }
-
-    suspend fun createHousehold(ownerUid: String, exodologioName: String): Household {
-        val householdId = UUID.randomUUID().toString().take(12)
-        val inviteCode = "OIKO-" + Random.nextInt(1000, 9999).toString()
-
-        val household = Household(
-            id = householdId,
-            name = exodologioName.ifBlank { "Το Εξοδολόγιό μου" },
-            ownerId = ownerUid,
-            inviteCode = inviteCode,
-            memberUids = listOf(ownerUid),
-            memberRoles = mapOf(ownerUid to HouseholdRole.CREATOR.key),
-            pendingInviteRole = HouseholdRole.REGISTAR.key,
-            createdAt = Timestamp.now(),
-            updatedAt = Timestamp.now()
-        )
-
-        try {
-            db.collection("households").document(householdId).set(household).await()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error saving new household: ${e.message}")
-        }
-
-        // Update user profile with householdId and add to householdIds list using merge
-        try {
-            val userRef = db.collection("users").document(ownerUid)
-            userRef.set(
-                mapOf(
-                    "householdId" to householdId,
-                    "householdIds" to FieldValue.arrayUnion(householdId)
-                ),
-                SetOptions.merge()
-            ).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error updating user with new household: ${e.message}")
-        }
-
-        return household
-    }
-
-    suspend fun ensureHouseholdExists(householdId: String, ownerUid: String, householdName: String = "Το Εξοδολόγιό μου"): Household {
-        if (householdId.isBlank() || ownerUid.isBlank()) {
-            return Household(id = householdId, name = householdName, ownerId = ownerUid, memberUids = listOf(ownerUid))
-        }
-        val docRef = db.collection("households").document(householdId)
-        val snapshot = try { docRef.get().await() } catch (_: Throwable) { null }
-        if (snapshot != null && snapshot.exists()) {
-            val existing = try { snapshot.toSafeHousehold() } catch (_: Throwable) {
-                Household(id = householdId, name = householdName, ownerId = ownerUid, memberUids = listOf(ownerUid))
-            }
-            if (!existing.memberUids.contains(ownerUid)) {
-                try {
-                    docRef.update("memberUids", FieldValue.arrayUnion(ownerUid)).await()
-                } catch (_: Throwable) {}
-            }
-            return existing
-        }
-
-        val newHousehold = Household(
-            id = householdId,
-            name = householdName.ifBlank { "Το Εξοδολόγιό μου" },
-            ownerId = ownerUid,
-            inviteCode = "OIKO-" + Random.nextInt(1000, 9999).toString(),
-            memberUids = listOf(ownerUid),
-            memberRoles = mapOf(ownerUid to HouseholdRole.CREATOR.key),
-            pendingInviteRole = HouseholdRole.REGISTAR.key,
-            createdAt = Timestamp.now(),
-            updatedAt = Timestamp.now()
-        )
-        try {
-            docRef.set(newHousehold, SetOptions.merge()).await()
-            val userRef = db.collection("users").document(ownerUid)
-            userRef.set(
-                mapOf(
-                    "householdId" to householdId,
-                    "householdIds" to FieldValue.arrayUnion(householdId)
-                ),
-                SetOptions.merge()
-            ).await()
-        } catch (t: Throwable) {
-            Log.e(TAG, "Error ensuring household in Firestore: ${t.message}")
-        }
-        return newHousehold
-    }
-
-    suspend fun fetchUserHouseholds(householdIds: List<String>, excludedHouseholdIds: Set<String> = emptySet()): List<Household> {
-        val filteredIds = householdIds.filter { it.isNotBlank() && !excludedHouseholdIds.contains(it) }
-        if (filteredIds.isEmpty()) return emptyList()
-        val list = mutableListOf<Household>()
-        for (id in filteredIds) {
-            try {
-                val doc = db.collection("households").document(id).get().await()
-                if (doc.exists()) {
-                    val h = doc.toSafeHousehold()
-                    if (h.id.isBlank()) h.id = doc.id
-                    val rawName = doc.safeString("name")
-                    if (!rawName.isNullOrBlank()) {
-                        h.name = rawName
-                    }
-                    list.add(h)
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "Error fetching household $id", t)
-            }
-        }
-        return list
-    }
-
-    suspend fun switchActiveHousehold(uid: String, householdId: String) {
-        if (uid.isBlank() || householdId.isBlank()) return
-        try {
-            db.collection("users").document(uid)
-                .set(mapOf("householdId" to householdId), SetOptions.merge())
-                .await()
-        } catch (t: Throwable) {
-            Log.w(TAG, "switchActiveHousehold notice: ${t.message}")
-        }
-    }
-
-    suspend fun renameHousehold(householdId: String, newName: String) {
-        if (householdId.isBlank() || newName.isBlank()) return
-        val cleanName = newName.trim()
-        db.collection("households").document(householdId).set(
-            mapOf(
-                "id" to householdId,
-                "name" to cleanName,
-                "updatedAt" to Timestamp.now()
-            ),
-            com.google.firebase.firestore.SetOptions.merge()
-        ).await()
-    }
-
-    suspend fun updateUserProfileName(uid: String, newDisplayName: String) {
-        if (uid.isBlank() || newDisplayName.isBlank()) return
-        db.collection("users").document(uid).set(
-            mapOf("displayName" to newDisplayName.trim()),
-            SetOptions.merge()
-        ).await()
-    }
-
-    suspend fun updateUserProfilePhoto(uid: String, photoUrl: String) {
-        if (uid.isBlank()) return
-        db.collection("users").document(uid).set(
-            mapOf("photoUrl" to photoUrl),
-            SetOptions.merge()
-        ).await()
-    }
+    suspend fun updateUserProfilePhoto(uid: String, photoUrl: String) =
+        userProfileDelegate.updateUserProfilePhoto(uid, photoUrl)
 
     suspend fun updateUserProfilePreferences(
         uid: String,
@@ -690,46 +179,12 @@ class FirestoreSyncRepository(
         reminderHour: Int? = null,
         reminderMinute: Int? = null,
         notificationConsentCompleted: Boolean? = null
-    ) {
-        if (uid.isBlank()) return
-        val updates = mutableMapOf<String, Any>()
-        if (appLanguage != null) updates["appLanguage"] = appLanguage
-        if (themeMode != null) updates["themeMode"] = themeMode
-        if (reminderEnabled != null) updates["reminderEnabled"] = reminderEnabled
-        if (reminderHour != null) updates["reminderHour"] = reminderHour
-        if (reminderMinute != null) updates["reminderMinute"] = reminderMinute
-        if (notificationConsentCompleted != null) updates["notificationConsentCompleted"] = notificationConsentCompleted
-        updates["updatedAt"] = Timestamp.now()
-        try {
-            db.collection("users").document(uid).set(updates, SetOptions.merge()).await()
-        } catch (e: Exception) {
-            Log.w("FirestoreSyncRepo", "Error updating profile preferences: ${e.message}")
-        }
-    }
+    ) = userProfileDelegate.updateUserProfilePreferences(
+        uid, appLanguage, themeMode, reminderEnabled, reminderHour, reminderMinute, notificationConsentCompleted
+    )
 
-    fun observeUserProfile(userId: String): Flow<UserProfile?> {
-        if (userId.isBlank()) return flowOf(null)
-        return db.collection("users").document(userId)
-            .snapshots()
-            .map { snapshot ->
-                try {
-                    if (snapshot.exists()) {
-                        val p = snapshot.toSafeUserProfile()
-                        if (p.uid.isBlank()) {
-                            p.uid = snapshot.id
-                        }
-                        p
-                    } else null
-                } catch (t: Throwable) {
-                    Log.w(TAG, "observeUserProfile map warning: ${t.message}")
-                    null
-                }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserProfile flow error: ${t.message}")
-                emit(null)
-            }
-    }
+    fun observeUserProfile(userId: String): Flow<UserProfile?> =
+        userProfileDelegate.observeUserProfile(userId)
 
     suspend fun updateUserFullProfile(
         uid: String,
@@ -739,2101 +194,268 @@ class FirestoreSyncRepository(
         phoneNumber: String,
         occupation: String,
         city: String
-    ): Result<UserProfile> {
-        if (uid.isBlank()) return Result.failure(Exception("Μη έγκυρο αναγνωριστικό χρήστη"))
-        val fullName = "$firstName $lastName".trim().ifBlank { "Χρήστης Finsay" }
-        val updates = mapOf(
-            "displayName" to fullName,
-            "firstName" to firstName.trim(),
-            "lastName" to lastName.trim(),
-            "birthDate" to birthDate.trim(),
-            "phoneNumber" to phoneNumber.trim(),
-            "occupation" to occupation.trim(),
-            "city" to city.trim(),
-            "updatedAt" to Timestamp.now()
-        )
-        // Use SetOptions.merge() so document is created or merged without NOT_FOUND exception
-        db.collection("users").document(uid).set(updates, SetOptions.merge()).await()
-        val doc = db.collection("users").document(uid).get().await()
-        val updatedFromDoc = try { doc.toSafeUserProfile() } catch (_: Exception) { null }
-        val finalProfile = (updatedFromDoc ?: UserProfile(uid = uid)).copy(
-            uid = uid,
-            displayName = if (updatedFromDoc?.displayName.isNullOrBlank()) fullName else updatedFromDoc!!.displayName,
-            firstName = if (updatedFromDoc?.firstName.isNullOrBlank()) firstName.trim() else updatedFromDoc!!.firstName,
-            lastName = if (updatedFromDoc?.lastName.isNullOrBlank()) lastName.trim() else updatedFromDoc!!.lastName,
-            birthDate = if (updatedFromDoc?.birthDate.isNullOrBlank()) birthDate.trim() else updatedFromDoc!!.birthDate,
-            phoneNumber = if (updatedFromDoc?.phoneNumber.isNullOrBlank()) phoneNumber.trim() else updatedFromDoc!!.phoneNumber,
-            occupation = if (updatedFromDoc?.occupation.isNullOrBlank()) occupation.trim() else updatedFromDoc!!.occupation,
-            city = if (updatedFromDoc?.city.isNullOrBlank()) city.trim() else updatedFromDoc!!.city
-        )
-        return Result.success(finalProfile)
-    }
+    ): Result<UserProfile> = userProfileDelegate.updateUserFullProfile(uid, firstName, lastName, birthDate, phoneNumber, occupation, city)
 
-    suspend fun findUserByPhoneNumber(phone: String): UserProfile? {
-        val raw = phone.trim().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-        if (raw.isBlank()) return null
-        
-        val digitsOnly = when {
-            raw.startsWith("0030") -> raw.removePrefix("0030")
-            raw.startsWith("+30") -> raw.removePrefix("+30")
-            else -> raw
-        }
+    suspend fun findUserByPhoneNumber(phone: String): UserProfile? =
+        userProfileDelegate.findUserByPhoneNumber(phone)
 
-        // Try direct lookups with variations
-        val variations = listOf(raw, digitsOnly, "+30$digitsOnly", "0030$digitsOnly").distinct()
-        for (v in variations) {
-            val query = db.collection("users").whereEqualTo("phoneNumber", v).get().await()
-            if (!query.isEmpty) {
-                val profile = try { query.documents.first().toSafeUserProfile() } catch (_: Exception) { null }
-                if (profile != null) return profile
-            }
-        }
-
-        // Fallback: Scan users collection to match normalized phone numbers
-        try {
-            val allUsers = db.collection("users").limit(50).get().await()
-            for (doc in allUsers.documents) {
-                val u = try { doc.toSafeUserProfile() } catch (_: Exception) { null } ?: continue
-                val uDigits = u.phoneNumber.trim().replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
-                    .let { if (it.startsWith("+30")) it.removePrefix("+30") else if (it.startsWith("0030")) it.removePrefix("0030") else it }
-                if (uDigits.isNotBlank() && (uDigits == digitsOnly || u.phoneNumber == raw)) {
-                    return u
-                }
-            }
-        } catch (_: Exception) {}
-
-        return null
-    }
-
-    suspend fun findUserByEmail(email: String): UserProfile? {
-        val clean = email.trim()
-        if (clean.isBlank()) return null
-        val lower = clean.lowercase()
-
-        // 1. Direct indexed equality on clean email
-        try {
-            val q1 = db.collection("users").whereEqualTo("email", clean).get().await()
-            if (!q1.isEmpty) {
-                val doc = q1.documents.first()
-                val profile = try { doc.toSafeUserProfile() } catch (_: Throwable) { null }
-                if (profile != null) {
-                    if (profile.uid.isBlank()) profile.uid = doc.id
-                    if (profile.email.isBlank()) profile.email = doc.safeString("email") ?: clean
-                    return profile
-                }
-            }
-        } catch (_: Throwable) {}
-
-        // 2. Direct indexed equality on lowercased email
-        if (lower != clean) {
-            try {
-                val q2 = db.collection("users").whereEqualTo("email", lower).get().await()
-                if (!q2.isEmpty) {
-                    val doc = q2.documents.first()
-                    val profile = try { doc.toSafeUserProfile() } catch (_: Throwable) { null }
-                    if (profile != null) {
-                        if (profile.uid.isBlank()) profile.uid = doc.id
-                        if (profile.email.isBlank()) profile.email = doc.safeString("email") ?: lower
-                        return profile
-                    }
-                }
-            } catch (_: Throwable) {}
-        }
-
-        // 3. Fallback scan across users collection: handles mixed casing, whitespace differences, and alternate field names
-        try {
-            val allUsers = db.collection("users").limit(500).get().await()
-            for (doc in allUsers.documents) {
-                val docEmail = doc.safeString("email")?.trim()
-                    ?: doc.safeString("userEmail")?.trim()
-                    ?: doc.safeString("contactEmail")?.trim()
-                    ?: continue
-                if (docEmail.equals(clean, ignoreCase = true) || docEmail.equals(lower, ignoreCase = true)) {
-                    val profile = try { doc.toSafeUserProfile() } catch (_: Throwable) { null }
-                    if (profile != null) {
-                        if (profile.uid.isBlank()) profile.uid = doc.id
-                        if (profile.email.isBlank()) profile.email = docEmail
-                        return profile
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            Log.w(TAG, "findUserByEmail scan error: ${e.message}")
-        }
-
-        // 4. Default Marios check if email matches
-        if (clean.equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true)) {
-            return UserProfile(
-                uid = FirestoreDataSeed.DEFAULT_USER_UID,
-                email = FirestoreDataSeed.DEFAULT_USER_EMAIL,
-                displayName = "Μάριος Κυνηγός",
-                firstName = "Μάριος",
-                lastName = "Κυνηγός",
-                householdId = FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID,
-                householdIds = listOf(FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID, "e1d4ae67-499"),
-                isPremium = true
-            )
-        }
-
-        return null
-    }
-
-    sealed class VerifiedUserLookupResult {
-        data class Found(val user: UserProfile) : VerifiedUserLookupResult()
-        object NotFound : VerifiedUserLookupResult()
-        object NotVerified : VerifiedUserLookupResult()
-        object SelfEmail : VerifiedUserLookupResult()
-    }
-
-    private fun isUserDocumentVerified(doc: DocumentSnapshot): Boolean {
-        val confirmed = doc.safeBoolean("emailVerifiedConfirmed")
-        val requiresVerif = doc.safeBoolean("requiresEmailVerification") == true
-        return confirmed == true || (confirmed == null && !requiresVerif)
-    }
+    suspend fun findUserByEmail(email: String): UserProfile? =
+        userProfileDelegate.findUserByEmail(email)
 
     suspend fun findVerifiedUserByEmail(
         email: String,
         currentUserUid: String = "",
         currentUserEmail: String = ""
-    ): VerifiedUserLookupResult {
-        val clean = email.trim()
-        if (clean.isBlank()) return VerifiedUserLookupResult.NotFound
-        val lower = clean.lowercase()
-        if (currentUserEmail.isNotBlank() && clean.equals(currentUserEmail.trim(), ignoreCase = true)) {
-            return VerifiedUserLookupResult.SelfEmail
-        }
-
-        var matchedDoc: DocumentSnapshot? = null
-
-        try {
-            val q1 = db.collection("users").whereEqualTo("email", clean).get().await()
-            if (!q1.isEmpty) {
-                matchedDoc = q1.documents.first()
-            }
-        } catch (_: Throwable) {}
-
-        if (matchedDoc == null && lower != clean) {
-            try {
-                val q2 = db.collection("users").whereEqualTo("email", lower).get().await()
-                if (!q2.isEmpty) {
-                    matchedDoc = q2.documents.first()
-                }
-            } catch (_: Throwable) {}
-        }
-
-        if (matchedDoc == null) {
-            try {
-                val allUsers = db.collection("users").limit(500).get().await()
-                for (doc in allUsers.documents) {
-                    val docEmail = doc.safeString("email")?.trim()
-                        ?: doc.safeString("userEmail")?.trim()
-                        ?: doc.safeString("contactEmail")?.trim()
-                        ?: continue
-                    if (docEmail.equals(clean, ignoreCase = true) || docEmail.equals(lower, ignoreCase = true)) {
-                        matchedDoc = doc
-                        break
-                    }
-                }
-            } catch (e: Throwable) {
-                Log.w(TAG, "findVerifiedUserByEmail scan error: ${e.message}")
-            }
-        }
-
-        if (matchedDoc != null) {
-            val profile = try {
-                matchedDoc.toSafeUserProfile().let { p ->
-                    val resolvedEmail = p.email.ifBlank {
-                        matchedDoc.safeString("email")?.trim()
-                            ?: matchedDoc.safeString("userEmail")?.trim()
-                            ?: matchedDoc.safeString("contactEmail")?.trim()
-                            ?: clean
-                    }
-                    p.copy(uid = p.uid.ifBlank { matchedDoc.id }, email = resolvedEmail)
-                }
-            } catch (_: Throwable) {
-                null
-            }
-            if (profile != null) {
-                if (currentUserUid.isNotBlank() && profile.uid == currentUserUid) {
-                    return VerifiedUserLookupResult.SelfEmail
-                }
-                return if (isUserDocumentVerified(matchedDoc)) {
-                    VerifiedUserLookupResult.Found(profile)
-                } else {
-                    VerifiedUserLookupResult.NotVerified
-                }
-            }
-        }
-
-        if (clean.equals(FirestoreDataSeed.DEFAULT_USER_EMAIL, ignoreCase = true)) {
-            if (currentUserUid == FirestoreDataSeed.DEFAULT_USER_UID) {
-                return VerifiedUserLookupResult.SelfEmail
-            }
-            return VerifiedUserLookupResult.Found(
-                UserProfile(
-                    uid = FirestoreDataSeed.DEFAULT_USER_UID,
-                    email = FirestoreDataSeed.DEFAULT_USER_EMAIL,
-                    displayName = "Μάριος Κυνηγός",
-                    firstName = "Μάριος",
-                    lastName = "Κυνηγός",
-                    householdId = FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID,
-                    householdIds = listOf(FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID, "e1d4ae67-499"),
-                    isPremium = true,
-                    emailVerifiedConfirmed = true
-                )
-            )
-        }
-
-        return VerifiedUserLookupResult.NotFound
-    }
-
-    suspend fun findRegisteredUserByEmail(email: String): UserProfile? = findUserByEmail(email)
-
-    suspend fun updateUserProfileHouseholdIds(uid: String, householdIds: List<String>) {
-        if (uid.isBlank()) return
-        try {
-            db.collection("users").document(uid).set(
-                mapOf(
-                    "householdIds" to householdIds.filter { it.isNotBlank() }.distinct(),
-                    "updatedAt" to Timestamp.now()
-                ),
-                SetOptions.merge()
-            ).await()
-        } catch (e: Exception) {
-            Log.w(TAG, "updateUserProfileHouseholdIds notice: ${e.message}")
-        }
-    }
-
-    suspend fun savePasswordResetPhoneCode(phone: String, code: String, userEmail: String) {
-        val cleanPhone = phone.trim().replace(" ", "").replace("-", "")
-        val data = mapOf(
-            "phone" to cleanPhone,
-            "code" to code,
-            "userEmail" to userEmail,
-            "createdAt" to Timestamp.now()
-        )
-        db.collection("phone_password_resets").document(cleanPhone).set(data).await()
-    }
-
-    suspend fun getPasswordResetPhoneCode(phone: String): Pair<String, String>? {
-        val cleanPhone = phone.trim().replace(" ", "").replace("-", "")
-        val doc = db.collection("phone_password_resets").document(cleanPhone).get().await()
-        if (!doc.exists()) return null
-        val code = doc.getString("code") ?: return null
-        val email = doc.getString("userEmail") ?: return null
-        return Pair(code, email)
-    }
-
-    suspend fun setPremiumStatus(uid: String, isPremium: Boolean) {
-        db.collection("users").document(uid).update("isPremium", isPremium).await()
-    }
-
-    suspend fun updateHouseholdInviteRole(householdId: String, role: String) {
-        if (householdId.isBlank()) return
-        try {
-            db.collection("households").document(householdId)
-                .update("pendingInviteRole", role)
-                .await()
-        } catch (_: Exception) {}
-    }
-
-    suspend fun joinHouseholdByCode(userUid: String, inviteCode: String, role: String? = null): Result<Household> {
-        val normalizedCode = inviteCode.trim().uppercase()
-        val querySnapshot = db.collection("households")
-            .whereEqualTo("inviteCode", normalizedCode)
-            .get()
-            .await()
-
-        if (querySnapshot.isEmpty) {
-            return Result.failure(Exception("Δεν βρέθηκε εξοδολόγιο με τον κωδικό: $normalizedCode"))
-        }
-
-        val doc = querySnapshot.documents.first()
-        val household = try { doc.toSafeHousehold() } catch (_: Exception) { null }
-            ?: return Result.failure(Exception("Σφάλμα ανάγνωσης στοιχείων εξοδολογίου"))
-
-        val assignedRole = role?.uppercase() ?: (doc.getString("pendingInviteRole") ?: "CONTRIBUTOR")
-
-        // Add userUid to memberUids array and memberRoles
-        val updates = mutableMapOf<String, Any>(
-            "memberUids" to FieldValue.arrayUnion(userUid),
-            "memberRoles.$userUid" to assignedRole
-        )
-        try {
-            doc.reference.update(updates).await()
-        } catch (_: Exception) {
-            doc.reference.update("memberUids", FieldValue.arrayUnion(userUid)).await()
-        }
-
-        // Update user profile
-        db.collection("users").document(userUid).update(
-            "householdId", household.id,
-            "householdIds", FieldValue.arrayUnion(household.id)
-        ).await()
-
-        val updatedRoles = household.memberRoles.toMutableMap().apply { put(userUid, assignedRole) }
-        return Result.success(household.copy(
-            memberUids = (household.memberUids + userUid).distinct(),
-            memberRoles = updatedRoles
-        ))
-    }
-
-    fun observeHousehold(householdId: String): Flow<Household?> {
-        if (householdId.isBlank()) return flowOf(null)
-
-        return db.collection("households").document(householdId)
-            .snapshots()
-            .map { snapshot ->
-                try {
-                    if (snapshot.exists()) {
-                        val h = snapshot.toSafeHousehold()
-                        if (h.id.isBlank()) h.id = snapshot.id
-                        val rawName = snapshot.safeString("name")
-                        if (!rawName.isNullOrBlank()) {
-                            h.name = rawName
-                        }
-                        h
-                    } else null
-                } catch (t: Throwable) {
-                    Log.w(TAG, "observeHousehold map warning: ${t.message}")
-                    null
-                }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeHousehold flow error: ${t.message}")
-                emit(null)
-            }
-    }
-
-    fun observeExpenses(householdId: String): Flow<List<FirebaseExpense>> {
-        if (householdId.isBlank()) return flowOf(emptyList())
-
-        return db.collection("households").document(householdId)
-            .collection("expenses")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) {
-                        obj.id = doc.id
-                    }
-                    obj
-                }.sortedWith(
-                    compareByDescending<FirebaseExpense> { it.timestamp }
-                        .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                        .thenByDescending { it.id }
-                )
-            }
-            .catch { t ->
-                Log.w(TAG, "observeExpenses flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncExpense(expense: FirebaseExpense) {
-        if (expense.householdId.isBlank()) return
-        if (expense.createdByUid.isNotBlank()) {
-            try { ensureHouseholdExists(expense.householdId, expense.createdByUid) } catch (_: Exception) {}
-        }
-
-        val docId = if (expense.id.isNotBlank()) expense.id else UUID.randomUUID().toString()
-        val expenseToSave = expense.copy(id = docId, createdAt = expense.createdAt ?: Timestamp.now())
-
-        db.collection("households").document(expense.householdId)
-            .collection("expenses").document(docId)
-            .set(expenseToSave)
-            .await()
-    }
-
-    suspend fun deleteExpense(householdId: String, expenseId: String) {
-        if (householdId.isBlank() || expenseId.isBlank()) return
-        db.collection("households").document(householdId)
-            .collection("expenses").document(expenseId)
-            .delete()
-            .await()
-    }
-
-    fun observeUserExpenses(userId: String): Flow<List<FirebaseExpense>> {
-        if (userId.isBlank()) return flowOf(emptyList())
-
-        return db.collection("users").document(userId)
-            .collection("expenses")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) {
-                        obj.id = doc.id
-                    }
-                    obj
-                }.sortedWith(
-                    compareByDescending<FirebaseExpense> { it.timestamp }
-                        .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                        .thenByDescending { it.id }
-                )
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserExpenses flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncUserExpense(userId: String, expense: FirebaseExpense) {
-        if (userId.isBlank()) return
-        val docId = if (expense.id.isNotBlank()) expense.id else UUID.randomUUID().toString()
-        val expenseToSave = expense.copy(id = docId, createdAt = expense.createdAt ?: Timestamp.now())
-
-        db.collection("users").document(userId)
-            .collection("expenses").document(docId)
-            .set(expenseToSave)
-            .await()
-    }
-
-    suspend fun deleteUserExpense(userId: String, expenseId: String) {
-        if (userId.isBlank() || expenseId.isBlank()) return
-        db.collection("users").document(userId)
-            .collection("expenses").document(expenseId)
-            .delete()
-            .await()
-    }
-
-    suspend fun clearAllExpenses(householdId: String, userId: String) {
-        try {
-            if (householdId.isNotBlank()) {
-                val docs = db.collection("households").document(householdId)
-                    .collection("expenses").get().await()
-                for (doc in docs.documents) {
-                    doc.reference.delete().await()
-                }
-            }
-            if (userId.isNotBlank()) {
-                val docs = db.collection("users").document(userId)
-                    .collection("expenses").get().await()
-                for (doc in docs.documents) {
-                    doc.reference.delete().await()
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error clearing cloud expenses", e)
-        }
-    }
-
-    // Incomes Cloud Sync
-    fun observeIncomes(householdId: String): Flow<List<FirebaseIncome>> {
-        if (householdId.isBlank()) return flowOf(emptyList())
-
-        return db.collection("households").document(householdId)
-            .collection("incomes")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) {
-                        obj.id = doc.id
-                    }
-                    obj
-                }.sortedWith(
-                    compareByDescending<FirebaseIncome> { it.timestamp }
-                        .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                        .thenByDescending { it.id }
-                )
-            }
-            .catch { t ->
-                Log.w(TAG, "observeIncomes flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncIncome(income: FirebaseIncome) {
-        if (income.householdId.isBlank()) return
-        if (income.createdByUid.isNotBlank()) {
-            try { ensureHouseholdExists(income.householdId, income.createdByUid) } catch (_: Exception) {}
-        }
-
-        val docId = if (income.id.isNotBlank()) income.id else UUID.randomUUID().toString()
-        val incomeToSave = income.copy(id = docId, createdAt = income.createdAt ?: Timestamp.now())
-
-        db.collection("households").document(income.householdId)
-            .collection("incomes").document(docId)
-            .set(incomeToSave)
-            .await()
-    }
-
-    suspend fun deleteIncome(householdId: String, incomeId: String) {
-        if (householdId.isBlank() || incomeId.isBlank()) return
-        db.collection("households").document(householdId)
-            .collection("incomes").document(incomeId)
-            .delete()
-            .await()
-    }
-
-    fun observeUserIncomes(userId: String): Flow<List<FirebaseIncome>> {
-        if (userId.isBlank()) return flowOf(emptyList())
-
-        return db.collection("users").document(userId)
-            .collection("incomes")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) {
-                        obj.id = doc.id
-                    }
-                    obj
-                }.sortedWith(
-                    compareByDescending<FirebaseIncome> { it.timestamp }
-                        .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                        .thenByDescending { it.id }
-                )
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserIncomes flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncUserIncome(userId: String, income: FirebaseIncome) {
-        if (userId.isBlank()) return
-        val docId = if (income.id.isNotBlank()) income.id else UUID.randomUUID().toString()
-        val incomeToSave = income.copy(id = docId, createdAt = income.createdAt ?: Timestamp.now())
-
-        db.collection("users").document(userId)
-            .collection("incomes").document(docId)
-            .set(incomeToSave)
-            .await()
-    }
-
-    suspend fun enableNetwork() {
-        try {
-            db.enableNetwork().await()
-        } catch (e: Exception) {
-            Log.w(TAG, "enableNetwork warning: ${e.message}")
-        }
-    }
-
-    suspend fun getExpensesFromCache(householdId: String): List<FirebaseExpense> {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("expenses")
-                .get(com.google.firebase.firestore.Source.CACHE)
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                if (obj != null && obj.id.isBlank()) {
-                    obj.id = doc.id
-                }
-                obj
-            }.sortedWith(
-                compareByDescending<FirebaseExpense> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun getIncomesFromCache(householdId: String): List<FirebaseIncome> {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("incomes")
-                .get(com.google.firebase.firestore.Source.CACHE)
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                if (obj != null && obj.id.isBlank()) {
-                    obj.id = doc.id
-                }
-                obj
-            }.sortedWith(
-                compareByDescending<FirebaseIncome> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun getExpensesOnce(householdId: String): List<FirebaseExpense> {
-        return getExpensesOnceOrNull(householdId) ?: emptyList()
-    }
-
-    suspend fun getExpensesOnceOrNull(householdId: String): List<FirebaseExpense>? {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("expenses")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                if (obj != null && obj.id.isBlank()) {
-                    obj.id = doc.id
-                }
-                obj
-            }.sortedWith(
-                compareByDescending<FirebaseExpense> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-        } catch (t: Throwable) {
-            Log.w(TAG, "Error fetching expenses once", t)
-            null
-        }
-    }
-
-    suspend fun getIncomesOnce(householdId: String): List<FirebaseIncome> {
-        return getIncomesOnceOrNull(householdId) ?: emptyList()
-    }
-
-    suspend fun getIncomesOnceOrNull(householdId: String): List<FirebaseIncome>? {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("incomes")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                if (obj != null && obj.id.isBlank()) {
-                    obj.id = doc.id
-                }
-                obj
-            }.sortedWith(
-                compareByDescending<FirebaseIncome> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-        } catch (t: Throwable) {
-            Log.w(TAG, "Error fetching incomes once", t)
-            null
-        }
-    }
-
-    suspend fun getUserExpensesOnce(userId: String): List<FirebaseExpense> {
-        if (userId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("users").document(userId)
-                .collection("expenses")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                if (obj != null && obj.id.isBlank()) {
-                    obj.id = doc.id
-                }
-                obj
-            }.sortedWith(
-                compareByDescending<FirebaseExpense> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-        } catch (t: Throwable) {
-            Log.w(TAG, "Error fetching user expenses once", t)
-            emptyList()
-        }
-    }
-
-    suspend fun getUserIncomesOnce(userId: String): List<FirebaseIncome> {
-        if (userId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("users").document(userId)
-                .collection("incomes")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                if (obj != null && obj.id.isBlank()) {
-                    obj.id = doc.id
-                }
-                obj
-            }.sortedWith(
-                compareByDescending<FirebaseIncome> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-        } catch (t: Throwable) {
-            Log.w(TAG, "Error fetching user incomes once", t)
-            emptyList()
-        }
-    }
-
-    suspend fun deleteUserIncome(userId: String, incomeId: String) {
-        if (userId.isBlank() || incomeId.isBlank()) return
-        db.collection("users").document(userId)
-            .collection("incomes").document(incomeId)
-            .delete()
-            .await()
-    }
-
-    // Household Members Sync
-    fun observeMembers(householdId: String): Flow<List<FirebaseMember>> {
-        if (householdId.isBlank()) return flowOf(emptyList())
-        return db.collection("households").document(householdId)
-            .collection("members")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    try {
-                        doc.toSafeMember()
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Error deserializing member ${doc.id}: ${t.message}")
-                        null
-                    }
-                }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
-            }
-            .catch { t ->
-                Log.w(TAG, "observeMembers flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncMember(householdId: String, member: FirebaseMember) {
-        if (householdId.isBlank()) return
-        if (member.userId.isNotBlank()) {
-            try { ensureHouseholdExists(householdId, member.userId) } catch (_: Exception) {}
-        }
-        val docId = if (member.id.isNotBlank()) member.id else UUID.randomUUID().toString()
-        val toSave = member.copy(id = docId, householdId = householdId, createdAt = Timestamp.now())
-        db.collection("households").document(householdId)
-            .collection("members").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun deleteMember(householdId: String, memberId: String) {
-        if (householdId.isBlank() || memberId.isBlank()) return
-        db.collection("households").document(householdId)
-            .collection("members").document(memberId)
-            .delete()
-            .await()
-    }
-
-    suspend fun setMemberDeleted(householdId: String, memberId: String, memberName: String, isDeleted: Boolean) {
-        if (householdId.isBlank()) return
-        try {
-            val membersCol = db.collection("households").document(householdId).collection("members")
-            val targetNameNorm = GreekVoiceParser.normalizeGreek(memberName.trim().lowercase())
-            val snap = membersCol.get().await()
-            var matched = false
-            for (doc in snap.documents) {
-                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
-                val docId = doc.getString("id") ?: doc.id
-                if (docId == memberId || doc.id == memberId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
-                    doc.reference.update("isDeleted", isDeleted).await()
-                    matched = true
-                }
-            }
-            if (!matched && memberId.isNotBlank()) {
-                membersCol.document(memberId).set(mapOf("isDeleted" to isDeleted), SetOptions.merge()).await()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error setting member isDeleted in household $householdId: ${e.message}")
-        }
-    }
-
-    suspend fun permanentDeleteMemberExact(householdId: String, memberId: String, memberName: String) {
-        if (householdId.isBlank()) return
-        try {
-            val membersCol = db.collection("households").document(householdId).collection("members")
-            val targetNameNorm = GreekVoiceParser.normalizeGreek(memberName.trim().lowercase())
-            val snap = membersCol.get().await()
-            for (doc in snap.documents) {
-                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
-                val docId = doc.getString("id") ?: doc.id
-                if (docId == memberId || doc.id == memberId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
-                    doc.reference.delete().await()
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error permanently deleting member from household $householdId: ${e.message}")
-        }
-    }
-
-    // Household Categories Sync
-    fun observeCategories(householdId: String): Flow<List<FirebaseCategory>> {
-        if (householdId.isBlank()) return flowOf(emptyList())
-        return db.collection("households").document(householdId)
-            .collection("categories")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    try {
-                        doc.toSafeCategory()
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "Error deserializing category ${doc.id}: ${t.message}")
-                        null
-                    }
-                }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
-            }
-            .catch { t ->
-                Log.w(TAG, "observeCategories flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncCategory(householdId: String, category: FirebaseCategory) {
-        if (householdId.isBlank()) return
-        if (category.userId.isNotBlank()) {
-            try { ensureHouseholdExists(householdId, category.userId) } catch (_: Exception) {}
-        }
-        val docId = if (category.id.isNotBlank()) category.id else UUID.randomUUID().toString()
-        val toSave = category.copy(id = docId, householdId = householdId, createdAt = Timestamp.now())
-        db.collection("households").document(householdId)
-            .collection("categories").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun deleteCategory(householdId: String, categoryId: String) {
-        if (householdId.isBlank() || categoryId.isBlank()) return
-        db.collection("households").document(householdId)
-            .collection("categories").document(categoryId)
-            .delete()
-            .await()
-    }
-
-    suspend fun setCategoryDeleted(householdId: String, categoryId: String, categoryName: String, isDeleted: Boolean) {
-        if (householdId.isBlank()) return
-        try {
-            val catsCol = db.collection("households").document(householdId).collection("categories")
-            val targetNameNorm = GreekVoiceParser.normalizeGreek(categoryName.trim().lowercase())
-            val snap = catsCol.get().await()
-            var matched = false
-            for (doc in snap.documents) {
-                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
-                val docId = doc.getString("id") ?: doc.id
-                if (docId == categoryId || doc.id == categoryId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
-                    doc.reference.update("isDeleted", isDeleted).await()
-                    matched = true
-                }
-            }
-            if (!matched && categoryId.isNotBlank()) {
-                catsCol.document(categoryId).set(mapOf("isDeleted" to isDeleted), SetOptions.merge()).await()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error setting category isDeleted in household $householdId: ${e.message}")
-        }
-    }
-
-    suspend fun permanentDeleteCategoryExact(householdId: String, categoryId: String, categoryName: String) {
-        if (householdId.isBlank()) return
-        try {
-            val catsCol = db.collection("households").document(householdId).collection("categories")
-            val targetNameNorm = GreekVoiceParser.normalizeGreek(categoryName.trim().lowercase())
-            val snap = catsCol.get().await()
-            for (doc in snap.documents) {
-                val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
-                val docId = doc.getString("id") ?: doc.id
-                if (docId == categoryId || doc.id == categoryId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
-                    doc.reference.delete().await()
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error permanently deleting category from household $householdId: ${e.message}")
-        }
-    }
-
-    // Direct / One-time fetches for Members
-    suspend fun getMembersOnce(householdId: String): List<FirebaseMember> {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("members")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                try {
-                    doc.toSafeMember()
-                } catch (_: Throwable) {
-                    null
-                }
-            }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun getUserMembersOnce(userId: String): List<FirebaseMember> {
-        if (userId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("users").document(userId)
-                .collection("members")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                try {
-                    doc.toSafeMember()
-                } catch (_: Throwable) {
-                    null
-                }
-            }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    fun observeUserMembers(userId: String): Flow<List<FirebaseMember>> {
-        if (userId.isBlank()) return flowOf(emptyList())
-        return db.collection("users").document(userId)
-            .collection("members")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    try {
-                        doc.toSafeMember()
-                    } catch (_: Throwable) {
-                        null
-                    }
-                }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserMembers flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncUserMember(userId: String, member: FirebaseMember) {
-        if (userId.isBlank()) return
-        val docId = if (member.id.isNotBlank()) member.id else UUID.randomUUID().toString()
-        val toSave = member.copy(id = docId, userId = userId, createdAt = Timestamp.now())
-        db.collection("users").document(userId)
-            .collection("members").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun deleteUserMember(userId: String, memberId: String) {
-        if (userId.isBlank() || memberId.isBlank()) return
-        db.collection("users").document(userId)
-            .collection("members").document(memberId)
-            .delete()
-            .await()
-    }
-
-    // Direct / One-time fetches for Categories
-    suspend fun getCategoriesOnce(householdId: String): List<FirebaseCategory> {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("categories")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                try {
-                    doc.toSafeCategory()
-                } catch (_: Throwable) {
-                    null
-                }
-            }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun getUserCategoriesOnce(userId: String): List<FirebaseCategory> {
-        if (userId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("users").document(userId)
-                .collection("categories")
-                .get()
-                .await()
-            snapshot.documents.mapNotNull { doc ->
-                try {
-                    doc.toSafeCategory()
-                } catch (_: Throwable) {
-                    null
-                }
-            }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    fun observeUserCategories(userId: String): Flow<List<FirebaseCategory>> {
-        if (userId.isBlank()) return flowOf(emptyList())
-        return db.collection("users").document(userId)
-            .collection("categories")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    try {
-                        doc.toSafeCategory()
-                    } catch (_: Throwable) {
-                        null
-                    }
-                }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserCategories flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun syncUserCategory(userId: String, category: FirebaseCategory) {
-        if (userId.isBlank()) return
-        val docId = if (category.id.isNotBlank()) category.id else UUID.randomUUID().toString()
-        val toSave = category.copy(id = docId, userId = userId, createdAt = Timestamp.now())
-        db.collection("users").document(userId)
-            .collection("categories").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun deleteUserCategory(userId: String, categoryId: String) {
-        if (userId.isBlank() || categoryId.isBlank()) return
-        db.collection("users").document(userId)
-            .collection("categories").document(categoryId)
-            .delete()
-            .await()
-    }
-
-    // Savings Goals Cloud Sync
-    fun observeSavingsGoals(householdId: String): Flow<List<FirebaseSavingsGoal>> {
-        if (householdId.isBlank()) return flowOf(emptyList())
-        return db.collection("households").document(householdId)
-            .collection("savings_goals")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
-                }.sortedBy { it.title }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeSavingsGoals flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    fun observeUserSavingsGoals(userId: String): Flow<List<FirebaseSavingsGoal>> {
-        if (userId.isBlank()) return flowOf(emptyList())
-        return db.collection("users").document(userId)
-            .collection("savings_goals")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
-                }.sortedBy { it.title }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserSavingsGoals flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun getSavingsGoalsOnce(householdId: String): List<FirebaseSavingsGoal> {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("savings_goals")
-                .get()
-                .await()
-            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null } }
-            if (list.isNotEmpty()) list else {
-                val alt = db.collection("households").document(householdId)
-                    .collection("savingsGoals").get().await()
-                alt.documents.mapNotNull { doc -> try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null } }
-            }
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun getUserSavingsGoalsOnce(userId: String): List<FirebaseSavingsGoal> {
-        if (userId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("users").document(userId)
-                .collection("savings_goals")
-                .get()
-                .await()
-            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null } }
-            if (list.isNotEmpty()) list else {
-                val alt = db.collection("users").document(userId)
-                    .collection("savingsGoals").get().await()
-                alt.documents.mapNotNull { doc -> try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null } }
-            }
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun syncSavingsGoal(householdId: String, goal: FirebaseSavingsGoal) {
-        if (householdId.isBlank()) return
-        val docId = if (goal.id.isNotBlank()) goal.id else UUID.randomUUID().toString()
-        val toSave = goal.copy(id = docId, householdId = householdId, createdAt = Timestamp.now())
-        db.collection("households").document(householdId)
-            .collection("savings_goals").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun syncUserSavingsGoal(userId: String, goal: FirebaseSavingsGoal) {
-        if (userId.isBlank()) return
-        val docId = if (goal.id.isNotBlank()) goal.id else UUID.randomUUID().toString()
-        val toSave = goal.copy(id = docId, userId = userId, createdAt = Timestamp.now())
-        db.collection("users").document(userId)
-            .collection("savings_goals").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun deleteSavingsGoal(householdId: String, goalId: String, title: String = "") {
-        if (householdId.isBlank()) return
-        try {
-            if (goalId.isNotBlank()) {
-                db.collection("households").document(householdId)
-                    .collection("savings_goals").document(goalId).delete().await()
-                db.collection("households").document(householdId)
-                    .collection("savingsGoals").document(goalId).delete().await()
-            }
-            if (title.isNotBlank()) {
-                val q1 = db.collection("households").document(householdId)
-                    .collection("savings_goals").whereEqualTo("title", title).get().await()
-                for (doc in q1.documents) { doc.reference.delete().await() }
-                val q2 = db.collection("households").document(householdId)
-                    .collection("savingsGoals").whereEqualTo("title", title).get().await()
-                for (doc in q2.documents) { doc.reference.delete().await() }
-            }
-        } catch (_: Exception) {}
-    }
-
-    suspend fun deleteUserSavingsGoal(userId: String, goalId: String, title: String = "") {
-        if (userId.isBlank()) return
-        try {
-            if (goalId.isNotBlank()) {
-                db.collection("users").document(userId)
-                    .collection("savings_goals").document(goalId).delete().await()
-                db.collection("users").document(userId)
-                    .collection("savingsGoals").document(goalId).delete().await()
-            }
-            if (title.isNotBlank()) {
-                val q1 = db.collection("users").document(userId)
-                    .collection("savings_goals").whereEqualTo("title", title).get().await()
-                for (doc in q1.documents) { doc.reference.delete().await() }
-                val q2 = db.collection("users").document(userId)
-                    .collection("savingsGoals").whereEqualTo("title", title).get().await()
-                for (doc in q2.documents) { doc.reference.delete().await() }
-            }
-        } catch (_: Exception) {}
-    }
-
-    // Recurring Expenses Cloud Sync
-    fun observeRecurringExpenses(householdId: String): Flow<List<FirebaseRecurringExpense>> {
-        if (householdId.isBlank()) return flowOf(emptyList())
-        return db.collection("households").document(householdId)
-            .collection("recurring_expenses")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
-                }.sortedBy { it.title }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeRecurringExpenses flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    fun observeUserRecurringExpenses(userId: String): Flow<List<FirebaseRecurringExpense>> {
-        if (userId.isBlank()) return flowOf(emptyList())
-        return db.collection("users").document(userId)
-            .collection("recurring_expenses")
-            .snapshots()
-            .map { querySnapshot ->
-                querySnapshot.documents.mapNotNull { doc ->
-                    val obj = try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
-                }.sortedBy { it.title }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserRecurringExpenses flow error: ${t.message}")
-                emit(emptyList())
-            }
-    }
-
-    suspend fun getRecurringExpensesOnce(householdId: String): List<FirebaseRecurringExpense> {
-        if (householdId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("households").document(householdId)
-                .collection("recurring_expenses")
-                .get()
-                .await()
-            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
-            if (list.isNotEmpty()) list else {
-                val alt = db.collection("households").document(householdId)
-                    .collection("recurringExpenses").get().await()
-                alt.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
-            }
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun getUserRecurringExpensesOnce(userId: String): List<FirebaseRecurringExpense> {
-        if (userId.isBlank()) return emptyList()
-        return try {
-            val snapshot = db.collection("users").document(userId)
-                .collection("recurring_expenses")
-                .get()
-                .await()
-            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
-            if (list.isNotEmpty()) list else {
-                val alt = db.collection("users").document(userId)
-                    .collection("recurringExpenses").get().await()
-                alt.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
-            }
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    suspend fun syncRecurringExpense(householdId: String, recurring: FirebaseRecurringExpense) {
-        if (householdId.isBlank()) return
-        val docId = if (recurring.id.isNotBlank()) recurring.id else UUID.randomUUID().toString()
-        val toSave = recurring.copy(id = docId, householdId = householdId, createdAt = Timestamp.now())
-        db.collection("households").document(householdId)
-            .collection("recurring_expenses").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun syncUserRecurringExpense(userId: String, recurring: FirebaseRecurringExpense) {
-        if (userId.isBlank()) return
-        val docId = if (recurring.id.isNotBlank()) recurring.id else UUID.randomUUID().toString()
-        val toSave = recurring.copy(id = docId, userId = userId, createdAt = Timestamp.now())
-        db.collection("users").document(userId)
-            .collection("recurring_expenses").document(docId)
-            .set(toSave)
-            .await()
-    }
-
-    suspend fun deleteRecurringExpense(householdId: String, recurringId: String, title: String = "") {
-        if (householdId.isBlank()) return
-        try {
-            if (recurringId.isNotBlank()) {
-                db.collection("households").document(householdId)
-                    .collection("recurring_expenses").document(recurringId).delete().await()
-                db.collection("households").document(householdId)
-                    .collection("recurringExpenses").document(recurringId).delete().await()
-            }
-            if (title.isNotBlank()) {
-                val q1 = db.collection("households").document(householdId)
-                    .collection("recurring_expenses").whereEqualTo("title", title).get().await()
-                for (doc in q1.documents) { doc.reference.delete().await() }
-                val q2 = db.collection("households").document(householdId)
-                    .collection("recurringExpenses").whereEqualTo("title", title).get().await()
-                for (doc in q2.documents) { doc.reference.delete().await() }
-            }
-        } catch (_: Exception) {}
-    }
-
-    suspend fun deleteUserRecurringExpense(userId: String, recurringId: String, title: String = "") {
-        if (userId.isBlank()) return
-        try {
-            if (recurringId.isNotBlank()) {
-                db.collection("users").document(userId)
-                    .collection("recurring_expenses").document(recurringId).delete().await()
-                db.collection("users").document(userId)
-                    .collection("recurringExpenses").document(recurringId).delete().await()
-            }
-            if (title.isNotBlank()) {
-                val q1 = db.collection("users").document(userId)
-                    .collection("recurring_expenses").whereEqualTo("title", title).get().await()
-                for (doc in q1.documents) { doc.reference.delete().await() }
-                val q2 = db.collection("users").document(userId)
-                    .collection("recurringExpenses").whereEqualTo("title", title).get().await()
-                for (doc in q2.documents) { doc.reference.delete().await() }
-            }
-        } catch (_: Exception) {}
-    }
-
-    // Cross-Household & Cross-Scope helper scans to recover data across any household associated with the user
-    suspend fun getAllMembersAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseMember> {
-        val result = mutableListOf<FirebaseMember>()
-        val distinctHids = (householdIds + listOf(userId)).filter { it.isNotBlank() }.distinct()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val members = getMembersOnce(hId)
-            result.addAll(members)
-        }
-        if (userId.isNotBlank()) {
-            val userMembers = getUserMembersOnce(userId)
-            result.addAll(userMembers)
-        }
-        return result
-    }
-
-    suspend fun syncAndCleanMember(
-        householdIds: List<String>,
-        userId: String,
-        member: FirebaseMember,
-        oldName: String = ""
-    ) {
-        val canonicalDocId = member.id.ifBlank { "1" }
-        val toSave = member.copy(id = canonicalDocId, createdAt = Timestamp.now())
-
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try {
-                db.collection("households").document(hId)
-                    .collection("members").document(canonicalDocId)
-                    .set(toSave.copy(householdId = hId))
-                    .await()
-            } catch (e: Exception) {
-                Log.w("FirestoreSyncRepo", "Error syncing member to household $hId: ${e.message}")
-            }
-        }
-        if (userId.isNotBlank()) {
-            try {
-                db.collection("users").document(userId)
-                    .collection("members").document(canonicalDocId)
-                    .set(toSave.copy(userId = userId))
-                    .await()
-            } catch (e: Exception) {
-                Log.w("FirestoreSyncRepo", "Error syncing member to user $userId: ${e.message}")
-            }
-        }
-
-        // Purge old stale documents with old name or duplicate doc IDs
-        val namesToPurge = mutableListOf<String>()
-        if (oldName.isNotBlank() && !oldName.equals(member.name, ignoreCase = true)) {
-            namesToPurge.add(oldName.trim().lowercase())
-        }
-
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try {
-                val snapshot = db.collection("households").document(hId).collection("members").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    val remoteIsDef = doc.getBoolean("isDefault") ?: false
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (canonicalDocId == "1" && remoteIsDef) ||
-                        (remoteName == member.name.trim().lowercase())) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-
-        if (userId.isNotBlank()) {
-            try {
-                val snapshot = db.collection("users").document(userId).collection("members").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    val remoteIsDef = doc.getBoolean("isDefault") ?: false
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (canonicalDocId == "1" && remoteIsDef) ||
-                        (remoteName == member.name.trim().lowercase())) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-    }
-
-    suspend fun deleteMemberFromAllScopes(memberId: String, householdIds: List<String>, userId: String, memberName: String = "") {
-        if (memberId.isBlank() && memberName.isBlank()) return
-        val targetNameNorm = memberName.trim().lowercase()
-        if (userId.isNotBlank()) {
-            try { 
-                if (memberId.isNotBlank()) deleteUserMember(userId, memberId)
-                if (targetNameNorm.isNotBlank()) {
-                    val snap = db.collection("users").document(userId).collection("members").get().await()
-                    for (doc in snap.documents) {
-                        if (doc.getString("name").orEmpty().trim().lowercase() == targetNameNorm) {
-                            doc.reference.delete().await()
-                        }
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try { 
-                if (memberId.isNotBlank()) deleteMember(hId, memberId)
-                if (targetNameNorm.isNotBlank()) {
-                    val snap = db.collection("households").document(hId).collection("members").get().await()
-                    for (doc in snap.documents) {
-                        if (doc.getString("name").orEmpty().trim().lowercase() == targetNameNorm) {
-                            doc.reference.delete().await()
-                        }
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-    }
-
-    suspend fun getAllCategoriesAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseCategory> {
-        val result = mutableListOf<FirebaseCategory>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val cats = getCategoriesOnce(hId)
-            result.addAll(cats)
-        }
-        if (userId.isNotBlank()) {
-            val userCats = getUserCategoriesOnce(userId)
-            result.addAll(userCats)
-        }
-        return result
-    }
-
-    suspend fun syncAndCleanCategory(
-        householdIds: List<String>,
-        userId: String,
-        category: FirebaseCategory,
-        oldName: String = ""
-    ) {
-        val canonicalDocId = category.id.ifBlank { UUID.randomUUID().toString() }
-        val toSave = category.copy(id = canonicalDocId, createdAt = Timestamp.now())
-
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try {
-                db.collection("households").document(hId)
-                    .collection("categories").document(canonicalDocId)
-                    .set(toSave.copy(householdId = hId))
-                    .await()
-            } catch (e: Exception) {
-                Log.w("FirestoreSyncRepo", "Error syncing category to household $hId: ${e.message}")
-            }
-        }
-        if (userId.isNotBlank()) {
-            try {
-                db.collection("users").document(userId)
-                    .collection("categories").document(canonicalDocId)
-                    .set(toSave.copy(userId = userId))
-                    .await()
-            } catch (e: Exception) {
-                Log.w("FirestoreSyncRepo", "Error syncing category to user $userId: ${e.message}")
-            }
-        }
-
-        // Purge old stale documents with old name or duplicate doc IDs
-        val namesToPurge = mutableListOf<String>()
-        if (oldName.isNotBlank() && !oldName.equals(category.name, ignoreCase = true)) {
-            namesToPurge.add(oldName.trim().lowercase())
-        }
-
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try {
-                val snapshot = db.collection("households").document(hId).collection("categories").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (remoteName == category.name.trim().lowercase())) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-
-        if (userId.isNotBlank()) {
-            try {
-                val snapshot = db.collection("users").document(userId).collection("categories").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (remoteName == category.name.trim().lowercase())) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (e: Exception) {}
-        }
-    }
-
-    suspend fun deleteCategoryFromAllScopes(categoryId: String, householdIds: List<String>, userId: String) {
-        if (categoryId.isBlank()) return
-        if (userId.isNotBlank()) {
-            try { deleteUserCategory(userId, categoryId) } catch (e: Exception) {}
-        }
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try { deleteCategory(hId, categoryId) } catch (e: Exception) {}
-        }
-    }
-
-    suspend fun batchUpdateMemberSortOrder(
-        householdIds: List<String>,
-        userId: String,
-        members: List<FirebaseMember>
-    ) {
-        if (members.isEmpty()) return
-        val validHouseholdIds = householdIds.filter { it.isNotBlank() }.distinct()
-
-        try {
-            val batch = db.batch()
-            for (m in members) {
-                val docId = m.id.ifBlank { "1" }
-                val updates = mapOf(
-                    "sortOrder" to m.sortOrder,
-                    "updatedAt" to Timestamp.now()
-                )
-                for (hId in validHouseholdIds) {
-                    val ref = db.collection("households").document(hId)
-                        .collection("members").document(docId)
-                    batch.set(ref, updates, SetOptions.merge())
-                }
-                if (userId.isNotBlank()) {
-                    val ref = db.collection("users").document(userId)
-                        .collection("members").document(docId)
-                    batch.set(ref, updates, SetOptions.merge())
-                }
-            }
-            batch.commit().await()
-        } catch (e: Exception) {
-            Log.w(TAG, "batchUpdateMemberSortOrder error: ${e.message}")
-        }
-    }
-
-    suspend fun batchUpdateCategorySortOrder(
-        householdIds: List<String>,
-        userId: String,
-        categories: List<FirebaseCategory>
-    ) {
-        if (categories.isEmpty()) return
-        val validHouseholdIds = householdIds.filter { it.isNotBlank() }.distinct()
-
-        try {
-            val batch = db.batch()
-            for (c in categories) {
-                val docId = c.id.ifBlank { "1" }
-                val updates = mapOf(
-                    "sortOrder" to c.sortOrder,
-                    "updatedAt" to Timestamp.now()
-                )
-                for (hId in validHouseholdIds) {
-                    val ref = db.collection("households").document(hId)
-                        .collection("categories").document(docId)
-                    batch.set(ref, updates, SetOptions.merge())
-                }
-                if (userId.isNotBlank()) {
-                    val ref = db.collection("users").document(userId)
-                        .collection("categories").document(docId)
-                    batch.set(ref, updates, SetOptions.merge())
-                }
-            }
-            batch.commit().await()
-        } catch (e: Exception) {
-            Log.w(TAG, "batchUpdateCategorySortOrder error: ${e.message}")
-        }
-    }
-
-    suspend fun fetchAllHouseholdMembers(householdIds: List<String>): List<FirebaseMember> {
-        val result = mutableListOf<FirebaseMember>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val members = getMembersOnce(hId)
-            result.addAll(members)
-        }
-        return result
-    }
-
-    suspend fun fetchAllHouseholdCategories(householdIds: List<String>): List<FirebaseCategory> {
-        val result = mutableListOf<FirebaseCategory>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val cats = getCategoriesOnce(hId)
-            result.addAll(cats)
-        }
-        return result
-    }
-
-    suspend fun fetchAllHouseholdSavingsGoals(householdIds: List<String>): List<FirebaseSavingsGoal> {
-        val result = mutableListOf<FirebaseSavingsGoal>()
-        for (hId in householdIds) {
-            val goals = getSavingsGoalsOnce(hId)
-            result.addAll(goals)
-        }
-        return result.distinctBy { it.id.ifBlank { it.title } }
-    }
-
-    suspend fun fetchAllHouseholdExpenses(householdIds: List<String>): List<FirebaseExpense> {
-        val result = mutableListOf<FirebaseExpense>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val exps = getExpensesOnce(hId)
-            result.addAll(exps)
-        }
-        return result.distinctBy { it.id.ifBlank { "${it.title}_${it.timestamp}_${it.amount}" } }
-    }
-
-    suspend fun fetchAllHouseholdIncomes(householdIds: List<String>): List<FirebaseIncome> {
-        val result = mutableListOf<FirebaseIncome>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val incs = getIncomesOnce(hId)
-            result.addAll(incs)
-        }
-        return result.distinctBy { it.id.ifBlank { "${it.title}_${it.timestamp}_${it.amount}" } }
-    }
-
-    suspend fun fetchAllHouseholdRecurringExpenses(householdIds: List<String>): List<FirebaseRecurringExpense> {
-        val result = mutableListOf<FirebaseRecurringExpense>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val recurring = getRecurringExpensesOnce(hId)
-            result.addAll(recurring)
-        }
-        return result.distinctBy { it.id.ifBlank { it.title } }
-    }
-
-    fun observeUserHouseholds(uid: String, email: String): Flow<List<Household>> {
-        if (uid.isBlank()) return flowOf(emptyList())
-
-        val memberFlow = db.collection("households")
-            .whereArrayContains("memberUids", uid)
-            .snapshots()
-            .map { snap ->
-                snap.documents.mapNotNull { doc ->
-                    try {
-                        val deletedFor = doc.safeStringList("deletedForUsers") ?: emptyList()
-                        if (deletedFor.contains(uid)) return@mapNotNull null
-                        doc.toSafeHousehold().apply {
-                            if (id.isBlank()) id = doc.id
-                            doc.safeString("name")?.let { nm -> if (nm.isNotBlank()) name = nm }
-                        }
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "observeUserHouseholds member map error ${doc.id}: ${t.message}")
-                        null
-                    }
-                }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserHouseholds memberFlow error: ${t.message}")
-                emit(emptyList())
-            }
-
-        val ownerFlow = db.collection("households")
-            .whereEqualTo("ownerId", uid)
-            .snapshots()
-            .map { snap ->
-                snap.documents.mapNotNull { doc ->
-                    try {
-                        val deletedFor = doc.safeStringList("deletedForUsers") ?: emptyList()
-                        if (deletedFor.contains(uid)) return@mapNotNull null
-                        doc.toSafeHousehold().apply {
-                            if (id.isBlank()) id = doc.id
-                            doc.safeString("name")?.let { nm -> if (nm.isNotBlank()) name = nm }
-                        }
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "observeUserHouseholds owner map error ${doc.id}: ${t.message}")
-                        null
-                    }
-                }
-            }
-            .catch { t ->
-                Log.w(TAG, "observeUserHouseholds ownerFlow error: ${t.message}")
-                emit(emptyList())
-            }
-
-        return kotlinx.coroutines.flow.combine(memberFlow, ownerFlow) { mList, oList ->
-            (oList + mList).distinctBy { it.id }
-        }.catch { t ->
-            Log.w(TAG, "observeUserHouseholds combined flow error: ${t.message}")
-            emit(emptyList())
-        }
-    }
-
-    suspend fun resolveUserProfilesByUids(uids: List<String>): Map<String, UserProfile> {
-        val cleanUids = uids.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-        if (cleanUids.isEmpty()) return emptyMap()
-        return coroutineScope {
-            cleanUids.map { uid ->
-                async {
-                    try {
-                        var doc = db.collection("users").document(uid).get().await()
-                        if (!doc.exists()) {
-                            val querySnap = db.collection("users")
-                                .whereEqualTo("uid", uid)
-                                .limit(1)
-                                .get()
-                                .await()
-                            if (!querySnap.isEmpty) {
-                                doc = querySnap.documents.first()
-                            }
-                        }
-                        if (doc.exists()) {
-                            val profile = doc.toSafeUserProfile()
-                            val email = profile.email.trim().ifBlank {
-                                doc.safeString("email")?.trim()
-                                    ?: doc.safeString("userEmail")?.trim()
-                                    ?: doc.safeString("contactEmail")?.trim()
-                                    ?: ""
-                            }
-                            val name = profile.displayName.trim().ifBlank {
-                                "${profile.firstName} ${profile.lastName}".trim()
-                            }.ifBlank { email }
-                            uid to profile.copy(uid = uid, email = email, displayName = name)
-                        } else {
-                            null
-                        }
-                    } catch (t: Throwable) {
-                        Log.w(TAG, "resolveUserProfilesByUids($uid) error: ${t.message}")
-                        null
-                    }
-                }
-            }.awaitAll().filterNotNull().toMap()
-        }
-    }
-
-    suspend fun backfillHouseholdMemberMetadata(
-        householdId: String,
-        emailsByUid: Map<String, String>,
-        namesByUid: Map<String, String>
-    ) {
-        if (householdId.isBlank() || (emailsByUid.isEmpty() && namesByUid.isEmpty())) return
-        try {
-            val hDocRef = db.collection("households").document(householdId)
-            val doc = hDocRef.get().await()
-            if (!doc.exists()) return
-            val existing = doc.toSafeHousehold()
-            val updatedEmails = existing.memberEmails.toMutableMap()
-            val updatedNames = existing.memberNames.toMutableMap()
-            var changed = false
-            emailsByUid.forEach { (uid, email) ->
-                if (uid.isNotBlank() && email.isNotBlank() && updatedEmails[uid].isNullOrBlank()) {
-                    updatedEmails[uid] = email
-                    changed = true
-                }
-            }
-            namesByUid.forEach { (uid, name) ->
-                if (uid.isNotBlank() && name.isNotBlank() && updatedNames[uid].isNullOrBlank()) {
-                    updatedNames[uid] = name
-                    changed = true
-                }
-            }
-            if (changed) {
-                hDocRef.update(
-                    mapOf(
-                        "memberEmails" to updatedEmails,
-                        "memberNames" to updatedNames,
-                        "updatedAt" to Timestamp.now()
-                    )
-                ).await()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "backfillHouseholdMemberMetadata error: ${e.message}")
-        }
-    }
-
-    suspend fun shareHouseholdWithUser(
-        householdId: String,
-        targetUser: UserProfile,
-        role: HouseholdRole
-    ): Household? {
-        if (householdId.isBlank() || targetUser.uid.isBlank()) return null
-        val targetUid = targetUser.uid.trim()
-        val cleanEmail = targetUser.email.trim()
-        val lowerEmail = cleanEmail.lowercase()
-        val resolvedName = targetUser.displayName.ifBlank {
-            "${targetUser.firstName} ${targetUser.lastName}".trim()
-        }.ifBlank { cleanEmail.substringBefore("@").ifBlank { "Χρήστης" } }
-
-        val hDocRef = db.collection("households").document(householdId)
-        val doc = hDocRef.get().await()
-        if (!doc.exists()) return null
-
-        val existing = doc.toSafeHousehold()
-        val updatedMemberUids = (existing.memberUids + targetUid).filter { it.isNotBlank() }.distinct()
-        val updatedInvitedEmails = (existing.invitedEmails + listOfNotNull(
-            lowerEmail.ifBlank { null }
-        )).distinct()
-        val updatedRoles = existing.memberRoles.toMutableMap().apply {
-            put(targetUid, role.key)
-            // Remove legacy dotted email keys if present to avoid map fragmentation
-            if (cleanEmail.isNotBlank()) remove(cleanEmail)
-            if (lowerEmail.isNotBlank()) remove(lowerEmail)
-        }
-        val updatedEmails = existing.memberEmails.toMutableMap().apply {
-            if (cleanEmail.isNotBlank()) put(targetUid, cleanEmail)
-        }
-        val updatedNames = existing.memberNames.toMutableMap().apply {
-            put(targetUid, resolvedName)
-        }
-        val deletedFor = (doc.safeStringList("deletedForUsers") ?: emptyList())
-            .filterNot { it == targetUid }
-
-        val payload = hashMapOf<String, Any>(
-            "memberUids" to updatedMemberUids,
-            "invitedEmails" to updatedInvitedEmails,
-            "memberRoles" to updatedRoles,
-            "memberEmails" to updatedEmails,
-            "memberNames" to updatedNames,
-            "deletedForUsers" to deletedFor,
-            "updatedAt" to Timestamp.now()
-        )
-        hDocRef.update(payload).await()
-
-        return existing.copy(
-            memberUids = updatedMemberUids,
-            invitedEmails = updatedInvitedEmails,
-            memberRoles = updatedRoles,
-            memberEmails = updatedEmails,
-            memberNames = updatedNames
-        )
-    }
-
-    suspend fun updateSharedUserRole(
-        householdId: String,
-        targetUid: String,
-        targetEmail: String,
-        newRole: HouseholdRole
-    ): Household? {
-        if (householdId.isBlank() || targetUid.isBlank()) return null
-        val hDocRef = db.collection("households").document(householdId)
-        val doc = hDocRef.get().await()
-        if (!doc.exists()) return null
-
-        val existing = doc.toSafeHousehold()
-        val updatedRoles = existing.memberRoles.toMutableMap().apply {
-            put(targetUid, newRole.key)
-            val clean = targetEmail.trim()
-            if (clean.isNotBlank()) {
-                remove(clean)
-                remove(clean.lowercase())
-            }
-        }
-        hDocRef.update(
-            mapOf(
-                "memberRoles" to updatedRoles,
-                "updatedAt" to Timestamp.now()
-            )
-        ).await()
-
-        return existing.copy(memberRoles = updatedRoles)
-    }
-
-    suspend fun removeSharedUser(
-        householdId: String,
-        targetUid: String,
-        targetEmail: String
-    ): Household? {
-        if (householdId.isBlank()) return null
-        val hDocRef = db.collection("households").document(householdId)
-        val doc = hDocRef.get().await()
-        if (!doc.exists()) return null
-
-        val existing = doc.toSafeHousehold()
-        val cleanEmail = targetEmail.trim().ifBlank { existing.memberEmails[targetUid].orEmpty().trim() }
-        val updatedMemberUids = existing.memberUids.filterNot { it == targetUid }
-        val updatedInvited = if (cleanEmail.isNotBlank()) {
-            existing.invitedEmails.filterNot { it.equals(cleanEmail, ignoreCase = true) }
-        } else {
-            existing.invitedEmails
-        }
-        val updatedRoles = existing.memberRoles.toMutableMap().apply {
-            if (targetUid.isNotBlank()) remove(targetUid)
-            if (cleanEmail.isNotBlank()) {
-                remove(cleanEmail)
-                remove(cleanEmail.lowercase())
-            }
-        }
-        val updatedEmails = existing.memberEmails.toMutableMap().apply {
-            if (targetUid.isNotBlank()) remove(targetUid)
-        }
-        val updatedNames = existing.memberNames.toMutableMap().apply {
-            if (targetUid.isNotBlank()) remove(targetUid)
-        }
-
-        hDocRef.update(
-            mapOf(
-                "memberUids" to updatedMemberUids,
-                "invitedEmails" to updatedInvited,
-                "memberRoles" to updatedRoles,
-                "memberEmails" to updatedEmails,
-                "memberNames" to updatedNames,
-                "updatedAt" to Timestamp.now()
-            )
-        ).await()
-
-        return existing.copy(
-            memberUids = updatedMemberUids,
-            invitedEmails = updatedInvited,
-            memberRoles = updatedRoles,
-            memberEmails = updatedEmails,
-            memberNames = updatedNames
-        )
-    }
-
-    suspend fun inviteMemberToHousehold(
-        householdId: String,
-        email: String,
-        role: String = "REGISTAR",
-        targetUser: UserProfile? = null
-    ) {
-        if (householdId.isBlank() || email.isBlank()) return
-        val cleanEmail = email.trim()
-        val resolvedUser = targetUser ?: findUserByEmail(cleanEmail)
-        val parsedRole = HouseholdRole.fromRaw(role, isCreator = false)
-        if (resolvedUser != null && resolvedUser.uid.isNotBlank()) {
-            shareHouseholdWithUser(householdId, resolvedUser.copy(email = resolvedUser.email.ifBlank { cleanEmail }), parsedRole)
-        }
-    }
-
-    suspend fun removeMemberFromHousehold(householdId: String, email: String) {
-        if (householdId.isBlank() || email.isBlank()) return
-        val cleanEmail = email.trim()
-        val matched = findUserByEmail(cleanEmail)
-        removeSharedUser(householdId, matched?.uid.orEmpty(), cleanEmail)
-    }
-
-    suspend fun deleteHousehold(householdId: String, userId: String, nextHouseholdId: String? = null) {
-        if (householdId.isBlank()) return
-        try {
-            if (userId.isNotBlank()) {
-                val userUpdate = mutableMapOf<String, Any>(
-                    "householdIds" to FieldValue.arrayRemove(householdId)
-                )
-                if (!nextHouseholdId.isNullOrBlank()) {
-                    userUpdate["householdId"] = nextHouseholdId
-                }
-                db.collection("users").document(userId).set(
-                    userUpdate,
-                    SetOptions.merge()
-                ).await()
-            }
-            // Keep the household data safely in Firestore as instructed, while disassociating user
-            try {
-                val hDoc = db.collection("households").document(householdId)
-                hDoc.update(
-                    mapOf(
-                        "deletedForUsers" to FieldValue.arrayUnion(userId),
-                        "memberUids" to FieldValue.arrayRemove(userId),
-                        "updatedAt" to Timestamp.now()
-                    )
-                ).await()
-            } catch (he: Exception) {
-                Log.w(TAG, "Household document disassociation notice: ${he.message}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "deleteHousehold error: ${e.message}", e)
-        }
-    }
-
-    suspend fun leaveSharedHousehold(householdId: String, userId: String, userEmail: String) {
-        if (householdId.isBlank()) return
-        val cleanEmail = userEmail.trim()
-        val lowerEmail = cleanEmail.lowercase()
-        try {
-            if (userId.isNotBlank()) {
-                db.collection("users").document(userId).set(
-                    mapOf("householdIds" to FieldValue.arrayRemove(householdId)),
-                    SetOptions.merge()
-                ).await()
-            }
-            val hRef = db.collection("households").document(householdId)
-            val snap = hRef.get().await()
-            if (snap.exists()) {
-                val existing = snap.toSafeHousehold()
-                val updatedMembers = existing.memberUids.filterNot { it == userId }
-                val updatedInvited = if (cleanEmail.isNotBlank()) {
-                    existing.invitedEmails.filterNot { it.equals(cleanEmail, ignoreCase = true) }
-                } else existing.invitedEmails
-                val updatedRoles = existing.memberRoles.toMutableMap().apply {
-                    remove(userId)
-                    if (cleanEmail.isNotBlank()) {
-                        remove(cleanEmail)
-                        remove(lowerEmail)
-                    }
-                }
-                val updatedEmails = existing.memberEmails.toMutableMap().apply { remove(userId) }
-                val updatedNames = existing.memberNames.toMutableMap().apply { remove(userId) }
-                val existingDeleted = snap.safeStringList("deletedForUsers") ?: emptyList()
-                val updatedDeleted = (existingDeleted + userId).filter { it.isNotBlank() }.distinct()
-                hRef.update(
-                    mapOf(
-                        "memberUids" to updatedMembers,
-                        "invitedEmails" to updatedInvited,
-                        "memberRoles" to updatedRoles,
-                        "memberEmails" to updatedEmails,
-                        "memberNames" to updatedNames,
-                        "deletedForUsers" to updatedDeleted,
-                        "updatedAt" to Timestamp.now()
-                    )
-                ).await()
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "leaveSharedHousehold notice: ${e.message}")
-        }
-    }
-
-    suspend fun getAllExpensesAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseExpense> {
-        val result = mutableListOf<FirebaseExpense>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val exps = getExpensesOnce(hId)
-            result.addAll(exps)
-        }
-        if (userId.isNotBlank()) {
-            val userExps = getUserExpensesOnce(userId)
-            result.addAll(userExps)
-        }
-        return result.distinctBy { it.id.ifBlank { "${it.title}_${it.timestamp}_${it.amount}" } }
-            .sortedWith(
-                compareByDescending<FirebaseExpense> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-    }
-
-    suspend fun getAllIncomesAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseIncome> {
-        val result = mutableListOf<FirebaseIncome>()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            val incs = getIncomesOnce(hId)
-            result.addAll(incs)
-        }
-        if (userId.isNotBlank()) {
-            val userIncs = getUserIncomesOnce(userId)
-            result.addAll(userIncs)
-        }
-        return result.distinctBy { it.id.ifBlank { "${it.title}_${it.timestamp}_${it.amount}" } }
-            .sortedWith(
-                compareByDescending<FirebaseIncome> { it.timestamp }
-                    .thenByDescending { it.createdAt?.toDate()?.time ?: 0L }
-                    .thenByDescending { it.id }
-            )
-    }
-    suspend fun deleteUserEntireData(userId: String, householdIds: List<String> = emptyList()) {
-        if (userId.isBlank()) return
-        try {
-            // 1. Delete user profile subcollections
-            val subcollections = listOf("expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses")
-            for (sub in subcollections) {
-                try {
-                    val docs = db.collection("users").document(userId).collection(sub).get().await()
-                    for (d in docs.documents) {
-                        d.reference.delete().await()
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error cleaning user subcollection $sub: ${e.message}")
-                }
-            }
-            // 2. Delete user profile document
-            db.collection("users").document(userId).delete().await()
-
-            // 3. Remove user from household member lists
-            for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-                try {
-                    val hRef = db.collection("households").document(hId)
-                    val hDoc = hRef.get().await()
-                    if (hDoc.exists()) {
-                        val ownerId = hDoc.getString("ownerId") ?: ""
-                        val members = (hDoc.get("memberUids") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
-                        if (ownerId == userId && (members.isEmpty() || members == listOf(userId))) {
-                            hRef.delete().await()
-                        } else {
-                            hRef.update("memberUids", FieldValue.arrayRemove(userId)).await()
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Error removing user from household $hId: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "deleteUserEntireData error", e)
-        }
-    }
+    ): VerifiedUserLookupResult = userProfileDelegate.findVerifiedUserByEmail(email, currentUserUid, currentUserEmail)
+
+    suspend fun findRegisteredUserByEmail(email: String): UserProfile? =
+        userProfileDelegate.findUserByEmail(email)
+
+    suspend fun updateUserProfileHouseholdIds(uid: String, householdIds: List<String>) =
+        userProfileDelegate.updateUserProfileHouseholdIds(uid, householdIds)
+
+    suspend fun savePasswordResetPhoneCode(phone: String, code: String, userEmail: String) =
+        userProfileDelegate.savePasswordResetPhoneCode(phone, code, userEmail)
+
+    suspend fun getPasswordResetPhoneCode(phone: String): Pair<String, String>? =
+        userProfileDelegate.getPasswordResetPhoneCode(phone)
+
+    suspend fun setPremiumStatus(uid: String, isPremium: Boolean) =
+        userProfileDelegate.setPremiumStatus(uid, isPremium)
+
+    suspend fun resolveUserProfilesByUids(uids: List<String>): Map<String, UserProfile> =
+        userProfileDelegate.resolveUserProfilesByUids(uids)
+
+    // Transactions & Shared Activity Feed
+    fun observeExpenses(householdId: String): Flow<List<FirebaseExpense>> =
+        transactionsDelegate.observeExpenses(householdId)
+
+    suspend fun syncExpense(expense: FirebaseExpense) =
+        transactionsDelegate.syncExpense(expense)
+
+    suspend fun deleteExpense(householdId: String, expenseId: String) =
+        transactionsDelegate.deleteExpense(householdId, expenseId)
+
+    fun observeUserExpenses(userId: String): Flow<List<FirebaseExpense>> =
+        transactionsDelegate.observeUserExpenses(userId)
+
+    suspend fun syncUserExpense(userId: String, expense: FirebaseExpense) =
+        transactionsDelegate.syncUserExpense(userId, expense)
+
+    suspend fun deleteUserExpense(userId: String, expenseId: String) =
+        transactionsDelegate.deleteUserExpense(userId, expenseId)
+
+    suspend fun clearAllExpenses(householdId: String, userId: String) =
+        transactionsDelegate.clearAllExpenses(householdId, userId)
+
+    fun observeIncomes(householdId: String): Flow<List<FirebaseIncome>> =
+        transactionsDelegate.observeIncomes(householdId)
+
+    suspend fun syncIncome(income: FirebaseIncome) =
+        transactionsDelegate.syncIncome(income)
+
+    suspend fun deleteIncome(householdId: String, incomeId: String) =
+        transactionsDelegate.deleteIncome(householdId, incomeId)
+
+    fun observeUserIncomes(userId: String): Flow<List<FirebaseIncome>> =
+        transactionsDelegate.observeUserIncomes(userId)
+
+    suspend fun syncUserIncome(userId: String, income: FirebaseIncome) =
+        transactionsDelegate.syncUserIncome(userId, income)
+
+    suspend fun deleteUserIncome(userId: String, incomeId: String) =
+        transactionsDelegate.deleteUserIncome(userId, incomeId)
+
+    suspend fun enableNetwork() =
+        transactionsDelegate.enableNetwork()
+
+    suspend fun getExpensesFromCache(householdId: String): List<FirebaseExpense> =
+        transactionsDelegate.getExpensesFromCache(householdId)
+
+    suspend fun getIncomesFromCache(householdId: String): List<FirebaseIncome> =
+        transactionsDelegate.getIncomesFromCache(householdId)
+
+    suspend fun getExpensesOnce(householdId: String): List<FirebaseExpense> =
+        transactionsDelegate.getExpensesOnceOrNull(householdId) ?: emptyList()
+
+    suspend fun getExpensesOnceOrNull(householdId: String): List<FirebaseExpense>? =
+        transactionsDelegate.getExpensesOnceOrNull(householdId)
+
+    suspend fun getIncomesOnce(householdId: String): List<FirebaseIncome> =
+        transactionsDelegate.getIncomesOnceOrNull(householdId) ?: emptyList()
+
+    suspend fun getIncomesOnceOrNull(householdId: String): List<FirebaseIncome>? =
+        transactionsDelegate.getIncomesOnceOrNull(householdId)
+
+    suspend fun getUserExpensesOnce(userId: String): List<FirebaseExpense> =
+        transactionsDelegate.getUserExpensesOnce(userId)
+
+    suspend fun getUserIncomesOnce(userId: String): List<FirebaseIncome> =
+        transactionsDelegate.getUserIncomesOnce(userId)
+
+    suspend fun fetchAllHouseholdExpenses(householdIds: List<String>): List<FirebaseExpense> =
+        transactionsDelegate.fetchAllHouseholdExpenses(householdIds)
+
+    suspend fun fetchAllHouseholdIncomes(householdIds: List<String>): List<FirebaseIncome> =
+        transactionsDelegate.fetchAllHouseholdIncomes(householdIds)
+
+    suspend fun getAllExpensesAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseExpense> =
+        transactionsDelegate.getAllExpensesAcrossAllScopes(householdIds, userId)
+
+    suspend fun getAllIncomesAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseIncome> =
+        transactionsDelegate.getAllIncomesAcrossAllScopes(householdIds, userId)
+
+    suspend fun logHouseholdActivity(householdId: String, activity: FirebaseHouseholdActivity) =
+        transactionsDelegate.logHouseholdActivity(householdId, activity)
+
+    fun observeHouseholdActivity(householdId: String, limit: Long = 50L): Flow<List<FirebaseHouseholdActivity>> =
+        transactionsDelegate.observeHouseholdActivity(householdId, limit)
+
+    // Structure (Seed, Members, Categories, Savings Goals, Recurring Expenses)
+    suspend fun seedFirestoreIfEmpty(householdId: String, userId: String, isMarios: Boolean) =
+        structureDelegate.seedFirestoreIfEmpty(householdId, userId, isMarios)
+
+    fun observeMembers(householdId: String): Flow<List<FirebaseMember>> =
+        structureDelegate.observeMembers(householdId)
+
+    suspend fun syncMember(householdId: String, member: FirebaseMember) =
+        structureDelegate.syncMember(householdId, member)
+
+    suspend fun deleteMember(householdId: String, memberId: String) =
+        structureDelegate.deleteMember(householdId, memberId)
+
+    suspend fun setMemberDeleted(householdId: String, memberId: String, memberName: String, isDeleted: Boolean) =
+        structureDelegate.setMemberDeleted(householdId, memberId, memberName, isDeleted)
+
+    suspend fun permanentDeleteMemberExact(householdId: String, memberId: String, memberName: String) =
+        structureDelegate.permanentDeleteMemberExact(householdId, memberId, memberName)
+
+    suspend fun getMembersOnce(householdId: String): List<FirebaseMember> =
+        structureDelegate.getMembersOnce(householdId)
+
+    suspend fun getUserMembersOnce(userId: String): List<FirebaseMember> =
+        structureDelegate.getUserMembersOnce(userId)
+
+    fun observeUserMembers(userId: String): Flow<List<FirebaseMember>> =
+        structureDelegate.observeUserMembers(userId)
+
+    suspend fun syncUserMember(userId: String, member: FirebaseMember) =
+        structureDelegate.syncUserMember(userId, member)
+
+    suspend fun deleteUserMember(userId: String, memberId: String) =
+        structureDelegate.deleteUserMember(userId, memberId)
+
+    fun observeCategories(householdId: String): Flow<List<FirebaseCategory>> =
+        structureDelegate.observeCategories(householdId)
+
+    suspend fun syncCategory(householdId: String, category: FirebaseCategory) =
+        structureDelegate.syncCategory(householdId, category)
+
+    suspend fun deleteCategory(householdId: String, categoryId: String) =
+        structureDelegate.deleteCategory(householdId, categoryId)
+
+    suspend fun setCategoryDeleted(householdId: String, categoryId: String, categoryName: String, isDeleted: Boolean) =
+        structureDelegate.setCategoryDeleted(householdId, categoryId, categoryName, isDeleted)
+
+    suspend fun permanentDeleteCategoryExact(householdId: String, categoryId: String, categoryName: String) =
+        structureDelegate.permanentDeleteCategoryExact(householdId, categoryId, categoryName)
+
+    suspend fun getCategoriesOnce(householdId: String): List<FirebaseCategory> =
+        structureDelegate.getCategoriesOnce(householdId)
+
+    suspend fun getUserCategoriesOnce(userId: String): List<FirebaseCategory> =
+        structureDelegate.getUserCategoriesOnce(userId)
+
+    fun observeUserCategories(userId: String): Flow<List<FirebaseCategory>> =
+        structureDelegate.observeUserCategories(userId)
+
+    suspend fun syncUserCategory(userId: String, category: FirebaseCategory) =
+        structureDelegate.syncUserCategory(userId, category)
+
+    suspend fun deleteUserCategory(userId: String, categoryId: String) =
+        structureDelegate.deleteUserCategory(userId, categoryId)
+
+    fun observeSavingsGoals(householdId: String): Flow<List<FirebaseSavingsGoal>> =
+        structureDelegate.observeSavingsGoals(householdId)
+
+    fun observeUserSavingsGoals(userId: String): Flow<List<FirebaseSavingsGoal>> =
+        structureDelegate.observeUserSavingsGoals(userId)
+
+    suspend fun getSavingsGoalsOnce(householdId: String): List<FirebaseSavingsGoal> =
+        structureDelegate.getSavingsGoalsOnce(householdId)
+
+    suspend fun getUserSavingsGoalsOnce(userId: String): List<FirebaseSavingsGoal> =
+        structureDelegate.getUserSavingsGoalsOnce(userId)
+
+    suspend fun syncSavingsGoal(householdId: String, goal: FirebaseSavingsGoal) =
+        structureDelegate.syncSavingsGoal(householdId, goal)
+
+    suspend fun syncUserSavingsGoal(userId: String, goal: FirebaseSavingsGoal) =
+        structureDelegate.syncUserSavingsGoal(userId, goal)
+
+    suspend fun deleteSavingsGoal(householdId: String, goalId: String, title: String = "") =
+        structureDelegate.deleteSavingsGoal(householdId, goalId, title)
+
+    suspend fun deleteUserSavingsGoal(userId: String, goalId: String, title: String = "") =
+        structureDelegate.deleteUserSavingsGoal(userId, goalId, title)
+
+    fun observeRecurringExpenses(householdId: String): Flow<List<FirebaseRecurringExpense>> =
+        structureDelegate.observeRecurringExpenses(householdId)
+
+    fun observeUserRecurringExpenses(userId: String): Flow<List<FirebaseRecurringExpense>> =
+        structureDelegate.observeUserRecurringExpenses(userId)
+
+    suspend fun getRecurringExpensesOnce(householdId: String): List<FirebaseRecurringExpense> =
+        structureDelegate.getRecurringExpensesOnce(householdId)
+
+    suspend fun getUserRecurringExpensesOnce(userId: String): List<FirebaseRecurringExpense> =
+        structureDelegate.getUserRecurringExpensesOnce(userId)
+
+    suspend fun syncRecurringExpense(householdId: String, recurring: FirebaseRecurringExpense) =
+        structureDelegate.syncRecurringExpense(householdId, recurring)
+
+    suspend fun syncUserRecurringExpense(userId: String, recurring: FirebaseRecurringExpense) =
+        structureDelegate.syncUserRecurringExpense(userId, recurring)
+
+    suspend fun deleteRecurringExpense(householdId: String, recurringId: String, title: String = "") =
+        structureDelegate.deleteRecurringExpense(householdId, recurringId, title)
+
+    suspend fun deleteUserRecurringExpense(userId: String, recurringId: String, title: String = "") =
+        structureDelegate.deleteUserRecurringExpense(userId, recurringId, title)
+
+    suspend fun getAllMembersAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseMember> =
+        structureDelegate.getAllMembersAcrossAllScopes(householdIds, userId)
+
+    suspend fun syncAndCleanMember(householdIds: List<String>, userId: String, member: FirebaseMember, oldName: String = "") =
+        structureDelegate.syncAndCleanMember(householdIds, userId, member, oldName)
+
+    suspend fun deleteMemberFromAllScopes(memberId: String, householdIds: List<String>, userId: String, memberName: String = "") =
+        structureDelegate.deleteMemberFromAllScopes(memberId, householdIds, userId, memberName)
+
+    suspend fun getAllCategoriesAcrossAllScopes(householdIds: List<String>, userId: String): List<FirebaseCategory> =
+        structureDelegate.getAllCategoriesAcrossAllScopes(householdIds, userId)
+
+    suspend fun syncAndCleanCategory(householdIds: List<String>, userId: String, category: FirebaseCategory, oldName: String = "") =
+        structureDelegate.syncAndCleanCategory(householdIds, userId, category, oldName)
+
+    suspend fun deleteCategoryFromAllScopes(categoryId: String, householdIds: List<String>, userId: String) =
+        structureDelegate.deleteCategoryFromAllScopes(categoryId, householdIds, userId)
+
+    suspend fun batchUpdateMemberSortOrder(householdIds: List<String>, userId: String, members: List<FirebaseMember>) =
+        structureDelegate.batchUpdateMemberSortOrder(householdIds, userId, members)
+
+    suspend fun batchUpdateCategorySortOrder(householdIds: List<String>, userId: String, categories: List<FirebaseCategory>) =
+        structureDelegate.batchUpdateCategorySortOrder(householdIds, userId, categories)
+
+    suspend fun fetchAllHouseholdMembers(householdIds: List<String>): List<FirebaseMember> =
+        structureDelegate.fetchAllHouseholdMembers(householdIds)
+
+    suspend fun fetchAllHouseholdCategories(householdIds: List<String>): List<FirebaseCategory> =
+        structureDelegate.fetchAllHouseholdCategories(householdIds)
+
+    suspend fun fetchAllHouseholdSavingsGoals(householdIds: List<String>): List<FirebaseSavingsGoal> =
+        structureDelegate.fetchAllHouseholdSavingsGoals(householdIds)
+
+    suspend fun fetchAllHouseholdRecurringExpenses(householdIds: List<String>): List<FirebaseRecurringExpense> =
+        structureDelegate.fetchAllHouseholdRecurringExpenses(householdIds)
 }
-

@@ -19,13 +19,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +53,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.entity.FamilyMember
+import com.example.data.model.ConnectedHouseholdUser
 import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.SharedHouseholdUser
@@ -95,6 +101,9 @@ fun HouseholdShareMask(
     lookupState: OikoNomosViewModel.VerifiedUserLookupState,
     resolvedUsersByUid: Map<String, UserProfile> = emptyMap(),
     currentUserId: String = "",
+    allMembers: List<FamilyMember> = emptyList(),
+    connectedUsers: List<ConnectedHouseholdUser> = emptyList(),
+    onAssignDefaultPayer: (uid: String, memberId: Long?) -> Unit = { _, _ -> },
     onSearchUser: (email: String, householdId: String) -> Unit,
     onClearLookup: () -> Unit,
     onAddSharedUser: (householdId: String, targetUser: UserProfile, role: HouseholdRole) -> Unit,
@@ -376,6 +385,44 @@ fun HouseholdShareMask(
             is OikoNomosViewModel.VerifiedUserLookupState.Idle -> Unit
         }
 
+        // Creator default payer selector when members exist
+        val creatorUid = household.ownerId.ifBlank { currentUserId }
+        if (allMembers.isNotEmpty() && creatorUid.isNotBlank()) {
+            val creatorLinkedMember = allMembers.firstOrNull { it.linkedUserUid == creatorUid }
+            val creatorLabel = connectedUsers.firstOrNull { it.uid == creatorUid }
+                ?.let { it.email.ifBlank { it.displayName } }
+                ?: household.memberEmails[creatorUid]?.takeIf { it.isNotBlank() }
+                ?: household.memberNames[creatorUid]?.takeIf { it.isNotBlank() }
+                ?: Localization.householdRoleLabel(HouseholdRole.CREATOR, lang)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Emerald700.copy(alpha = 0.06f),
+                border = BorderStroke(0.8.dp, Emerald700.copy(alpha = 0.25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = creatorLabel,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    DefaultPayerDropdownRow(
+                        selectedMember = creatorLinkedMember,
+                        allMembers = allMembers,
+                        lang = lang,
+                        testTag = "default_payer_creator_$creatorUid",
+                        onSelectMember = { memberId -> onAssignDefaultPayer(creatorUid, memberId) }
+                    )
+                }
+            }
+        }
+
         // Added users for this household
         if (addedUsers.isNotEmpty()) {
             Text(
@@ -501,9 +548,110 @@ fun HouseholdShareMask(
                                     registarTag = "shared_user_role_registar_${sharedUser.uid}"
                                 )
                             }
+
+                            if (allMembers.isNotEmpty()) {
+                                val linkedMember = allMembers.firstOrNull { it.linkedUserUid == sharedUser.uid }
+                                Box(modifier = Modifier.padding(end = 6.dp)) {
+                                    DefaultPayerDropdownRow(
+                                        selectedMember = linkedMember,
+                                        allMembers = allMembers,
+                                        lang = lang,
+                                        testTag = "default_payer_selector_${sharedUser.uid}",
+                                        onSelectMember = { memberId ->
+                                            onAssignDefaultPayer(sharedUser.uid, memberId)
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DefaultPayerDropdownRow(
+    selectedMember: FamilyMember?,
+    allMembers: List<FamilyMember>,
+    lang: Localization.Language,
+    testTag: String,
+    onSelectMember: (Long?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            border = BorderStroke(0.8.dp, Emerald700.copy(alpha = 0.25f)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 40.dp)
+                .clickable { expanded = true }
+                .testTag(testTag)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CreditCard,
+                        contentDescription = null,
+                        tint = Emerald700,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "${Localization.defaultPayerShort(lang)}: ${selectedMember?.name ?: Localization.selectDefaultPayerLabel(lang)}",
+                        fontSize = 11.5.sp,
+                        fontWeight = if (selectedMember != null) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (selectedMember != null) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text(Localization.noLinkedUserLabel(lang)) },
+                onClick = {
+                    expanded = false
+                    onSelectMember(null)
+                }
+            )
+            allMembers.forEach { member ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = member.name,
+                            fontWeight = if (member.id == selectedMember?.id) FontWeight.Bold else FontWeight.Normal,
+                            color = if (member.id == selectedMember?.id) Emerald700 else MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelectMember(member.id)
+                    }
+                )
             }
         }
     }

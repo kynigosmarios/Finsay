@@ -99,6 +99,9 @@ fun ReceiptScanDialog(
     members: List<FamilyMember>,
     isPro: Boolean,
     appLanguage: String,
+    defaultPayerMember: FamilyMember? = null,
+    onSuggestCategory: ((String, String) -> ExpenseCategory?)? = null,
+    onLearnCategory: ((String, Long, String, String) -> Unit)? = null,
     onShowPremiumPaywall: (String) -> Unit,
     onExpenseConfirmed: (
         title: String,
@@ -123,7 +126,9 @@ fun ReceiptScanDialog(
     var titleInput by remember { mutableStateOf("") }
     var amountInput by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(categories.firstOrNull()) }
-    var selectedMember by remember { mutableStateOf(members.firstOrNull()) }
+    var selectedMember by remember(members, defaultPayerMember) {
+        mutableStateOf(defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } } ?: members.firstOrNull())
+    }
     var selectedTimestamp by remember { mutableStateOf(System.currentTimeMillis()) }
     var showCategoryMenu by remember { mutableStateOf(false) }
     var showMemberMenu by remember { mutableStateOf(false) }
@@ -177,12 +182,15 @@ fun ReceiptScanDialog(
                     textRecognizer.process(inputImage).await()
                 }
 
-                // 3. Parse receipt with full text + spatial bounding boxes + QR metadata
+                // 3. Parse receipt with full text + spatial bounding boxes + QR metadata + learned category
                 val result = ReceiptParser.parseReceipt(
                     visionText = visionText,
                     rawText = visionText.text,
                     aadeQr = aadeQr,
-                    availableCategories = categories
+                    availableCategories = categories,
+                    learnedCategorySuggester = { merchantTitle, merchantAfm ->
+                        onSuggestCategory?.invoke(merchantTitle, merchantAfm)?.name
+                    }
                 )
 
                 parsedData = result
@@ -549,6 +557,12 @@ fun ReceiptScanDialog(
                                 val amt = amountInput.toDoubleOrNull() ?: 0.0
                                 val cat = selectedCategory ?: categories.firstOrNull() ?: return@Button
                                 val title = titleInput.ifBlank { "Αγορά απόδειξης" }
+                                onLearnCategory?.invoke(
+                                    title,
+                                    cat.id,
+                                    cat.name,
+                                    parsedData?.merchantAfm.orEmpty()
+                                )
                                 onExpenseConfirmed(
                                     title,
                                     amt,

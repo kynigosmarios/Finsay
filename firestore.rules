@@ -161,21 +161,35 @@ service cloud.firestore {
         allow delete: if isHouseholdMember(householdId);
       }
 
-      // Savings Goals & Recurring Expenses: accessible to household members
+      // Savings Goals & Recurring Expenses: members can read, only CREATOR & EDITOR can write
       match /savings_goals/{goalId} {
-        allow read, write: if isHouseholdMember(householdId);
+        allow read: if isHouseholdMember(householdId);
+        allow create, update, delete: if canManageHouseholdStructure(householdId);
       }
 
       match /savingsGoals/{goalId} {
-        allow read, write: if isHouseholdMember(householdId);
+        allow read: if isHouseholdMember(householdId);
+        allow create, update, delete: if canManageHouseholdStructure(householdId);
       }
 
       match /recurring_expenses/{recurringId} {
-        allow read, write: if isHouseholdMember(householdId);
+        allow read: if isHouseholdMember(householdId);
+        allow create, update, delete: if canManageHouseholdStructure(householdId);
       }
 
       match /recurringExpenses/{recurringId} {
-        allow read, write: if isHouseholdMember(householdId);
+        allow read: if isHouseholdMember(householdId);
+        allow create, update, delete: if canManageHouseholdStructure(householdId);
+      }
+
+      // Shared Household Activity Log: append-only per actorUid for household members
+      match /activity/{activityId} {
+        allow read: if isHouseholdMember(householdId);
+        allow create: if isHouseholdMember(householdId) &&
+          incoming().actorUid == request.auth.uid &&
+          incoming().actionType is string &&
+          incoming().summaryEl is string;
+        allow update, delete: if false;
       }
     }
 

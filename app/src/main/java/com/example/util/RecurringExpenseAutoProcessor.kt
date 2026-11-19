@@ -24,7 +24,7 @@ object RecurringExpenseAutoProcessor {
         return list.distinctBy { rec ->
             val normTitle = GreekVoiceParser.normalizeGreek(rec.title.trim().lowercase())
             if (normTitle.isNotBlank()) {
-                "$normTitle|${rec.dayOfMonth}|${rec.reminderHour}:${rec.reminderMinute}"
+                "$normTitle|${rec.frequency}|${rec.dayOfMonth}|${rec.anchorMonth}|${rec.reminderHour}:${rec.reminderMinute}"
             } else {
                 "id_${rec.id}"
             }
@@ -43,12 +43,22 @@ object RecurringExpenseAutoProcessor {
         return calendar.timeInMillis
     }
 
-    fun isAlreadyGeneratedForMonth(recurring: RecurringExpense, monthKey: String, monthExpenses: List<Expense>): Boolean {
-        if (recurring.lastGeneratedMonth == monthKey) return true
-        if (recurring.lastGeneratedMonth.isNotBlank() && recurring.lastGeneratedMonth.startsWith(monthKey.take(7))) return true
+    fun isAlreadyGeneratedForPeriod(
+        recurring: RecurringExpense,
+        periodKey: String,
+        periodExpenses: List<Expense>
+    ): Boolean {
+        if (recurring.lastGeneratedMonth == periodKey) return true
+        val normFreq = RecurringScheduleHelper.normalizeFrequency(recurring.frequency)
+        if (normFreq == RecurringScheduleHelper.FREQ_MONTHLY &&
+            recurring.lastGeneratedMonth.isNotBlank() &&
+            recurring.lastGeneratedMonth.startsWith(periodKey.take(7))
+        ) {
+            return true
+        }
 
         val normRecTitle = GreekVoiceParser.normalizeGreek(recurring.title.trim().lowercase())
-        return monthExpenses.any { expense ->
+        return periodExpenses.any { expense ->
             val normExpTitle = GreekVoiceParser.normalizeGreek(expense.title.trim().lowercase())
             val titleMatches = normExpTitle == normRecTitle ||
                     (normRecTitle.length >= 4 && normExpTitle.contains(normRecTitle)) ||
@@ -64,6 +74,9 @@ object RecurringExpenseAutoProcessor {
         }
     }
 
+    fun isAlreadyGeneratedForMonth(recurring: RecurringExpense, monthKey: String, monthExpenses: List<Expense>): Boolean =
+        isAlreadyGeneratedForPeriod(recurring, monthKey, monthExpenses)
+
     suspend fun processDueRecurringExpenses(
         repository: ExpenseRepository,
         firestoreSyncRepo: FirestoreSyncRepository? = null,
@@ -76,16 +89,14 @@ object RecurringExpenseAutoProcessor {
             val activeRecurring = allRecurring.filter { it.isActive }
             if (activeRecurring.isEmpty()) return emptyList()
 
-            // Deduplicate active recurring by normalized title so duplicate records never trigger multiple inserts
             val uniqueRecurring = activeRecurring.distinctBy {
                 GreekVoiceParser.normalizeGreek(it.title.trim().lowercase())
             }
 
-            val calendar = Calendar.getInstance()
+            val nowMillis = System.currentTimeMillis()
+            val calendar = Calendar.getInstance().apply { timeInMillis = nowMillis }
             val currentYear = calendar.get(Calendar.YEAR)
             val currentMonth = calendar.get(Calendar.MONTH)
-            val currentDay = calendar.get(Calendar.DAY_OF_MONTH)
-            val monthKey = String.format(Locale.US, "%04d-%02d", currentYear, currentMonth + 1)
 
             val allExpenses = repository.getAllExpensesList()
             val currentMonthExpenses = allExpenses.filter { exp ->
@@ -109,12 +120,21 @@ object RecurringExpenseAutoProcessor {
                     continue
                 }
 
-                if (currentDay >= recurring.dayOfMonth) {
-                    val alreadyRecorded = isAlreadyGeneratedForMonth(recurring, monthKey, currentMonthExpenses)
+                if (RecurringScheduleHelper.isDueNow(recurring, nowMillis)) {
+                    val periodKey = RecurringScheduleHelper.periodKeyFor(recurring, nowMillis)
+                    val normFreq = RecurringScheduleHelper.normalizeFrequency(recurring.frequency)
+                    val relevantExpenses = if (normFreq == RecurringScheduleHelper.FREQ_WEEKLY || normFreq == RecurringScheduleHelper.FREQ_BIWEEKLY) {
+                        val windowMs = if (normFreq == RecurringScheduleHelper.FREQ_WEEKLY) 7L * 86_400_000L else 14L * 86_400_000L
+                        allExpenses.filter { (nowMillis - it.timestamp) in 0L..windowMs }
+                    } else {
+                        currentMonthExpenses
+                    }
+
+                    val alreadyRecorded = isAlreadyGeneratedForPeriod(recurring, periodKey, relevantExpenses)
                     if (alreadyRecorded) {
                         processedRoots.add(rootKey)
-                        if (recurring.lastGeneratedMonth != monthKey) {
-                            val updatedRecurring = recurring.copy(lastGeneratedMonth = monthKey)
+                        if (recurring.lastGeneratedMonth != periodKey) {
+                            val updatedRecurring = recurring.copy(lastGeneratedMonth = periodKey)
                             repository.updateRecurringExpense(updatedRecurring)
                             if (householdId.isNotBlank() && firestoreSyncRepo != null) {
                                 val fbRec = com.example.data.model.FirebaseRecurringExpense(
@@ -134,11 +154,12 @@ object RecurringExpenseAutoProcessor {
                                     memberNamesDisplay = recurring.memberNamesDisplay,
                                     note = recurring.note,
                                     isActive = recurring.isActive,
-                                    lastGeneratedMonth = monthKey,
+                                    lastGeneratedMonth = periodKey,
                                     payerMemberId = recurring.payerMemberId,
                                     payerMemberName = recurring.payerMemberName,
                                     payerMemberIdsCsv = recurring.payerMemberIdsCsv,
-                                    payerAmountsCsv = recurring.payerAmountsCsv
+                                    payerAmountsCsv = recurring.payerAmountsCsv,
+                                    anchorMonth = recurring.anchorMonth
                                 )
                                 firestoreSyncRepo.syncRecurringExpense(householdId, fbRec)
                             }
@@ -149,7 +170,7 @@ object RecurringExpenseAutoProcessor {
                             amount = recurring.amount,
                             categoryId = recurring.categoryId,
                             categoryName = recurring.categoryName,
-                            timestamp = calculateTargetTimestamp(currentYear, currentMonth, recurring.dayOfMonth),
+                            timestamp = RecurringScheduleHelper.calculateTargetTimestampForPeriod(recurring, nowMillis),
                             splitType = recurring.splitType,
                             memberIdsCsv = recurring.memberIdsCsv,
                             memberNamesDisplay = recurring.memberNamesDisplay,
@@ -166,7 +187,7 @@ object RecurringExpenseAutoProcessor {
                         currentMonthExpenses.add(insertedExpense)
                         processedRoots.add(rootKey)
 
-                        val updatedRecurring = recurring.copy(lastGeneratedMonth = monthKey)
+                        val updatedRecurring = recurring.copy(lastGeneratedMonth = periodKey)
                         repository.updateRecurringExpense(updatedRecurring)
                     }
                 }

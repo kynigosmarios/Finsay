@@ -6,37 +6,27 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.OpenInBrowser
-import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -45,20 +35,18 @@ import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
 
@@ -69,184 +57,146 @@ fun LegalDocumentsDialog(
     onDismiss: () -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(if (initialTab == "PRIVACY") 1 else 0) }
+    var selectedTab by remember { mutableIntStateOf(if (initialTab == "PRIVACY") 1 else 0) }
+    LaunchedEffect(initialTab) {
+        selectedTab = if (initialTab == "PRIVACY") 1 else 0
+    }
 
-    val privacyCloudUrl = "https://finsayapp.com/privacy-policy.html"
-    val termsCloudUrl = "https://finsayapp.com/terms-of-service.html"
-    val currentCloudUrl = if (selectedTab == 0) termsCloudUrl else privacyCloudUrl
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .testTag("legal_documents_dialog")
     ) {
-        Card(
+        // Page Header Card
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.92f)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .widthIn(max = 520.dp)
-                .testTag("legal_documents_dialog"),
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+            tonalElevation = 1.dp
         ) {
-            Column(
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(20.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Header (Icon + Title + Close Button)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Emerald700.copy(alpha = 0.12f),
-                            modifier = Modifier.size(38.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (selectedTab == 0) Icons.Default.Description else Icons.Default.Security,
-                                    contentDescription = null,
-                                    tint = Emerald700,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (selectedTab == 0) {
-                                    if (lang == Localization.Language.ENGLISH) "Terms & Conditions" else "Όροι & Προϋποθέσεις"
-                                } else {
-                                    if (lang == Localization.Language.ENGLISH) "Privacy Policy" else "Πολιτική Απορρήτου"
-                                },
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH)
-                                    "GDPR & Greek Law 4624/2019 Compliant"
-                                else
-                                    "Συμβατό με GDPR & Ν. 4624/2019",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clickable { onDismiss() }
-                            .testTag("legal_dialog_close_button")
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = Localization.close(lang),
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // Tabs: Terms of Service / Privacy Policy
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    indicator = { tabPositions ->
-                        TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                            color = Emerald700,
-                            height = 3.dp
-                        )
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(42.dp)
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = {
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Terms of Service" else "Όροι Χρήσης",
-                                fontSize = 12.5.sp,
-                                fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
-                                color = if (selectedTab == 0) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = {
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Privacy Policy" else "Πολιτική Απορρήτου",
-                                fontSize = 12.5.sp,
-                                fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
-                                color = if (selectedTab == 1) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Scrollable Legal Text Content
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    if (selectedTab == 0) {
-                        // Terms of Service
-                        TermsOfServiceText(lang = lang)
-                    } else {
-                        // Privacy Policy
-                        PrivacyPolicyText(lang = lang)
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                // Close Button
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
+                IconButton(
                     onClick = onDismiss,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Emerald700,
-                        contentColor = Color.White
-                    ),
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(46.dp)
+                        .size(48.dp)
+                        .testTag("legal_dialog_close_button")
                 ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = if (lang == Localization.Language.ENGLISH) "Back" else "Επιστροφή",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Surface(
+                    shape = CircleShape,
+                    color = Emerald700.copy(alpha = 0.12f),
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (selectedTab == 0) Icons.Default.Description else Icons.Default.Security,
+                            contentDescription = null,
+                            tint = Emerald700,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = Localization.close(lang),
+                        text = if (selectedTab == 0) {
+                            if (lang == Localization.Language.ENGLISH) "Terms & Conditions" else "Όροι & Προϋποθέσεις"
+                        } else {
+                            if (lang == Localization.Language.ENGLISH) "Privacy Policy" else "Πολιτική Απορρήτου"
+                        },
+                        fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (lang == Localization.Language.ENGLISH)
+                            "GDPR & Greek Law 4624/2019 Compliant"
+                        else
+                            "Συμβατό με GDPR & Ν. 4624/2019",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Tabs: Terms of Service / Privacy Policy
+        TabRow(
+            selectedTabIndex = selectedTab,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            indicator = { tabPositions ->
+                TabRowDefaults.SecondaryIndicator(
+                    Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = Emerald700,
+                    height = 3.dp
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .height(44.dp)
+        ) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = {
+                    Text(
+                        text = if (lang == Localization.Language.ENGLISH) "Terms of Service" else "Όροι Χρήσης",
+                        fontSize = 12.5.sp,
+                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selectedTab == 0) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = {
+                    Text(
+                        text = if (lang == Localization.Language.ENGLISH) "Privacy Policy" else "Πολιτική Απορρήτου",
+                        fontSize = 12.5.sp,
+                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
+                        color = if (selectedTab == 1) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Scrollable Legal Text Content
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            if (selectedTab == 0) {
+                TermsOfServiceText(lang = lang)
+            } else {
+                PrivacyPolicyText(lang = lang)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

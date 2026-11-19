@@ -1,26 +1,18 @@
 package com.example.ui.components
 
 import android.Manifest
-import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
 import android.net.Uri
-import android.os.Build
-import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -36,23 +28,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Euro
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,20 +45,21 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -82,49 +67,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.example.data.entity.Expense
 import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
-import com.example.data.entity.getPayerShares
-import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
-import com.example.util.ReceiptParser
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import kotlinx.coroutines.Dispatchers
+import com.example.util.RecurringScheduleHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ManualExpenseDialog(
     expenseToEdit: Expense?,
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
     appLanguage: String = "EL",
+    defaultPayerMember: FamilyMember? = null,
+    onSuggestCategory: ((merchantOrText: String, merchantAfm: String) -> ExpenseCategory?)? = null,
+    onLearnCategory: ((merchantOrText: String, categoryId: Long, categoryName: String, merchantAfm: String) -> Unit)? = null,
     onDismiss: () -> Unit,
     onSave: (
         id: Long,
@@ -147,6 +112,8 @@ fun ManualExpenseDialog(
     initialReminderDayOfMonth: Int = 1,
     initialReminderHour: Int = 9,
     initialReminderMinute: Int = 0,
+    initialReminderFrequency: String = RecurringScheduleHelper.FREQ_MONTHLY,
+    initialReminderAnchorMonth: Int = 0,
     onSaveReminder: ((
         id: Long,
         title: String,
@@ -163,13 +130,20 @@ fun ManualExpenseDialog(
         payerMemberId: Long,
         payerMemberName: String,
         payerMemberIdsCsv: String,
-        payerAmountsCsv: String
+        payerAmountsCsv: String,
+        frequency: String,
+        anchorMonth: Int
     ) -> Unit)? = null
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
 
-    // Multi-payer selection state
-    val selectedPayerIds = remember(expenseToEdit, members) {
+    val fallbackDefaultPayer = remember(members, defaultPayerMember) {
+        defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } }
+            ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+            ?: members.firstOrNull()
+    }
+
+    val selectedPayerIds = remember(expenseToEdit, members, fallbackDefaultPayer) {
         val list = mutableStateListOf<Long>()
         if (expenseToEdit != null) {
             val parsedIds = if (expenseToEdit.payerAmountsCsv.isNotBlank()) {
@@ -193,29 +167,26 @@ fun ManualExpenseDialog(
                     val matched = members.filter { m -> names.any { n -> n.equals(m.name, ignoreCase = true) || cleanPayer.contains(m.name, ignoreCase = true) } }
                     if (matched.isNotEmpty()) {
                         list.addAll(matched.map { it.id })
-                    } else {
-                        val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) } ?: members.firstOrNull()
-                        if (def != null) list.add(def.id)
+                    } else if (fallbackDefaultPayer != null) {
+                        list.add(fallbackDefaultPayer.id)
                     }
                 }
-            } else {
-                val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) } ?: members.firstOrNull()
-                if (def != null) list.add(def.id)
+            } else if (fallbackDefaultPayer != null) {
+                list.add(fallbackDefaultPayer.id)
             }
-        } else {
-            val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) } ?: members.firstOrNull()
-            if (def != null) list.add(def.id)
+        } else if (fallbackDefaultPayer != null) {
+            list.add(fallbackDefaultPayer.id)
         }
         list
     }
 
     var isCustomPayerSplit by remember(expenseToEdit) {
         val hasCustom = if (expenseToEdit != null && expenseToEdit.payerAmountsCsv.isNotBlank()) {
-            val parts = expenseToEdit.payerAmountsCsv.split(",")
-            val amounts = parts.mapNotNull { it.split(":").getOrNull(1)?.trim()?.toDoubleOrNull() }
+            val amounts = expenseToEdit.payerAmountsCsv.split(",")
+                .mapNotNull { it.split(":").getOrNull(1)?.trim()?.toDoubleOrNull() }
             if (amounts.size >= 2) {
                 val first = amounts[0]
-                amounts.any { Math.abs(it - first) > 0.01 }
+                amounts.any { kotlin.math.abs(it - first) > 0.01 }
             } else false
         } else false
         mutableStateOf(hasCustom)
@@ -258,13 +229,33 @@ fun ManualExpenseDialog(
         }
         mutableStateOf(initialId)
     }
+    var userManuallyChangedCategory by remember(expenseToEdit) { mutableStateOf(expenseToEdit != null && expenseToEdit.id != 0L) }
+    var autoSuggestedCategoryId by remember(expenseToEdit) { mutableStateOf<Long?>(null) }
+    var scannedMerchantAfm by remember(expenseToEdit) { mutableStateOf("") }
+
+    LaunchedEffect(title, userManuallyChangedCategory) {
+        if ((expenseToEdit == null || expenseToEdit.id == 0L) && !userManuallyChangedCategory && title.trim().length >= 2) {
+            val suggested = onSuggestCategory?.invoke(title.trim(), scannedMerchantAfm)
+            if (suggested != null) {
+                selectedCategoryId = suggested.id
+                autoSuggestedCategoryId = suggested.id
+            }
+        }
+    }
+
     var selectedTimestamp by remember(expenseToEdit) {
         mutableLongStateOf(expenseToEdit?.timestamp ?: System.currentTimeMillis())
     }
     var showDatePicker by remember { mutableStateOf(false) }
 
+    var reminderFrequency by remember(expenseToEdit, initialReminderFrequency) {
+        mutableStateOf(RecurringScheduleHelper.normalizeFrequency(initialReminderFrequency))
+    }
     var reminderDayOfMonth by remember(expenseToEdit, initialReminderDayOfMonth) {
         mutableIntStateOf(initialReminderDayOfMonth.coerceIn(1, 31))
+    }
+    var reminderAnchorMonth by remember(expenseToEdit, initialReminderAnchorMonth) {
+        mutableIntStateOf(initialReminderAnchorMonth.coerceIn(0, 11))
     }
     var reminderHour by remember(expenseToEdit, initialReminderHour) {
         mutableIntStateOf(initialReminderHour.coerceIn(0, 23))
@@ -272,7 +263,6 @@ fun ManualExpenseDialog(
     var reminderMinute by remember(expenseToEdit, initialReminderMinute) {
         mutableIntStateOf(initialReminderMinute.coerceIn(0, 59))
     }
-    var showReminderDayDropdown by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -283,69 +273,30 @@ fun ManualExpenseDialog(
         isScanningReceipt = true
         coroutineScope.launch {
             try {
-                val inputImage = InputImage.fromBitmap(bitmap, 0)
-
-                // 1. Scan QR for AADE metadata
-                val barcodeScanner = BarcodeScanning.getClient()
-                val barcodes = withContext(Dispatchers.IO) {
-                    try {
-                        barcodeScanner.process(inputImage).await()
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
-                }
-                var aadeQr = barcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-
-                // Fallback: If no QR found in full image, crop bottom 45% (where Greek AADE QR codes are printed)
-                if (aadeQr.isNullOrBlank() && bitmap.height > 600) {
-                    try {
-                        val cropY = (bitmap.height * 0.55).toInt()
-                        val cropH = bitmap.height - cropY
-                        val bottomCrop = Bitmap.createBitmap(bitmap, 0, cropY, bitmap.width, cropH)
-                        val bottomImage = InputImage.fromBitmap(bottomCrop, 0)
-                        val bottomBarcodes = withContext(Dispatchers.IO) {
-                            try {
-                                barcodeScanner.process(bottomImage).await()
-                            } catch (e: Exception) {
-                                emptyList()
-                            }
-                        }
-                        aadeQr = bottomBarcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-                    } catch (_: Exception) {}
-                }
-
-                // 2. OCR Text Recognition (always runs to extract store name & total)
-                val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                val visionText = withContext(Dispatchers.IO) {
-                    textRecognizer.process(inputImage).await()
-                }
-
-                // 3. Parse receipt with store name from top and strict amount from right of ΣΥΝΟΛΟ
-                val result = ReceiptParser.parseReceipt(
-                    visionText = visionText,
-                    rawText = visionText.text,
-                    aadeQr = aadeQr,
-                    availableCategories = categories
+                val outcome = ManualExpenseReceiptScanHelper.scanReceiptBitmap(
+                    bitmap = bitmap,
+                    categories = categories,
+                    lang = lang,
+                    onSuggestCategory = onSuggestCategory
                 )
-
-                if (result.title.isNotBlank() && result.title != "Απόδειξη") title = result.title
-                if (result.amount > 0.0) amountText = String.format(Locale.US, "%.2f", result.amount)
-                if (result.timestamp > 0) selectedTimestamp = result.timestamp
-                val matched = categories.find { it.name.equals(result.suggestedCategoryName, ignoreCase = true) }
-                if (matched != null) selectedCategoryId = matched.id
-
-                val msg = if (result.title.isNotBlank() || result.amount > 0.0) {
-                    if (lang == Localization.Language.ENGLISH)
-                        "Receipt scanned: ${if (result.title.isNotBlank()) result.title else "Receipt"} (${if (result.amount > 0.0) String.format(Locale.US, "%.2f€", result.amount) else ""})"
-                    else
-                        "Αναγνωρίστηκε: ${if (result.title.isNotBlank()) result.title else "Απόδειξη"} (${if (result.amount > 0.0) String.format(Locale.US, "%.2f€", result.amount) else ""})"
-                } else {
-                    if (lang == Localization.Language.ENGLISH) "Could not detect receipt details" else "Δεν εντοπίστηκαν στοιχεία στην απόδειξη"
+                if (outcome.merchantAfm.isNotBlank()) scannedMerchantAfm = outcome.merchantAfm
+                if (outcome.title.isNotBlank()) title = outcome.title
+                if (outcome.amountText.isNotBlank()) amountText = outcome.amountText
+                if (outcome.timestamp > 0) selectedTimestamp = outcome.timestamp
+                if (outcome.matchedCategoryId != null) {
+                    selectedCategoryId = outcome.matchedCategoryId
+                    autoSuggestedCategoryId = outcome.matchedCategoryId
                 }
-                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, outcome.toastMessage, Toast.LENGTH_SHORT).show()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("ManualExpenseDialog", "Error parsing receipt: ${e.message}", e)
-                Toast.makeText(context, if (lang == Localization.Language.ENGLISH) "Receipt scan failed" else "Σφάλμα ανάγνωσης απόδειξης", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (lang == Localization.Language.ENGLISH) "Receipt scan failed" else "Σφάλμα ανάγνωσης απόδειξης",
+                    Toast.LENGTH_SHORT
+                ).show()
             } finally {
                 isScanningReceipt = false
             }
@@ -355,19 +306,14 @@ fun ManualExpenseDialog(
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicturePreview()
     ) { bmp: Bitmap? ->
-        if (bmp != null) {
-            processReceiptBitmap(bmp)
-        }
+        if (bmp != null) processReceiptBitmap(bmp)
     }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) {
-            cameraLauncher.launch(null)
-        } else {
-            Toast.makeText(context, if (lang == Localization.Language.ENGLISH) "Camera permission is required" else "Απαιτείται άδεια κάμερας", Toast.LENGTH_SHORT).show()
-        }
+        if (isGranted) cameraLauncher.launch(null)
+        else Toast.makeText(context, if (lang == Localization.Language.ENGLISH) "Camera permission is required" else "Απαιτείται άδεια κάμερας", Toast.LENGTH_SHORT).show()
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -375,15 +321,7 @@ fun ManualExpenseDialog(
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                val bmp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    val src = ImageDecoder.createSource(context.contentResolver, uri)
-                    ImageDecoder.decodeBitmap(src) { decoder, _, _ ->
-                        decoder.isMutableRequired = true
-                    }
-                } else {
-                    @Suppress("DEPRECATION")
-                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-                }
+                val bmp = ManualExpenseReceiptScanHelper.decodeBitmap(context.contentResolver, uri)
                 processReceiptBitmap(bmp)
             } catch (e: Exception) {
                 Log.e("ManualExpenseDialog", "Failed to load picked image: ${e.message}", e)
@@ -394,9 +332,11 @@ fun ManualExpenseDialog(
     var isAllFamily by remember(expenseToEdit) {
         val hasSpecific = expenseToEdit != null && (
             expenseToEdit.splitType == "SPECIFIC_MEMBERS" ||
-            expenseToEdit.memberIdsCsv.isNotBlank() ||
-            (expenseToEdit.memberNamesDisplay.isNotBlank() && !expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) && !expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true))
-        )
+                expenseToEdit.memberIdsCsv.isNotBlank() ||
+                (expenseToEdit.memberNamesDisplay.isNotBlank() &&
+                    !expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) &&
+                    !expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true))
+            )
         val isEmptyMember = expenseToEdit != null && expenseToEdit.memberIdsCsv.isBlank() && expenseToEdit.memberNamesDisplay.isBlank()
         mutableStateOf(if (expenseToEdit != null) (!hasSpecific && !isEmptyMember) else true)
     }
@@ -408,20 +348,19 @@ fun ManualExpenseDialog(
             val validIds = parsedIds.filter { id -> members.any { it.id == id } }
             if (validIds.isNotEmpty()) {
                 list.addAll(validIds)
-            } else if (expenseToEdit.memberNamesDisplay.isNotBlank() && !expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) && !expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true)) {
+            } else if (expenseToEdit.memberNamesDisplay.isNotBlank() &&
+                !expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) &&
+                !expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true)
+            ) {
                 val raw = expenseToEdit.memberNamesDisplay.trim()
                 if (raw.equals("Γονείς", ignoreCase = true) || raw.equals("Parents", ignoreCase = true)) {
-                    val parents = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
-                    list.addAll(parents.map { it.id })
+                    list.addAll(members.filter { it.role.equals("Γονέας", ignoreCase = true) }.map { it.id })
                 } else if (raw.equals("Παιδιά", ignoreCase = true) || raw.equals("Children", ignoreCase = true)) {
-                    val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-                    list.addAll(kids.map { it.id })
+                    list.addAll(members.filter { it.role.equals("Παιδί", ignoreCase = true) }.map { it.id })
                 } else if (raw.equals("Συγκάτοικοι", ignoreCase = true) || raw.equals("Roommates", ignoreCase = true)) {
-                    val roommates = members.filter { it.role.equals("Συγκάτοικος", ignoreCase = true) || it.role.equals("Συγκάτοικοι", ignoreCase = true) }
-                    list.addAll(roommates.map { it.id })
+                    list.addAll(members.filter { it.role.equals("Συγκάτοικος", ignoreCase = true) || it.role.equals("Συγκάτοικοι", ignoreCase = true) }.map { it.id })
                 } else {
-                    val matched = members.filter { m -> expenseToEdit.memberNamesDisplay.contains(m.name, ignoreCase = true) }
-                    list.addAll(matched.map { it.id })
+                    list.addAll(members.filter { m -> expenseToEdit.memberNamesDisplay.contains(m.name, ignoreCase = true) }.map { it.id })
                 }
             }
         } else {
@@ -437,154 +376,37 @@ fun ManualExpenseDialog(
     val activeMemberCount = if (isAllFamily) members.size else selectedMemberIds.size.coerceAtLeast(1)
     val splitPerPerson = currentAmount / activeMemberCount
 
-    // Date formatting localized
     val displayDateFormat = remember(lang) { SimpleDateFormat("EEEE, d MMMM yyyy", Localization.getDateLocale(lang)) }
     val todayDateString = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
     val isSelectedDateToday = remember(selectedTimestamp) {
-        val selectedString = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(selectedTimestamp))
-        selectedString == todayDateString
+        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(selectedTimestamp)) == todayDateString
     }
 
-    // Material 3 Date Picker Dialog
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedTimestamp
+        ManualExpenseDatePickerDialog(
+            initialTimestamp = selectedTimestamp,
+            lang = lang,
+            onDismiss = { showDatePicker = false },
+            onDateSelected = { selectedTimestamp = it }
         )
-
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        datePickerState.selectedDateMillis?.let { utcMillis ->
-                            val cal = java.util.Calendar.getInstance()
-                            val curHour = cal.get(java.util.Calendar.HOUR_OF_DAY)
-                            val curMinute = cal.get(java.util.Calendar.MINUTE)
-                            val curSecond = cal.get(java.util.Calendar.SECOND)
-
-                            val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
-                                timeInMillis = utcMillis
-                            }
-
-                            val targetCal = java.util.Calendar.getInstance().apply {
-                                set(java.util.Calendar.YEAR, utcCal.get(java.util.Calendar.YEAR))
-                                set(java.util.Calendar.MONTH, utcCal.get(java.util.Calendar.MONTH))
-                                set(java.util.Calendar.DAY_OF_MONTH, utcCal.get(java.util.Calendar.DAY_OF_MONTH))
-                                set(java.util.Calendar.HOUR_OF_DAY, curHour)
-                                set(java.util.Calendar.MINUTE, curMinute)
-                                set(java.util.Calendar.SECOND, curSecond)
-                            }
-                            selectedTimestamp = targetCal.timeInMillis
-                        }
-                        showDatePicker = false
-                    }
-                ) {
-                    Text(Localization.select(lang), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
-                    Text(Localization.cancel(lang))
-                }
-            }
-        ) {
-            DatePicker(state = datePickerState)
-        }
     }
 
     if (showCameraChooserDialog) {
-        AlertDialog(
-            onDismissRequest = { showCameraChooserDialog = false },
-            title = {
-                Text(
-                    text = if (lang == Localization.Language.ENGLISH) "Scan Receipt" else "Σάρωση Απόδειξης",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Choose how to scan your receipt:" else "Επιλέξτε τρόπο καταχώρησης απόδειξης:",
-                        fontSize = 13.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Option 1: Κάμερα
-                    Button(
-                        onClick = {
-                            showCameraChooserDialog = false
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-                                cameraLauncher.launch(null)
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp)
-                            .testTag("choose_camera_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Camera" else "Κάμερα",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-
-                    // Option 2: Συλλογή
-                    Button(
-                        onClick = {
-                            showCameraChooserDialog = false
-                            photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp)
-                            .testTag("choose_gallery_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp), tint = Emerald700)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Gallery" else "Συλλογή",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
+        ReceiptSourceChooserDialog(
+            lang = lang,
+            onDismiss = { showCameraChooserDialog = false },
+            onChooseCamera = {
+                showCameraChooserDialog = false
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                    cameraLauncher.launch(null)
+                } else {
+                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                 }
             },
-            confirmButton = {},
-            dismissButton = {
-                TextButton(onClick = { showCameraChooserDialog = false }) {
-                    Text(Localization.cancel(lang), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            },
-            shape = RoundedCornerShape(20.dp)
+            onChooseGallery = {
+                showCameraChooserDialog = false
+                photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }
         )
     }
 
@@ -607,7 +429,6 @@ fun ManualExpenseDialog(
                     .fillMaxSize()
                     .padding(20.dp)
             ) {
-                // 1. Fixed Header (Title + Camera Button + Close Button)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -676,197 +497,30 @@ fun ManualExpenseDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // 2. Scrollable Content Area (Middle)
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Reminder Day & Time Section (shown at the TOP when in Reminder Mode)
                     if (isReminderMode) {
-                        val isGreek = lang != Localization.Language.ENGLISH
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Amber700.copy(alpha = 0.08f)
-                            ),
-                            border = BorderStroke(1.dp, Amber700.copy(alpha = 0.35f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("reminder_schedule_section")
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp)
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.NotificationsActive,
-                                        contentDescription = null,
-                                        tint = Amber700,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (isGreek) "Ημέρα & Ώρα Υπενθύμισης" else "Reminder Day & Time",
-                                        fontSize = 13.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    // Day of Month selector (1..31)
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surface,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                                        modifier = Modifier.weight(1.25f)
-                                    ) {
-                                        Box {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.SpaceBetween
-                                            ) {
-                                                IconButton(
-                                                    onClick = {
-                                                        reminderDayOfMonth = if (reminderDayOfMonth <= 1) 31 else reminderDayOfMonth - 1
-                                                    },
-                                                    modifier = Modifier
-                                                        .size(48.dp)
-                                                        .testTag("reminder_day_minus")
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Remove,
-                                                        contentDescription = if (isGreek) "Μείωση ημέρας" else "Decrease day",
-                                                        tint = Amber700,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
-                                                Column(
-                                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .clickable { showReminderDayDropdown = true }
-                                                        .padding(vertical = 4.dp)
-                                                        .testTag("reminder_day_value")
-                                                ) {
-                                                    Text(
-                                                        text = if (isGreek) "Ημέρα" else "Day",
-                                                        fontSize = 10.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                    Text(
-                                                        text = if (isGreek) "${reminderDayOfMonth}η" else "${reminderDayOfMonth}",
-                                                        fontSize = 15.sp,
-                                                        fontWeight = FontWeight.ExtraBold,
-                                                        color = Amber700
-                                                    )
-                                                }
-                                                IconButton(
-                                                    onClick = {
-                                                        reminderDayOfMonth = if (reminderDayOfMonth >= 31) 1 else reminderDayOfMonth + 1
-                                                    },
-                                                    modifier = Modifier
-                                                        .size(48.dp)
-                                                        .testTag("reminder_day_plus")
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Add,
-                                                        contentDescription = if (isGreek) "Αύξηση ημέρας" else "Increase day",
-                                                        tint = Amber700,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
-                                            }
-                                            DropdownMenu(
-                                                expanded = showReminderDayDropdown,
-                                                onDismissRequest = { showReminderDayDropdown = false }
-                                            ) {
-                                                (1..31).forEach { day ->
-                                                    DropdownMenuItem(
-                                                        text = {
-                                                            Text(
-                                                                text = if (isGreek) "Κάθε ${day}η του μήνα" else "Day $day of month",
-                                                                fontWeight = if (day == reminderDayOfMonth) FontWeight.Bold else FontWeight.Normal,
-                                                                color = if (day == reminderDayOfMonth) Amber700 else MaterialTheme.colorScheme.onSurface
-                                                            )
-                                                        },
-                                                        onClick = {
-                                                            reminderDayOfMonth = day
-                                                            showReminderDayDropdown = false
-                                                        }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Reminder Time Picker (HH:mm)
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = MaterialTheme.colorScheme.surface,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-                                        modifier = Modifier
-                                            .weight(0.95f)
-                                            .clickable {
-                                                android.app.TimePickerDialog(
-                                                    context,
-                                                    { _, selectedH, selectedM ->
-                                                        reminderHour = selectedH
-                                                        reminderMinute = selectedM
-                                                    },
-                                                    reminderHour,
-                                                    reminderMinute,
-                                                    true
-                                                ).show()
-                                            }
-                                            .testTag("reminder_time_picker_button")
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.AccessTime,
-                                                contentDescription = if (isGreek) "Ώρα υπενθύμισης" else "Reminder time",
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(19.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Column {
-                                                Text(
-                                                    text = if (isGreek) "Ώρα" else "Time",
-                                                    fontSize = 10.sp,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = String.format(Locale.US, "%02d:%02d", reminderHour, reminderMinute),
-                                                    fontSize = 15.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = Emerald700
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
+                        ManualExpenseReminderScheduleSection(
+                            lang = lang,
+                            frequency = reminderFrequency,
+                            onFrequencyChange = { reminderFrequency = it },
+                            dayOfMonth = reminderDayOfMonth,
+                            onDayOfMonthChange = { reminderDayOfMonth = it },
+                            anchorMonth = reminderAnchorMonth,
+                            onAnchorMonthChange = { reminderAnchorMonth = it },
+                            reminderHour = reminderHour,
+                            reminderMinute = reminderMinute,
+                            onTimeChange = { h, m ->
+                                reminderHour = h
+                                reminderMinute = m
                             }
-                        }
+                        )
                         Spacer(modifier = Modifier.height(14.dp))
                     }
 
-                    // Title Input
                     OutlinedTextField(
                         value = title,
                         onValueChange = {
@@ -885,7 +539,6 @@ fun ManualExpenseDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Amount Input
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = {
@@ -907,612 +560,46 @@ fun ManualExpenseDialog(
 
                     if (!isReminderMode) {
                         Spacer(modifier = Modifier.height(14.dp))
-
-                        // Date Picker Selector
-                        Text(
-                            text = Localization.dateLabel(lang),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                        ManualExpenseDateCard(
+                            lang = lang,
+                            isSelectedDateToday = isSelectedDateToday,
+                            formattedDate = displayDateFormat.format(Date(selectedTimestamp)).replaceFirstChar { it.uppercase() },
+                            onClick = { showDatePicker = true }
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { showDatePicker = true }
-                                .testTag("expense_date_picker_button")
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarToday,
-                                        contentDescription = null,
-                                        tint = Emerald700,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = if (isSelectedDateToday) Localization.today(lang) else Localization.date(lang),
-                                            fontSize = 11.sp,
-                                            color = Emerald700,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = displayDateFormat.format(Date(selectedTimestamp)).replaceFirstChar { it.uppercase() },
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                    }
-                                }
-
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = Emerald100
-                                ) {
-                                    Text(
-                                        text = Localization.changeAction(lang),
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Emerald700,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Category Selection
-                    Text(
-                        text = Localization.categoryLabel(lang),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        categories.forEach { cat ->
-                            val isSelected = cat.id == selectedCategoryId
-                            val catColor = Color(cat.colorHex)
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { selectedCategoryId = if (isSelected) 0L else cat.id },
-                                label = { Text(Localization.translateCategory(cat.name, lang), fontSize = 12.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = CategoryIconHelper.getIcon(cat.iconKey),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (isSelected) Emerald700 else catColor
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Emerald700.copy(alpha = 0.15f),
-                                    selectedLabelColor = Emerald700
-                                )
-                            )
+                    ManualExpenseCategorySection(
+                        lang = lang,
+                        categories = categories,
+                        selectedCategoryId = selectedCategoryId,
+                        autoSuggestedCategoryId = autoSuggestedCategoryId,
+                        onSelectCategory = { nextId ->
+                            userManuallyChangedCategory = true
+                            autoSuggestedCategoryId = null
+                            selectedCategoryId = nextId
                         }
-                    }
+                    )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 1. Payer Section (Who paid)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CreditCard,
-                            contentDescription = null,
-                            tint = Emerald700,
-                            modifier = Modifier.size(17.dp)
-                        )
-                        Spacer(modifier = Modifier.width(7.dp))
-                        Text(
-                            text = Localization.payersSectionTitle(lang),
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = Localization.payersSubtitle(lang),
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    ManualExpensePayerAndSplitSection(
+                        lang = lang,
+                        members = members,
+                        selectedPayerIds = selectedPayerIds,
+                        isCustomPayerSplit = isCustomPayerSplit,
+                        onCustomPayerSplitChange = { isCustomPayerSplit = it },
+                        customPayerAmounts = customPayerAmounts,
+                        currentAmount = currentAmount,
+                        isAllFamily = isAllFamily,
+                        onIsAllFamilyChange = { isAllFamily = it },
+                        selectedMemberIds = selectedMemberIds,
+                        splitPerPerson = splitPerPerson
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        members.forEach { member ->
-                            val isPayer = selectedPayerIds.contains(member.id)
-                            val avatarColor = Color(member.avatarColorHex)
-                            val translatedRole = Localization.translateRole(member.role, lang)
-
-                            FilterChip(
-                                selected = isPayer,
-                                onClick = {
-                                    if (isPayer) {
-                                        if (selectedPayerIds.size > 1) {
-                                            selectedPayerIds.remove(member.id)
-                                            customPayerAmounts.remove(member.id)
-                                        }
-                                    } else {
-                                        selectedPayerIds.add(member.id)
-                                        if (isCustomPayerSplit) {
-                                            val currentAllocated = selectedPayerIds.sumOf { customPayerAmounts[it]?.toDoubleOrNull() ?: 0.0 }
-                                            val remaining = (currentAmount - currentAllocated).coerceAtLeast(0.0)
-                                            customPayerAmounts[member.id] = if (remaining > 0) String.format(Locale.US, "%.2f", remaining) else "0.00"
-                                        }
-                                    }
-                                },
-                                label = { Text("${member.name} ($translatedRole)", fontSize = 12.sp) },
-                                leadingIcon = {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(12.dp)
-                                            .clip(CircleShape)
-                                            .background(avatarColor)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Emerald700.copy(alpha = 0.2f),
-                                    selectedLabelColor = Emerald700
-                                )
-                            )
-                        }
-                    }
-
-                    // Multi-payer allocation details card (when 2 or more payers selected)
-                    if (selectedPayerIds.size > 1) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Card(
-                            shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                            ),
-                            border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.25f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                // Full-width Segmented Tab Control
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                        .padding(3.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(if (!isCustomPayerSplit) Emerald700 else Color.Transparent)
-                                            .clickable { isCustomPayerSplit = false }
-                                            .padding(vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = Localization.payerSplitModeEqual(lang),
-                                            fontSize = 12.5.sp,
-                                            fontWeight = if (!isCustomPayerSplit) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (!isCustomPayerSplit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(if (isCustomPayerSplit) Emerald700 else Color.Transparent)
-                                            .clickable {
-                                                isCustomPayerSplit = true
-                                                val share = if (currentAmount > 0) currentAmount / selectedPayerIds.size else 0.0
-                                                selectedPayerIds.forEach { id ->
-                                                    if (customPayerAmounts[id].isNullOrBlank()) {
-                                                        customPayerAmounts[id] = String.format(Locale.US, "%.2f", share)
-                                                    }
-                                                }
-                                            }
-                                            .padding(vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = Localization.payerSplitModeCustom(lang),
-                                            fontSize = 12.5.sp,
-                                            fontWeight = if (isCustomPayerSplit) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isCustomPayerSplit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                if (!isCustomPayerSplit) {
-                                    // Equal split display
-                                    val equalShare = if (currentAmount > 0) currentAmount / selectedPayerIds.size else 0.0
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(Emerald700.copy(alpha = 0.08f))
-                                            .padding(horizontal = 12.dp, vertical = 9.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "Share per person" else "Μερίδιο ανά άτομο",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = String.format(Locale.US, "%.2f €", equalShare),
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Emerald700
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        selectedPayerIds.forEach { pid ->
-                                            val m = members.find { it.id == pid } ?: return@forEach
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier.weight(1f)
-                                                ) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(10.dp)
-                                                            .clip(CircleShape)
-                                                            .background(Color(m.avatarColorHex))
-                                                    )
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    Text(
-                                                        text = m.name,
-                                                        fontSize = 12.5.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    Text(
-                                                        text = " (${Localization.translateRole(m.role, lang)})",
-                                                        fontSize = 11.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                Text(
-                                                    text = String.format(Locale.US, "%.2f €", equalShare),
-                                                    fontSize = 12.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = Emerald700
-                                                )
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Custom amounts per payer inputs
-                                    Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Enter amount paid per member:" else "Ορίστε το ποσό που πλήρωσε κάθε μέλος:",
-                                        fontSize = 11.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        selectedPayerIds.forEach { pid ->
-                                            val m = members.find { it.id == pid } ?: return@forEach
-                                            val currentVal = customPayerAmounts[pid] ?: ""
-
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.weight(1f),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(10.dp)
-                                                            .clip(CircleShape)
-                                                            .background(Color(m.avatarColorHex))
-                                                    )
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text(
-                                                        text = m.name,
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    Text(
-                                                        text = " (${Localization.translateRole(m.role, lang)})",
-                                                        fontSize = 11.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-
-                                                OutlinedTextField(
-                                                    value = currentVal,
-                                                    onValueChange = { input ->
-                                                        customPayerAmounts[pid] = input.replace(',', '.')
-                                                    },
-                                                    modifier = Modifier.width(115.dp),
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                                    singleLine = true,
-                                                    trailingIcon = {
-                                                        Text("€", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Emerald700)
-                                                    },
-                                                    colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedBorderColor = Emerald700,
-                                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                                                    )
-                                                )
-                                            }
-                                        }
-
-                                        // Balance & Auto-completion calculation
-                                        val totalAllocated = selectedPayerIds.sumOf { customPayerAmounts[it]?.toDoubleOrNull() ?: 0.0 }
-                                        val diff = currentAmount - totalAllocated
-
-                                        Spacer(modifier = Modifier.height(8.dp))
-
-                                        if (currentAmount > 0.0) {
-                                            Surface(
-                                                shape = RoundedCornerShape(10.dp),
-                                                color = when {
-                                                    Math.abs(diff) < 0.01 -> Emerald700.copy(alpha = 0.08f)
-                                                    diff > 0.01 -> Amber700.copy(alpha = 0.08f)
-                                                    else -> MaterialTheme.colorScheme.error.copy(alpha = 0.08f)
-                                                },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                if (Math.abs(diff) < 0.01) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(Icons.Default.Check, contentDescription = null, tint = Emerald700, modifier = Modifier.size(14.dp))
-                                                        Spacer(modifier = Modifier.width(4.dp))
-                                                        Text(
-                                                            text = Localization.payerFullyCovered(lang),
-                                                            fontSize = 11.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = Emerald700
-                                                        )
-                                                    }
-                                                } else if (diff > 0.01) {
-                                                    Text(
-                                                        text = Localization.payerRemaining(lang, String.format(Locale.US, "%.2f €", diff)),
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = Amber700
-                                                    )
-
-                                                    // Quick button to allocate remainder to the second payer if 2 payers
-                                                    if (selectedPayerIds.size == 2) {
-                                                        val targetId = selectedPayerIds[1]
-                                                        val targetMember = members.find { it.id == targetId }
-                                                        if (targetMember != null) {
-                                                            Surface(
-                                                                shape = RoundedCornerShape(6.dp),
-                                                                color = Amber700.copy(alpha = 0.12f),
-                                                                modifier = Modifier
-                                                                    .clip(RoundedCornerShape(6.dp))
-                                                                    .clickable {
-                                                                        val cur = customPayerAmounts[targetId]?.toDoubleOrNull() ?: 0.0
-                                                                        customPayerAmounts[targetId] = String.format(Locale.US, "%.2f", cur + diff)
-                                                                    }
-                                                            ) {
-                                                                Text(
-                                                                    text = Localization.payerQuickBalance(lang, targetMember.name, String.format(Locale.US, "%.2f €", diff)),
-                                                                    fontSize = 10.5.sp,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    color = Amber700,
-                                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                } else {
-                                                    Text(
-                                                        text = Localization.payerExceeded(lang, String.format(Locale.US, "%.2f €", -diff)),
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.error
-                                                    )
-                                                }
-
-                                                Text(
-                                                    text = "${String.format(Locale.US, "%.2f", totalAllocated)} / ${String.format(Locale.US, "%.2f €", currentAmount)}",
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
-                                                )
-                                            }
-                                        }
-                                    }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 2. Beneficiary Section (Who the expense concerns)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = Color(0xFF2563EB),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Who is this expense for?" else "Σε ποιον αφορά το έξοδο;",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (lang == Localization.Language.ENGLISH) "e.g. Choose children to track expenses per child" else "π.χ. Επιλέξτε τα παιδιά για να γνωρίζετε πόσα αναλογούν σε αυτά",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // All Family Toggle
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isAllFamily) Emerald700.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isAllFamily = !isAllFamily }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = isAllFamily,
-                                onCheckedChange = { isAllFamily = it }
-                            )
-                            Icon(
-                                imageVector = Icons.Default.Group,
-                                contentDescription = null,
-                                tint = Emerald700,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Common to entire household (Family)" else "Κοινό έξοδο όλου του σπιτιού (Οικογένεια)",
-                                fontSize = 13.sp,
-                                fontWeight = if (isAllFamily) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-
-                    if (!isAllFamily) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Select participating members:" else "Επιλέξτε μέλη που συμμετέχουν:",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            members.forEach { member ->
-                                val isChecked = selectedMemberIds.contains(member.id)
-                                val avatarColor = Color(member.avatarColorHex)
-                                val translatedRole = Localization.translateRole(member.role, lang)
-
-                                FilterChip(
-                                    selected = isChecked,
-                                    onClick = {
-                                        if (isChecked) {
-                                            selectedMemberIds.remove(member.id)
-                                        } else {
-                                            selectedMemberIds.add(member.id)
-                                        }
-                                    },
-                                    label = { Text("${member.name} ($translatedRole)", fontSize = 12.sp) },
-                                    leadingIcon = {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(12.dp)
-                                                .clip(CircleShape)
-                                                .background(avatarColor)
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = avatarColor.copy(alpha = 0.2f)
-                                    )
-                                )
-                            }
-                        }
-                    }
-
-                    // Live split preview
-                    if (currentAmount > 0) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Emerald700.copy(alpha = 0.08f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Split calculation: " else "Υπολογισμός διαμοιρασμού: ",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = if (lang == Localization.Language.ENGLISH)
-                                        String.format(Locale.US, "%.2f € / person", splitPerPerson)
-                                    else
-                                        String.format(Locale.US, "%.2f € / άτομο", splitPerPerson),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Emerald700
-                                )
-                            }
-                        }
-                    }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Optional note
                     OutlinedTextField(
                         value = note,
                         onValueChange = { note = it },
@@ -1536,7 +623,6 @@ fun ManualExpenseDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                // 3. Fixed Sticky Bottom Action Bar (Cancel + Save)
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                     modifier = Modifier.padding(vertical = 10.dp)
@@ -1571,32 +657,21 @@ fun ManualExpenseDialog(
                             val chosenCat = categories.find { it.id == selectedCategoryId }
                             val catId = chosenCat?.id ?: 0L
                             val catName = chosenCat?.name ?: ""
-
-                            val splitType = if (isAllFamily) "ALL_FAMILY" else "SPECIFIC_MEMBERS"
-                            val finalMemberIds = if (isAllFamily) {
-                                members.map { it.id }
-                            } else {
-                                selectedMemberIds.toList()
+                            if (catId > 0L && catName.isNotBlank()) {
+                                onLearnCategory?.invoke(title.trim(), catId, catName, scannedMerchantAfm)
                             }
 
-                            val memberDisplay = if (isAllFamily) {
-                                if (lang == Localization.Language.ENGLISH) "Family Shared" else "Κοινό Οικογένειας"
-                            } else {
-                                val active = members.filter { finalMemberIds.contains(it.id) }
-                                if (active.size >= 2) {
-                                    val firstRolePlural = Localization.pluralRoleName(active.first().role, lang)
-                                    val allSameRole = active.all {
-                                        Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-                                    }
-                                    if (allSameRole) {
-                                        firstRolePlural
-                                    } else {
-                                        active.joinToString(" & ") { it.name }
-                                    }
-                                } else {
-                                    active.joinToString(" & ") { it.name }
-                                }
-                            }
+                            val resolved = ManualExpenseSaveResolver.resolveSplitAndPayers(
+                                parsedAmount = parsedAmount,
+                                isAllFamily = isAllFamily,
+                                selectedMemberIds = selectedMemberIds.toList(),
+                                selectedPayerIds = selectedPayerIds.toList(),
+                                fallbackDefaultPayer = fallbackDefaultPayer,
+                                isCustomPayerSplit = isCustomPayerSplit,
+                                customPayerAmounts = customPayerAmounts.toMap(),
+                                members = members,
+                                lang = lang
+                            )
 
                             val finalTimestamp = if (isSelectedDateToday && expenseToEdit == null) {
                                 System.currentTimeMillis()
@@ -1604,69 +679,33 @@ fun ManualExpenseDialog(
                                 selectedTimestamp
                             }
 
-                            val finalPayerIds = selectedPayerIds.toList().ifEmpty {
-                                val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) } ?: members.firstOrNull()
-                                if (def != null) listOf(def.id) else emptyList()
-                            }
-
-                            val finalPayerMember: FamilyMember? = if (finalPayerIds.isNotEmpty()) members.find { it.id == finalPayerIds[0] } else null
-                            val finalPayerId = finalPayerMember?.id ?: 0L
-                            val finalPayerMemberIdsCsv = finalPayerIds.joinToString(",")
-
-                            val finalPayerAmountsCsv: String
-                            val finalPayerName: String
-
-                            if (finalPayerIds.size <= 1) {
-                                finalPayerAmountsCsv = if (finalPayerIds.isNotEmpty()) "${finalPayerIds[0]}:${String.format(Locale.US, "%.2f", parsedAmount)}" else ""
-                                finalPayerName = finalPayerMember?.name ?: ""
-                            } else {
-                                if (isCustomPayerSplit) {
-                                    finalPayerAmountsCsv = finalPayerIds.joinToString(",") { id ->
-                                        val amt = customPayerAmounts[id]?.toDoubleOrNull() ?: (parsedAmount / finalPayerIds.size)
-                                        String.format(Locale.US, "%d:%.2f", id, amt)
-                                    }
-                                    finalPayerName = finalPayerIds.mapNotNull { id -> members.find { it.id == id } }
-                                        .joinToString(" & ") { m ->
-                                            val amt = customPayerAmounts[m.id]?.toDoubleOrNull() ?: (parsedAmount / finalPayerIds.size)
-                                            "${m.name} (${String.format(Locale.US, "%.2f €", amt)})"
-                                        }
-                                } else {
-                                    val perPerson = parsedAmount / finalPayerIds.size
-                                    finalPayerAmountsCsv = finalPayerIds.joinToString(",") { id ->
-                                        String.format(Locale.US, "%d:%.2f", id, perPerson)
-                                    }
-                                    val payerMembers = finalPayerIds.mapNotNull { id -> members.find { it.id == id } }
-                                    val payerLabel = if (payerMembers.size >= 2) {
-                                        val firstRolePlural = Localization.pluralRoleName(payerMembers.first().role, lang)
-                                        val allSameRole = payerMembers.all {
-                                            Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-                                        }
-                                        if (allSameRole) firstRolePlural else payerMembers.joinToString(" & ") { it.name }
-                                    } else {
-                                        payerMembers.joinToString(" & ") { it.name }
-                                    }
-                                    finalPayerName = payerLabel
-                                }
-                            }
-
                             if (isReminderMode && onSaveReminder != null) {
+                                val resolvedDay = if (reminderFrequency == RecurringScheduleHelper.FREQ_WEEKLY ||
+                                    reminderFrequency == RecurringScheduleHelper.FREQ_BIWEEKLY
+                                ) {
+                                    reminderDayOfMonth.coerceIn(1, 7)
+                                } else {
+                                    reminderDayOfMonth.coerceIn(1, 31)
+                                }
                                 onSaveReminder(
                                     expenseToEdit?.id ?: 0L,
                                     title.trim(),
                                     parsedAmount,
                                     catId,
                                     catName,
-                                    reminderDayOfMonth,
+                                    resolvedDay,
                                     reminderHour,
                                     reminderMinute,
-                                    splitType,
-                                    finalMemberIds,
-                                    memberDisplay,
+                                    resolved.splitType,
+                                    resolved.finalMemberIds,
+                                    resolved.memberDisplay,
                                     note.trim(),
-                                    finalPayerId,
-                                    finalPayerName,
-                                    finalPayerMemberIdsCsv,
-                                    finalPayerAmountsCsv
+                                    resolved.finalPayerId,
+                                    resolved.finalPayerName,
+                                    resolved.finalPayerMemberIdsCsv,
+                                    resolved.finalPayerAmountsCsv,
+                                    reminderFrequency,
+                                    reminderAnchorMonth
                                 )
                             } else {
                                 onSave(
@@ -1676,14 +715,14 @@ fun ManualExpenseDialog(
                                     catId,
                                     catName,
                                     finalTimestamp,
-                                    splitType,
-                                    finalMemberIds,
-                                    memberDisplay,
+                                    resolved.splitType,
+                                    resolved.finalMemberIds,
+                                    resolved.memberDisplay,
                                     note.trim(),
-                                    finalPayerId,
-                                    finalPayerName,
-                                    finalPayerMemberIdsCsv,
-                                    finalPayerAmountsCsv
+                                    resolved.finalPayerId,
+                                    resolved.finalPayerName,
+                                    resolved.finalPayerMemberIdsCsv,
+                                    resolved.finalPayerAmountsCsv
                                 )
                             }
                         },

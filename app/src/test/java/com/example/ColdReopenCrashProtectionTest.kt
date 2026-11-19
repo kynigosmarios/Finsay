@@ -273,9 +273,11 @@ class ColdReopenCrashProtectionTest {
             "userSavingsGoalsSyncJob",
             "recurringSyncJob",
             "userRecurringSyncJob",
+            "activitySyncJob",
             "userProfileSyncJob",
             "userHouseholdsSyncJob",
             "countdownJob",
+            "undoCountdownJob",
             "memberReorderJob",
             "categoryReorderJob",
             "lastObservedHouseholdId"
