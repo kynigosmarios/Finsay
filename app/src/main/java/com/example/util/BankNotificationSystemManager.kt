@@ -135,7 +135,8 @@ object BankNotificationSystemManager {
             val text = "${tx.merchantName} • ${String.format(Locale.GERMANY, "%.2f €", tx.amount)}"
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_oikonomos_logo_white)
+                .setSmallIcon(R.drawable.ic_notification_infinity)
+                .setColor(0xFF059669.toInt())
                 .setContentTitle(title)
                 .setContentText(text)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(text))

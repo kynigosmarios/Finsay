@@ -173,7 +173,8 @@ object DailyReminderManager {
             val tapPendingIntent = PendingIntent.getActivity(context, 0, tapIntent, flags)
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_oikonomos_logo_white)
+                .setSmallIcon(R.drawable.ic_notification_infinity)
+                .setColor(0xFF059669.toInt())
                 .setContentTitle(title)
                 .setContentText(message)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(message))

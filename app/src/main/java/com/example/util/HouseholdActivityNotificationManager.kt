@@ -71,7 +71,8 @@ object HouseholdActivityNotificationManager {
 
             val titlePrefix = if (actorName.isNotBlank()) "$actorName • $householdName" else householdName
             val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_oikonomos_logo_white)
+                .setSmallIcon(R.drawable.ic_notification_infinity)
+                .setColor(0xFF059669.toInt())
                 .setContentTitle(titlePrefix.ifBlank { "Finsay" })
                 .setContentText(summaryText)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(summaryText))
