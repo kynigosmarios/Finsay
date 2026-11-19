@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -144,73 +145,43 @@ fun RecurringExpenseDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 480.dp)
-                .heightIn(max = 680.dp)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .testTag("recurring_expense_dialog")
-        ) {
-            Column(
+        SmoothDialogContent {
+            Card(
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(22.dp)
+                    .widthIn(max = 480.dp)
+                    .heightIn(max = 680.dp)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .testTag("recurring_expense_dialog")
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(22.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = if (recurringToEdit == null) Localization.newStandingOrder(lang) else Localization.editStandingOrder(lang),
                             fontSize = 19.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
                         )
-                        Text(
-                            text = if (isEn) "Automated recurring expenses" else "Αυτόματες επαναλαμβανόμενες πληρωμές",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = Localization.close(lang))
+                        }
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = Localization.close(lang))
-                    }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Emerald700.copy(alpha = 0.08f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("⚡", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (isEn)
-                                "Automatically registered in your expenses on the schedule you set."
-                            else
-                                "Καταχωρείται αυτόματα στα έξοδα σύμφωνα με τη συχνότητα που ορίζετε.",
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 16.sp
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                 // Field 1: Description
                 OutlinedTextField(
@@ -301,75 +272,87 @@ fun RecurringExpenseDialog(
                     }
                 }
 
-                if (isWeeklyMode) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = Localization.weekdayLabel(lang),
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        (1..7).forEach { isoDow ->
-                            val isSelected = dayOfMonth.coerceIn(1, 7) == isoDow
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { dayOfMonth = isoDow },
-                                label = {
-                                    Text(
-                                        text = RecurringScheduleHelper.weekdayName(isoDow, lang),
-                                        fontSize = 12.sp,
-                                        maxLines = 1,
-                                        softWrap = false
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = Emerald700.copy(alpha = 0.16f),
-                                    selectedLabelColor = Emerald700
-                                ),
-                                modifier = Modifier.testTag("recurring_weekday_chip_$isoDow")
-                            )
+                AnimatedVisibility(
+                    visible = isWeeklyMode,
+                    enter = FinsayMotion.ExpandEnter,
+                    exit = FinsayMotion.ShrinkExit
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = Localization.weekdayLabel(lang),
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            (1..7).forEach { isoDow ->
+                                val isSelected = dayOfMonth.coerceIn(1, 7) == isoDow
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { dayOfMonth = isoDow },
+                                    label = {
+                                        Text(
+                                            text = RecurringScheduleHelper.weekdayName(isoDow, lang),
+                                            fontSize = 12.sp,
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Emerald700.copy(alpha = 0.16f),
+                                        selectedLabelColor = Emerald700
+                                    ),
+                                    modifier = Modifier.testTag("recurring_weekday_chip_$isoDow")
+                                )
+                            }
                         }
                     }
                 }
 
-                if (needsAnchorMonth) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    ExposedDropdownMenuBox(
-                        expanded = anchorMonthDropdownExpanded,
-                        onExpandedChange = { anchorMonthDropdownExpanded = !anchorMonthDropdownExpanded },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = RecurringScheduleHelper.monthNameShort(anchorMonth, lang),
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(Localization.anchorMonthLabel(lang)) },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = anchorMonthDropdownExpanded) },
-                            shape = RoundedCornerShape(14.dp),
-                            colors = fieldColors,
-                            modifier = Modifier
-                                .menuAnchor()
-                                .fillMaxWidth()
-                                .testTag("recurring_anchor_month_dropdown")
-                        )
-                        ExposedDropdownMenu(
+                AnimatedVisibility(
+                    visible = needsAnchorMonth,
+                    enter = FinsayMotion.ExpandEnter,
+                    exit = FinsayMotion.ShrinkExit
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        ExposedDropdownMenuBox(
                             expanded = anchorMonthDropdownExpanded,
-                            onDismissRequest = { anchorMonthDropdownExpanded = false }
+                            onExpandedChange = { anchorMonthDropdownExpanded = !anchorMonthDropdownExpanded },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            (0..11).forEach { mIdx ->
-                                DropdownMenuItem(
-                                    text = { Text(RecurringScheduleHelper.monthNameShort(mIdx, lang)) },
-                                    onClick = {
-                                        anchorMonth = mIdx
-                                        anchorMonthDropdownExpanded = false
-                                    }
-                                )
+                            OutlinedTextField(
+                                value = RecurringScheduleHelper.monthNameShort(anchorMonth, lang),
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text(Localization.anchorMonthLabel(lang)) },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = anchorMonthDropdownExpanded) },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = fieldColors,
+                                modifier = Modifier
+                                    .menuAnchor()
+                                    .fillMaxWidth()
+                                    .testTag("recurring_anchor_month_dropdown")
+                            )
+                            ExposedDropdownMenu(
+                                expanded = anchorMonthDropdownExpanded,
+                                onDismissRequest = { anchorMonthDropdownExpanded = false }
+                            ) {
+                                (0..11).forEach { mIdx ->
+                                    DropdownMenuItem(
+                                        text = { Text(RecurringScheduleHelper.monthNameShort(mIdx, lang)) },
+                                        onClick = {
+                                            anchorMonth = mIdx
+                                            anchorMonthDropdownExpanded = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -527,6 +510,7 @@ fun RecurringExpenseDialog(
                     }
                 }
             }
+        }
         }
     }
 }

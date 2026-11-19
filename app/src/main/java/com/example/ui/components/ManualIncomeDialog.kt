@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Euro
 import androidx.compose.material.icons.filled.TrendingUp
@@ -171,15 +172,16 @@ fun ManualIncomeDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .padding(vertical = 16.dp)
-                .testTag("manual_income_dialog")
-        ) {
+        SmoothDialogContent {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .padding(vertical = 16.dp)
+                    .testTag("manual_income_dialog")
+            ) {
             Column(
                 modifier = Modifier
                     .padding(20.dp)
@@ -401,9 +403,14 @@ fun ManualIncomeDialog(
                             Icon(Icons.Default.CalendarToday, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             val dateStr = SimpleDateFormat("dd MMMM yyyy", Localization.getDateLocale(lang)).format(Date(selectedTimestamp))
-                            Text(text = "${Localization.dateLabel(lang)} $dateStr", fontSize = 13.sp)
+                            Text(text = dateStr, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                         }
-                        Text(Localization.changeAction(lang), fontSize = 12.sp, color = Color(0xFF059669), fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = Localization.changeAction(lang),
+                            tint = Color(0xFF059669),
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                 }
 
@@ -476,6 +483,7 @@ fun ManualIncomeDialog(
                     )
                 }
             }
+        }
         }
     }
 }

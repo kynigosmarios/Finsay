@@ -165,6 +165,7 @@ fun mapExpenseFromFields(
         payerAmountsCsv = coerceSafeString(getField("payerAmountsCsv")) ?: existing?.payerAmountsCsv ?: "",
         createdByUid = coerceSafeString(getField("createdByUid")) ?: existing?.createdByUid ?: "",
         createdByName = coerceSafeString(getField("createdByName")) ?: existing?.createdByName ?: "",
+        isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
         createdAt = createdAtTs
     )
 } catch (_: Throwable) {
@@ -246,6 +247,7 @@ fun mapIncomeFromFields(
         note = coerceSafeString(getField("note")) ?: existing?.note ?: "",
         createdByUid = coerceSafeString(getField("createdByUid")) ?: existing?.createdByUid ?: "",
         createdByName = coerceSafeString(getField("createdByName")) ?: existing?.createdByName ?: "",
+        isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
         createdAt = createdAtTs
     )
 } catch (_: Throwable) {
@@ -315,6 +317,7 @@ fun mapHouseholdFromFields(
     val rolesMap = coerceSafeStringMap(getField("memberRoles")) ?: existing?.memberRoles ?: emptyMap()
     val emailsMap = coerceSafeStringMap(getField("memberEmails")) ?: existing?.memberEmails ?: emptyMap()
     val namesMap = coerceSafeStringMap(getField("memberNames")) ?: existing?.memberNames ?: emptyMap()
+    val defaultPayersMap = coerceSafeStringMap(getField("memberDefaultPayers")) ?: existing?.memberDefaultPayers ?: emptyMap()
 
     (existing ?: Household()).copy(
         id = resolvedId,
@@ -326,6 +329,7 @@ fun mapHouseholdFromFields(
         memberRoles = rolesMap,
         memberEmails = emailsMap,
         memberNames = namesMap,
+        memberDefaultPayers = defaultPayersMap,
         pendingInviteRole = coerceSafeString(getField("pendingInviteRole")) ?: existing?.pendingInviteRole ?: "REGISTAR",
         isPremium = isPrem,
         createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt,
@@ -421,6 +425,7 @@ fun mapSavingsGoalFromFields(
         iconKey = coerceSafeString(getField("iconKey")) ?: existing?.iconKey ?: "vacation",
         colorHex = color,
         note = coerceSafeString(getField("note")) ?: existing?.note ?: "",
+        isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
         createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
 } catch (_: Throwable) {
@@ -475,6 +480,7 @@ fun mapRecurringExpenseFromFields(
         payerMemberIdsCsv = coerceSafeString(getField("payerMemberIdsCsv")) ?: existing?.payerMemberIdsCsv ?: "",
         payerAmountsCsv = coerceSafeString(getField("payerAmountsCsv")) ?: existing?.payerAmountsCsv ?: "",
         anchorMonth = (coerceSafeInt(getField("anchorMonth")) ?: existing?.anchorMonth ?: 0).coerceIn(0, 11),
+        isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
         createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
 } catch (_: Throwable) {

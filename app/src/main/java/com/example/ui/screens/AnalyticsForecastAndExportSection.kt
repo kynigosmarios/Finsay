@@ -3,6 +3,8 @@ package com.example.ui.screens
 import android.app.DatePickerDialog
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -60,6 +62,7 @@ import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.Income
 import com.example.data.entity.RecurringExpense
+import com.example.ui.components.FinsayMotion
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsForecastHelper
@@ -103,67 +106,40 @@ internal fun AnalyticsMonthForecastCard(
             .fillMaxWidth()
             .testTag("analytics_month_forecast_card")
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Emerald100,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Timeline,
-                                contentDescription = null,
-                                tint = Emerald700,
-                                modifier = Modifier.size(19.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = Localization.monthlyComparisonTitle(lang),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                if (result.isCurrentCalendarMonth) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Emerald700.copy(alpha = 0.1f)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.Timeline,
+                iconTint = Emerald700,
+                iconContainerColor = Emerald100,
+                title = Localization.monthlyComparisonTitle(lang),
+                trailing = if (result.isCurrentCalendarMonth) {
+                    {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Emerald700.copy(alpha = 0.1f)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                tint = Emerald700,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "${result.elapsedDaysInMonth}/${result.totalDaysInMonth}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Emerald700
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = Emerald700,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Text(
+                                    text = "${result.elapsedDaysInMonth}/${result.totalDaysInMonth}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Emerald700
+                                )
+                            }
                         }
                     }
-                }
-            }
+                } else null
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -215,10 +191,10 @@ internal fun AnalyticsMonthForecastCard(
                         Spacer(modifier = Modifier.height(2.dp))
                         val pctText = result.expenseDeltaPercent?.let { pct ->
                             val pctSign = if (pct >= 0) "+" else ""
-                            "($pctSign$pct%) "
+                            "$pctSign$pct% "
                         } ?: ""
                         Text(
-                            text = "$pctText${Localization.vsPreviousMonth(lang)}",
+                            text = "$pctText${if (lang == Localization.Language.ENGLISH) "vs prev." else "vs προηγ."}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -271,10 +247,10 @@ internal fun AnalyticsMonthForecastCard(
                         Spacer(modifier = Modifier.height(2.dp))
                         val pctText = result.incomeDeltaPercent?.let { pct ->
                             val pctSign = if (pct >= 0) "+" else ""
-                            "($pctSign$pct%) "
+                            "$pctSign$pct% "
                         } ?: ""
                         Text(
-                            text = "$pctText${Localization.vsPreviousMonth(lang)}",
+                            text = "$pctText${if (lang == Localization.Language.ENGLISH) "vs prev." else "vs προηγ."}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -297,7 +273,12 @@ internal fun AnalyticsMonthForecastCard(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                val monthProgress = (result.elapsedDaysInMonth.toFloat() / result.totalDaysInMonth.toFloat()).coerceIn(0f, 1f)
+                val monthProgressTarget = (result.elapsedDaysInMonth.toFloat() / result.totalDaysInMonth.toFloat()).coerceIn(0f, 1f)
+                val monthProgress by animateFloatAsState(
+                    targetValue = monthProgressTarget,
+                    animationSpec = FinsayMotion.ProgressSpec,
+                    label = "month_forecast_progress"
+                )
                 LinearProgressIndicator(
                     progress = { monthProgress },
                     modifier = Modifier
@@ -435,21 +416,23 @@ internal fun AnalyticsDataExportCard(
         selectedExportCategoryId,
         selectedExportMemberId
     ) {
+        val nowCal = Calendar.getInstance()
+        val curYear = nowCal.get(Calendar.YEAR)
+        val curMonth = nowCal.get(Calendar.MONTH)
+        val prevCal = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
+        val prevYear = prevCal.get(Calendar.YEAR)
+        val prevMonth = prevCal.get(Calendar.MONTH)
+        val reusableCal = Calendar.getInstance()
+
         expenses.filter { exp ->
             val matchesPeriod = when (exportPeriodIndex) {
                 0 -> {
-                    val cal = Calendar.getInstance()
-                    val curYear = cal.get(Calendar.YEAR)
-                    val curMonth = cal.get(Calendar.MONTH)
-                    val expCal = Calendar.getInstance().apply { timeInMillis = exp.timestamp }
-                    expCal.get(Calendar.YEAR) == curYear && expCal.get(Calendar.MONTH) == curMonth
+                    reusableCal.timeInMillis = exp.timestamp
+                    reusableCal.get(Calendar.YEAR) == curYear && reusableCal.get(Calendar.MONTH) == curMonth
                 }
                 1 -> {
-                    val cal = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
-                    val prevYear = cal.get(Calendar.YEAR)
-                    val prevMonth = cal.get(Calendar.MONTH)
-                    val expCal = Calendar.getInstance().apply { timeInMillis = exp.timestamp }
-                    expCal.get(Calendar.YEAR) == prevYear && expCal.get(Calendar.MONTH) == prevMonth
+                    reusableCal.timeInMillis = exp.timestamp
+                    reusableCal.get(Calendar.YEAR) == prevYear && reusableCal.get(Calendar.MONTH) == prevMonth
                 }
                 2 -> exp.timestamp in exportRangeStart..exportRangeEnd
                 else -> true
@@ -474,45 +457,22 @@ internal fun AnalyticsDataExportCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("analytics_export_data_card"),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(18.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Emerald700.copy(alpha = 0.12f),
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.TableChart,
-                                contentDescription = null,
-                                tint = Emerald700,
-                                modifier = Modifier.size(17.dp)
-                            )
-                        }
-                    }
-                    Text(
-                        text = if (isGreek) "Εξαγωγή δεδομένων" else "Data Export",
-                        fontSize = 15.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+            AnalyticsSectionHeader(
+                icon = Icons.Default.TableChart,
+                iconTint = Emerald700,
+                iconContainerColor = Emerald100,
+                title = if (isGreek) "Εξαγωγή δεδομένων" else "Data Export",
+                badge = {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = Color(0xFFF59E0B).copy(alpha = 0.16f),
@@ -520,21 +480,22 @@ internal fun AnalyticsDataExportCard(
                     ) {
                         Text(
                             text = "Pro",
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFFD97706),
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
+                },
+                trailing = {
+                    Text(
+                        text = if (isGreek) "${filteredExportExpenses.size} έξοδα" else "${filteredExportExpenses.size} items",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-
-                Text(
-                    text = if (isGreek) "${filteredExportExpenses.size} έξοδα" else "${filteredExportExpenses.size} items",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -569,76 +530,82 @@ internal fun AnalyticsDataExportCard(
                 }
             }
 
-            if (exportPeriodIndex == 2) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                val cal = Calendar.getInstance().apply { timeInMillis = exportRangeStart }
-                                DatePickerDialog(
-                                    context,
-                                    { _, y, m, d ->
-                                        val newCal = Calendar.getInstance().apply {
-                                            set(y, m, d, 0, 0, 0)
-                                            set(Calendar.MILLISECOND, 0)
-                                        }
-                                        exportRangeStart = newCal.timeInMillis
-                                    },
-                                    cal.get(Calendar.YEAR),
-                                    cal.get(Calendar.MONTH),
-                                    cal.get(Calendar.DAY_OF_MONTH)
-                                ).show()
-                            }
+            AnimatedVisibility(
+                visible = exportPeriodIndex == 2,
+                enter = FinsayMotion.ExpandEnter,
+                exit = FinsayMotion.ShrinkExit
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = (if (isGreek) "Από: " else "From: ") + dateSdf.format(exportRangeStart),
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Emerald700,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    val cal = Calendar.getInstance().apply { timeInMillis = exportRangeStart }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, y, m, d ->
+                                            val newCal = Calendar.getInstance().apply {
+                                                set(y, m, d, 0, 0, 0)
+                                                set(Calendar.MILLISECOND, 0)
+                                            }
+                                            exportRangeStart = newCal.timeInMillis
+                                        },
+                                        cal.get(Calendar.YEAR),
+                                        cal.get(Calendar.MONTH),
+                                        cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                        ) {
+                            Text(
+                                text = (if (isGreek) "Από: " else "From: ") + dateSdf.format(exportRangeStart),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Emerald700,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
 
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                val cal = Calendar.getInstance().apply { timeInMillis = exportRangeEnd }
-                                DatePickerDialog(
-                                    context,
-                                    { _, y, m, d ->
-                                        val newCal = Calendar.getInstance().apply {
-                                            set(y, m, d, 23, 59, 59)
-                                            set(Calendar.MILLISECOND, 999)
-                                        }
-                                        exportRangeEnd = newCal.timeInMillis
-                                    },
-                                    cal.get(Calendar.YEAR),
-                                    cal.get(Calendar.MONTH),
-                                    cal.get(Calendar.DAY_OF_MONTH)
-                                ).show()
-                            }
-                    ) {
-                        Text(
-                            text = (if (isGreek) "Έως: " else "To: ") + dateSdf.format(exportRangeEnd),
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Emerald700,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
-                            textAlign = TextAlign.Center
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    val cal = Calendar.getInstance().apply { timeInMillis = exportRangeEnd }
+                                    DatePickerDialog(
+                                        context,
+                                        { _, y, m, d ->
+                                            val newCal = Calendar.getInstance().apply {
+                                                set(y, m, d, 23, 59, 59)
+                                                set(Calendar.MILLISECOND, 999)
+                                            }
+                                            exportRangeEnd = newCal.timeInMillis
+                                        },
+                                        cal.get(Calendar.YEAR),
+                                        cal.get(Calendar.MONTH),
+                                        cal.get(Calendar.DAY_OF_MONTH)
+                                    ).show()
+                                }
+                        ) {
+                            Text(
+                                text = (if (isGreek) "Έως: " else "To: ") + dateSdf.format(exportRangeEnd),
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Emerald700,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }

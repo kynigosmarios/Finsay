@@ -168,9 +168,11 @@ fun NotificationConsentDialog(
                             .testTag("notification_consent_accept_btn")
                     ) {
                         Text(
-                            text = if (isEnglish) "Enable & Accept" else "Ενεργοποίηση & Αποδοχή",
+                            text = if (isEnglish) "Enable" else "Ενεργοποίηση",
                             fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }

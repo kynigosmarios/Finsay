@@ -1,7 +1,12 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,6 +51,7 @@ import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.SavingsGoal
 import com.example.ui.components.CategoryIconHelper
+import com.example.ui.components.FinsayMotion
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsSpecialFilter
@@ -77,27 +84,21 @@ internal fun AnalyticsMembersBreakdownCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = Localization.breakdownByMember(lang),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
-                )
-
-                ChartTypeToggle(
-                    selectedType = chartTypeMembers,
-                    onSelectType = onChartTypeMembersChange,
-                    activeColor = Emerald700,
-                    appLanguage = appLanguage
-                )
-            }
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.Groups,
+                iconTint = Emerald700,
+                iconContainerColor = Emerald100,
+                title = Localization.breakdownByMember(lang),
+                trailing = {
+                    ChartTypeToggle(
+                        selectedType = chartTypeMembers,
+                        onSelectType = onChartTypeMembersChange,
+                        activeColor = Emerald700,
+                        appLanguage = appLanguage
+                    )
+                }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -194,123 +195,136 @@ internal fun AnalyticsMembersBreakdownCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
-            } else if (chartTypeMembers == 1) {
-                val memberSlices = displayedMembers.map { m ->
-                    PieChartSlice(
-                        label = m.name,
-                        value = memberSpendMap[m] ?: 0.0,
-                        color = Color(m.avatarColorHex),
-                        onClick = { triggerMemberBreakdownDrillDown(m) }
-                    )
-                }
-
-                val displayedTotal = memberSpendMap.values.sum()
-                PieChartView(
-                    slices = memberSlices,
-                    totalAmount = displayedTotal,
-                    appLanguage = appLanguage
-                )
             } else {
-                val safeMax = memberSpendMap.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
-
-                displayedMembers.forEach { member ->
-                    val spend = memberSpendMap[member] ?: 0.0
-                    val ind = individualSpendMap[member] ?: 0.0
-                    val com = (spend - ind).coerceAtLeast(0.0)
-                    val progress = (spend / safeMax).toFloat().coerceIn(0f, 1f)
-                    val avatarColor = Color(member.avatarColorHex)
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { triggerMemberBreakdownDrillDown(member) }
-                            .padding(vertical = 7.dp, horizontal = 2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(avatarColor),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = member.name.take(1),
-                                        color = Color.White,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = member.name,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        val mPaid = payerSpendMap[member] ?: 0.0
-                                        val mInc = memberIncomeMap[member] ?: 0.0
-                                        if (mPaid > mInc && (mPaid > 0.0 || mInc > 0.0)) {
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Surface(
-                                                shape = RoundedCornerShape(4.dp),
-                                                color = Color(0xFFEF4444).copy(alpha = 0.12f)
-                                            ) {
-                                                Text(
-                                                    text = Localization.expensesExceedIncomeTag(lang),
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFDC2626),
-                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                    val subtitle = when (splitMode) {
-                                        3 -> if (lang == Localization.Language.ENGLISH) "Total paid: ${String.format(Locale.US, "%.2f €", spend)}" else "Πλήρωσε συνολικά: ${String.format(Locale.US, "%.2f €", spend)}"
-                                        0 -> if (com > 0.01) {
-                                            if (lang == Localization.Language.ENGLISH) "Direct: ${String.format(Locale.US, "%.1f€", ind)} • Shared: ${String.format(Locale.US, "%.1f€", com)}"
-                                            else "Ατομικά: ${String.format(Locale.US, "%.1f€", ind)} • Κοινό: ${String.format(Locale.US, "%.1f€", com)}"
-                                        } else {
-                                            Localization.translateRole(member.role, lang)
-                                        }
-                                        else -> Localization.translateRole(member.role, lang)
-                                    }
-                                    Text(
-                                        text = subtitle,
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            Text(
-                                text = String.format(Locale.US, "%.2f €", spend),
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        LinearProgressIndicator(
-                            progress = { progress },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(CircleShape),
-                            color = avatarColor,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                AnimatedContent(
+                    targetState = chartTypeMembers,
+                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                    label = "members_chart_type"
+                ) { activeChart ->
+                if (activeChart == 1) {
+                    val memberSlices = displayedMembers.map { m ->
+                        PieChartSlice(
+                            label = m.name,
+                            value = memberSpendMap[m] ?: 0.0,
+                            color = Color(m.avatarColorHex),
+                            onClick = { triggerMemberBreakdownDrillDown(m) }
                         )
                     }
+
+                    val displayedTotal = memberSpendMap.values.sum()
+                    PieChartView(
+                        slices = memberSlices,
+                        totalAmount = displayedTotal,
+                        appLanguage = appLanguage
+                    )
+                } else {
+                    val safeMax = memberSpendMap.values.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+
+                    Column {
+                    displayedMembers.forEach { member ->
+                        val spend = memberSpendMap[member] ?: 0.0
+                        val ind = individualSpendMap[member] ?: 0.0
+                        val com = (spend - ind).coerceAtLeast(0.0)
+                        val progress by animateFloatAsState(
+                            targetValue = (spend / safeMax).toFloat().coerceIn(0f, 1f),
+                            animationSpec = FinsayMotion.ProgressSpec,
+                            label = "member_spend_progress_${member.id}"
+                        )
+                        val avatarColor = Color(member.avatarColorHex)
+
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { triggerMemberBreakdownDrillDown(member) }
+                                .padding(vertical = 7.dp, horizontal = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(avatarColor),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = member.name.take(1),
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = member.name,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            val mPaid = payerSpendMap[member] ?: 0.0
+                                            val mInc = memberIncomeMap[member] ?: 0.0
+                                            if (mPaid > mInc && (mPaid > 0.0 || mInc > 0.0)) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = Color(0xFFEF4444).copy(alpha = 0.12f)
+                                                ) {
+                                                    Text(
+                                                        text = Localization.expensesExceedIncomeTag(lang),
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFFDC2626),
+                                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        val subtitle = when (splitMode) {
+                                            0 -> if (com > 0.01) {
+                                                if (lang == Localization.Language.ENGLISH) "Direct: ${String.format(Locale.US, "%.1f€", ind)} • Shared: ${String.format(Locale.US, "%.1f€", com)}"
+                                                else "Ατομικά: ${String.format(Locale.US, "%.1f€", ind)} • Κοινό: ${String.format(Locale.US, "%.1f€", com)}"
+                                            } else {
+                                                Localization.translateRole(member.role, lang)
+                                            }
+                                            else -> Localization.translateRole(member.role, lang)
+                                        }
+                                        Text(
+                                            text = subtitle,
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = String.format(Locale.US, "%.2f €", spend),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(CircleShape),
+                                color = avatarColor,
+                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        }
+                    }
+                    }
+                }
                 }
             }
         }
@@ -333,59 +347,33 @@ internal fun AnalyticsCategoryBudgetsCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Emerald100,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.AccountBalanceWallet,
-                                contentDescription = null,
-                                tint = Emerald700,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = Localization.budgetMonitoring(lang),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+        Column(modifier = Modifier.padding(18.dp)) {
+            val scopeSubtitle = if (budgetMultiplier > 1) {
+                if (filterScope == "YEAR") {
+                    if (lang == Localization.Language.ENGLISH) "Yearly (x12 months)" else "Ετήσιο (x12 μήνες)"
+                } else {
+                    if (lang == Localization.Language.ENGLISH) "Total (x$budgetMultiplier months)" else "Σύνολο (x$budgetMultiplier μήνες)"
                 }
+            } else null
 
-                Column(horizontalAlignment = Alignment.End) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.AccountBalanceWallet,
+                iconTint = Emerald700,
+                iconContainerColor = Emerald100,
+                title = Localization.budgetMonitoring(lang),
+                subtitle = scopeSubtitle,
+                subtitleColor = Emerald700,
+                trailing = {
                     Text(
                         text = Localization.categoriesCount(categories.size, lang),
-                        fontSize = 11.sp,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (budgetMultiplier > 1) {
-                        val scopeSubtitle = if (filterScope == "YEAR") {
-                            if (lang == Localization.Language.ENGLISH) "Yearly (x12 months)" else "Ετήσιο (x12 μήνες)"
-                        } else {
-                            if (lang == Localization.Language.ENGLISH) "Total (x$budgetMultiplier months)" else "Σύνολο (x$budgetMultiplier μήνες)"
-                        }
-                        Text(
-                            text = scopeSubtitle,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Emerald700
-                        )
-                    }
                 }
-            }
+            )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             val activeCategories = categories
                 .filter { (categorySpendMap[it] ?: 0.0) > 0.01 || it.monthlyBudget > 0.01 }
@@ -420,7 +408,11 @@ internal fun AnalyticsCategoryBudgetsCard(
                     val spent = categorySpendMap[cat] ?: 0.0
                     val budget = cat.monthlyBudget * budgetMultiplier
                     val ratio = if (budget > 0) spent / budget else 0.0
-                    val progress = ratio.toFloat().coerceIn(0f, 1f)
+                    val progress by animateFloatAsState(
+                        targetValue = ratio.toFloat().coerceIn(0f, 1f),
+                        animationSpec = FinsayMotion.ProgressSpec,
+                        label = "cat_budget_progress_${cat.id}"
+                    )
 
                     val isExact = budget > 0 && (kotlin.math.abs(spent - budget) < 0.05 || (ratio >= 0.999 && ratio <= 1.001))
                     val isExceeded = budget > 0 && spent > budget + 0.05
@@ -557,60 +549,30 @@ internal fun AnalyticsSavingsGoalsCard(
             .fillMaxWidth()
             .testTag("analytics_savings_goals_card")
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.Savings,
+                iconTint = Emerald700,
+                iconContainerColor = Emerald100,
+                title = if (isGreek) "Στόχοι Αποταμίευσης" else "Savings Goals",
+                subtitle = if (totalTargetAcrossGoals > 0.0) {
+                    "${String.format(Locale.US, "%.0f€", totalSavedAcrossGoals)} / ${String.format(Locale.US, "%.0f€", totalTargetAcrossGoals)}"
+                } else null,
                 modifier = Modifier
-                    .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
                     .clickable { onOpenSavingsGoals() }
                     .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Emerald100,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Savings,
-                                contentDescription = null,
-                                tint = Emerald700,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = if (isGreek) "Στόχοι Αποταμίευσης" else "Savings Goals",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        if (totalTargetAcrossGoals > 0.0) {
-                            Text(
-                                text = "${String.format(Locale.US, "%.0f€", totalSavedAcrossGoals)} / ${String.format(Locale.US, "%.0f€", totalTargetAcrossGoals)}",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                trailing = {
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Period deposits pill (tappable -> drills down to Home expenses)
             Surface(
@@ -646,11 +608,11 @@ internal fun AnalyticsSavingsGoalsCard(
                         )
                         Text(
                             text = if (periodGoalDeposits.isNotEmpty()) {
-                                if (isGreek) "${periodGoalDeposits.size} καταθέσεις • Πατήστε για προβολή στα έξοδα"
-                                else "${periodGoalDeposits.size} deposits • Tap to view in expenses"
+                                if (isGreek) "${periodGoalDeposits.size} καταθέσεις"
+                                else "${periodGoalDeposits.size} deposits"
                             } else {
-                                if (isGreek) "Καμία κατάθεση σε αυτή την περίοδο"
-                                else "No deposits in this period"
+                                if (isGreek) "Καμία κατάθεση"
+                                else "No deposits"
                             },
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -673,6 +635,11 @@ internal fun AnalyticsSavingsGoalsCard(
                         val target = goal.targetAmount.coerceAtLeast(0.0)
                         val saved = goal.currentAmount.coerceAtLeast(0.0)
                         val ratio = if (target > 0.0) (saved / target).toFloat().coerceIn(0f, 1f) else 0f
+                        val animatedRatio by animateFloatAsState(
+                            targetValue = ratio,
+                            animationSpec = FinsayMotion.ProgressSpec,
+                            label = "goal_progress_${goal.id}"
+                        )
                         val pct = (ratio * 100f).toInt().coerceIn(0, 100)
                         Column(
                             modifier = Modifier
@@ -705,7 +672,7 @@ internal fun AnalyticsSavingsGoalsCard(
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             LinearProgressIndicator(
-                                progress = { ratio },
+                                progress = { animatedRatio },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(5.dp)

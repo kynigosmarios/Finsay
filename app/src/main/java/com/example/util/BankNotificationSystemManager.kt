@@ -20,6 +20,7 @@ object BankNotificationSystemManager {
     private const val PREFS_NAME = "finsay_bank_catcher_prefs"
     private const val LEGACY_PREFS_NAME = "fintel_bank_catcher_prefs"
     private const val KEY_AUTO_CATCHER_ENABLED = "bank_auto_catcher_enabled"
+    private const val KEY_PRO_ENTITLED = "bank_catcher_pro_entitled"
     private const val TAG = "BankNotifSysMgr"
 
     @Volatile
@@ -37,7 +38,7 @@ object BankNotificationSystemManager {
             if (legacy.contains(KEY_AUTO_CATCHER_ENABLED)) {
                 prefs.edit().putBoolean(
                     KEY_AUTO_CATCHER_ENABLED,
-                    legacy.getBoolean(KEY_AUTO_CATCHER_ENABLED, true)
+                    legacy.getBoolean(KEY_AUTO_CATCHER_ENABLED, false)
                 ).apply()
             }
         }
@@ -45,11 +46,23 @@ object BankNotificationSystemManager {
     }
 
     fun isAutoCatcherEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_AUTO_CATCHER_ENABLED, true)
+        return getPrefs(context).getBoolean(KEY_AUTO_CATCHER_ENABLED, false)
     }
 
     fun setAutoCatcherEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_AUTO_CATCHER_ENABLED, enabled).apply()
+    }
+
+    fun isProEntitled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_PRO_ENTITLED, false)
+    }
+
+    fun setProEntitled(context: Context, isPro: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PRO_ENTITLED, isPro).apply()
+    }
+
+    fun isAutoCatcherActiveForPro(context: Context): Boolean {
+        return isProEntitled(context) && isAutoCatcherEnabled(context)
     }
 
     fun createNotificationChannel(context: Context) {
@@ -75,8 +88,8 @@ object BankNotificationSystemManager {
 
     fun showNotification(context: Context, tx: PendingBankTransaction) {
         try {
-            if (!isAutoCatcherEnabled(context)) {
-                Log.d(TAG, "Auto-catcher disabled; skipping system notification")
+            if (!isAutoCatcherActiveForPro(context)) {
+                Log.d(TAG, "Auto-catcher disabled or non-Pro; skipping system notification")
                 return
             }
 

@@ -80,15 +80,16 @@ service cloud.firestore {
         incoming().memberUids is list;
     }
 
-    function isSelfLeavingHousehold() {
+    function isSelfUpdatingOwnDefaultPayer() {
       return isHouseholdMemberData(existing()) &&
-        existing().ownerId != request.auth.uid &&
-        incoming().ownerId == existing().ownerId &&
-        incoming().name == existing().name &&
-        incoming().memberUids is list &&
-        !(request.auth.uid in incoming().memberUids) &&
-        incoming().memberUids.size() == existing().get('memberUids', []).size() - 1 &&
-        existing().get('memberUids', []).hasAll(incoming().memberUids);
+        incoming().diff(existing()).affectedKeys().hasOnly(['memberDefaultPayers', 'updatedAt']) &&
+        incoming().memberDefaultPayers is map &&
+        incoming().memberDefaultPayers.diff(existing().get('memberDefaultPayers', {})).affectedKeys().hasOnly([request.auth.uid]) &&
+        (
+          !(request.auth.uid in incoming().memberDefaultPayers) ||
+          (incoming().memberDefaultPayers[request.auth.uid] is string &&
+            incoming().memberDefaultPayers[request.auth.uid].size() <= 200)
+        );
     }
 
     function isValidExpenseOrIncomeWrite() {
@@ -131,7 +132,7 @@ service cloud.firestore {
       );
       allow update: if isAuthenticated() && (
         isValidHouseholdCreatorUpdate() ||
-        isSelfLeavingHousehold()
+        isSelfUpdatingOwnDefaultPayer()
       );
       allow delete: if isAuthenticated() && existing().ownerId == request.auth.uid;
 

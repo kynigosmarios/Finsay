@@ -3,6 +3,8 @@ package com.example.ui.components
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -128,11 +130,14 @@ fun BurgerMenuDrawer(
                     .align(Alignment.CenterEnd)
                     .animateEnterExit(
                         enter = slideInHorizontally(
-                            animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
                             initialOffsetX = { fullWidth -> fullWidth }
                         ),
                         exit = slideOutHorizontally(
-                            animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+                            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
                             targetOffsetX = { fullWidth -> fullWidth }
                         )
                     )

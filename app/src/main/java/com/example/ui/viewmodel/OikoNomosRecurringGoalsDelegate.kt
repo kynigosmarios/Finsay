@@ -68,6 +68,15 @@ internal class OikoNomosRecurringGoalsDelegate(
             vm.dismissSavingsGoalDialog()
             return
         }
+        if (id == 0L && !vm.isCurrentUserPro() && vm._allSavingsGoals.value.size >= 1) {
+            vm.dismissSavingsGoalDialog()
+            vm.showPremiumPaywall("savings_goal_limit")
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN") "Free edition supports up to 1 Savings Goal"
+                else "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
+            )
+            return
+        }
 
         val cleanTitle = title.trim()
         val user = vm._currentUser.value
@@ -576,13 +585,20 @@ internal class OikoNomosRecurringGoalsDelegate(
             )
         ) return
         dismissDueReminder(reminder)
-        val defaultMember = vm.allMembers.value.find { it.id == reminder.payerMemberId }
-            ?: vm.resolveDefaultPayerMember()
-        val resolvedPayerId = if (reminder.payerMemberId != 0L) reminder.payerMemberId else (defaultMember?.id ?: 0L)
-        val resolvedPayerName = reminder.payerMemberName.ifBlank { defaultMember?.name ?: "" }
-        val resolvedPayerIdsCsv = reminder.payerMemberIdsCsv.ifBlank {
-            if (resolvedPayerId != 0L) "$resolvedPayerId" else ""
+        val hasReminderPayer = reminder.payerMemberId != 0L || reminder.payerMemberIdsCsv.isNotBlank() || reminder.payerMemberName.isNotBlank()
+        val fallbackFields = com.example.util.DefaultPayerHelper.buildEqualPayerFields(
+            vm.resolveDefaultPayerMembers(),
+            reminder.amount,
+            fallbackLabel = ""
+        )
+        val resolvedPayerId = if (hasReminderPayer) reminder.payerMemberId else fallbackFields.primaryId
+        val resolvedPayerName = if (hasReminderPayer) reminder.payerMemberName else fallbackFields.displayName
+        val resolvedPayerIdsCsv = if (hasReminderPayer) {
+            reminder.payerMemberIdsCsv.ifBlank { if (resolvedPayerId != 0L) "$resolvedPayerId" else "" }
+        } else {
+            fallbackFields.idsCsv
         }
+        val resolvedPayerAmountsCsv = if (hasReminderPayer) reminder.payerAmountsCsv else fallbackFields.amountsCsv
 
         val prefilledExpense = Expense(
             id = 0L,
@@ -598,7 +614,7 @@ internal class OikoNomosRecurringGoalsDelegate(
             payerMemberId = resolvedPayerId,
             payerMemberName = resolvedPayerName,
             payerMemberIdsCsv = resolvedPayerIdsCsv,
-            payerAmountsCsv = reminder.payerAmountsCsv
+            payerAmountsCsv = resolvedPayerAmountsCsv
         )
         vm.openManualExpenseDialog(prefilledExpense)
     }
@@ -647,6 +663,15 @@ internal class OikoNomosRecurringGoalsDelegate(
             vm.dismissRecurringExpenseDialog()
             return
         }
+        if (id == 0L && !vm.isCurrentUserPro() && vm.allRecurringExpenses.value.size >= 2) {
+            vm.dismissRecurringExpenseDialog()
+            vm.showPremiumPaywall("recurring_expense_limit")
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN") "Free edition supports up to 2 Standing Orders"
+                else "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
+            )
+            return
+        }
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             vm.trackSyncStart()
             try {
@@ -684,9 +709,16 @@ internal class OikoNomosRecurringGoalsDelegate(
                 val resolvedPayerIdsCsv = if (!autoRegisterIfDue) payerMemberIdsCsv else (existing?.payerMemberIdsCsv ?: "")
                 val resolvedPayerAmountsCsv = if (!autoRegisterIfDue) payerAmountsCsv else (existing?.payerAmountsCsv ?: "")
 
-                val defaultPayer = vm.resolveDefaultPayerMember()
-                val effPayerId = if (payerMemberId > 0L) payerMemberId else (defaultPayer?.id ?: 0L)
-                val effPayerName = payerMemberName.ifBlank { defaultPayer?.name ?: "" }
+                val fallbackFields = com.example.util.DefaultPayerHelper.buildEqualPayerFields(
+                    vm.resolveDefaultPayerMembers(),
+                    amount,
+                    fallbackLabel = ""
+                )
+                val useDefaultPayers = payerMemberId <= 0L && resolvedPayerIdsCsv.isBlank() && payerMemberName.isBlank()
+                val effPayerId = if (useDefaultPayers) fallbackFields.primaryId else payerMemberId
+                val effPayerName = if (useDefaultPayers) fallbackFields.displayName else payerMemberName.ifBlank { fallbackFields.displayName }
+                val effPayerIdsCsv = if (useDefaultPayers) fallbackFields.idsCsv else resolvedPayerIdsCsv.ifBlank { if (effPayerId > 0L) "$effPayerId" else "" }
+                val effPayerAmountsCsv = if (useDefaultPayers) fallbackFields.amountsCsv else resolvedPayerAmountsCsv
 
                 var recurring = RecurringExpense(
                     id = targetId,
@@ -706,8 +738,8 @@ internal class OikoNomosRecurringGoalsDelegate(
                     lastGeneratedMonth = existing?.lastGeneratedMonth ?: "",
                     payerMemberId = effPayerId,
                     payerMemberName = effPayerName,
-                    payerMemberIdsCsv = resolvedPayerIdsCsv.ifBlank { if (effPayerId > 0L) "$effPayerId" else "" },
-                    payerAmountsCsv = resolvedPayerAmountsCsv,
+                    payerMemberIdsCsv = effPayerIdsCsv,
+                    payerAmountsCsv = effPayerAmountsCsv,
                     anchorMonth = clampedAnchor
                 )
 

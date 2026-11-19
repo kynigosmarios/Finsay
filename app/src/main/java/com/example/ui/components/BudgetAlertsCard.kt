@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,8 +71,9 @@ fun BudgetAlertsCard(
         val cal = Calendar.getInstance()
         val curYear = cal.get(Calendar.YEAR)
         val curMonth = cal.get(Calendar.MONTH)
+        val expCal = Calendar.getInstance()
         expenses.filter {
-            val expCal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+            expCal.timeInMillis = it.timestamp
             expCal.get(Calendar.YEAR) == curYear && expCal.get(Calendar.MONTH) == curMonth
         }
     }
@@ -99,7 +102,7 @@ fun BudgetAlertsCard(
     val warningCount = budgetStatuses.count { it.isWarning }
 
     Card(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             1.dp,
@@ -114,20 +117,23 @@ fun BudgetAlertsCard(
             .fillMaxWidth()
             .testTag("budget_alerts_card")
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(18.dp)) {
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                ) {
                     Surface(
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(11.dp),
                         color = when {
-                            exceededCount > 0 -> Color(0xFFEF4444).copy(alpha = 0.15f)
-                            warningCount > 0 -> Color(0xFFF59E0B).copy(alpha = 0.15f)
-                            else -> Emerald700.copy(alpha = 0.15f)
+                            exceededCount > 0 -> Color(0xFFEF4444).copy(alpha = 0.14f)
+                            warningCount > 0 -> Color(0xFFF59E0B).copy(alpha = 0.14f)
+                            else -> Emerald700.copy(alpha = 0.13f)
                         },
                         modifier = Modifier.size(36.dp)
                     ) {
@@ -144,15 +150,15 @@ fun BudgetAlertsCard(
                                     warningCount > 0 -> Color(0xFFF59E0B)
                                     else -> Emerald700
                                 },
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(19.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
                             text = Localization.monthlyBudgetLimits(lang),
-                            fontSize = 15.sp,
+                            fontSize = 15.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -162,7 +168,7 @@ fun BudgetAlertsCard(
                                 warningCount > 0 -> Localization.categoriesApproachingLimit(lang, warningCount)
                                 else -> Localization.allBudgetsHealthy(lang)
                             },
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = if (exceededCount > 0 || warningCount > 0) FontWeight.SemiBold else FontWeight.Normal,
                             color = when {
                                 exceededCount > 0 -> Color(0xFFEF4444)
@@ -192,7 +198,11 @@ fun BudgetAlertsCard(
 
             // Show top budget categories
             budgetStatuses.take(4).forEach { status ->
-                val progressClamped = status.percentage.coerceIn(0f, 1f)
+                val animatedProgress by animateFloatAsState(
+                    targetValue = status.percentage.coerceIn(0f, 1f),
+                    animationSpec = FinsayMotion.ProgressSpec,
+                    label = "budget_alert_progress_${status.category.id}"
+                )
                 val barColor = when {
                     status.isExact -> Color(0xFF2563EB)
                     status.isExceeded -> Color(0xFFEF4444)
@@ -233,7 +243,7 @@ fun BudgetAlertsCard(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                     LinearProgressIndicator(
-                        progress = { progressClamped },
+                        progress = { animatedProgress },
                         color = barColor,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier

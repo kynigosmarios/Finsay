@@ -1,10 +1,14 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,17 +23,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,9 +64,11 @@ import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.SharedHouseholdUser
 import com.example.data.model.UserProfile
+import androidx.compose.ui.draw.clip
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
 import com.example.ui.viewmodel.OikoNomosViewModel
+import com.example.util.DefaultPayerHelper
 import com.example.util.Localization
 
 private val EditorBlue = Color(0xFF0284C7)
@@ -104,6 +111,9 @@ fun HouseholdShareMask(
     allMembers: List<FamilyMember> = emptyList(),
     connectedUsers: List<ConnectedHouseholdUser> = emptyList(),
     onAssignDefaultPayer: (uid: String, memberId: Long?) -> Unit = { _, _ -> },
+    onAssignDefaultPayers: (householdId: String, uid: String, memberIds: List<Long>) -> Unit = { _, uid, ids ->
+        onAssignDefaultPayer(uid, ids.firstOrNull())
+    },
     onSearchUser: (email: String, householdId: String) -> Unit,
     onClearLookup: () -> Unit,
     onAddSharedUser: (householdId: String, targetUser: UserProfile, role: HouseholdRole) -> Unit,
@@ -385,43 +395,8 @@ fun HouseholdShareMask(
             is OikoNomosViewModel.VerifiedUserLookupState.Idle -> Unit
         }
 
-        // Creator default payer selector when members exist
-        val creatorUid = household.ownerId.ifBlank { currentUserId }
-        if (allMembers.isNotEmpty() && creatorUid.isNotBlank()) {
-            val creatorLinkedMember = allMembers.firstOrNull { it.linkedUserUid == creatorUid }
-            val creatorLabel = connectedUsers.firstOrNull { it.uid == creatorUid }
-                ?.let { it.email.ifBlank { it.displayName } }
-                ?: household.memberEmails[creatorUid]?.takeIf { it.isNotBlank() }
-                ?: household.memberNames[creatorUid]?.takeIf { it.isNotBlank() }
-                ?: Localization.householdRoleLabel(HouseholdRole.CREATOR, lang)
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Emerald700.copy(alpha = 0.06f),
-                border = BorderStroke(0.8.dp, Emerald700.copy(alpha = 0.25f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = creatorLabel,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    DefaultPayerDropdownRow(
-                        selectedMember = creatorLinkedMember,
-                        allMembers = allMembers,
-                        lang = lang,
-                        testTag = "default_payer_creator_$creatorUid",
-                        onSelectMember = { memberId -> onAssignDefaultPayer(creatorUid, memberId) }
-                    )
-                }
-            }
-        }
+        // Note: Creator's own default payer selector is rendered directly on the active household card
+        // for ALL roles (CREATOR, EDITOR, REGISTAR). Shared users' selectors remain below for the Creator.
 
         // Added users for this household
         if (addedUsers.isNotEmpty()) {
@@ -550,15 +525,19 @@ fun HouseholdShareMask(
                             }
 
                             if (allMembers.isNotEmpty()) {
-                                val linkedMember = allMembers.firstOrNull { it.linkedUserUid == sharedUser.uid }
+                                val linkedMembers = DefaultPayerHelper.resolveAssignedDefaultPayers(
+                                    uid = sharedUser.uid,
+                                    household = household,
+                                    members = allMembers
+                                )
                                 Box(modifier = Modifier.padding(end = 6.dp)) {
-                                    DefaultPayerDropdownRow(
-                                        selectedMember = linkedMember,
+                                    DefaultPayerMultiSelectRow(
+                                        selectedMembers = linkedMembers,
                                         allMembers = allMembers,
                                         lang = lang,
                                         testTag = "default_payer_selector_${sharedUser.uid}",
-                                        onSelectMember = { memberId ->
-                                            onAssignDefaultPayer(sharedUser.uid, memberId)
+                                        onSelectionChanged = { memberIds ->
+                                            onAssignDefaultPayers(household.id, sharedUser.uid, memberIds)
                                         }
                                     )
                                 }
@@ -571,30 +550,48 @@ fun HouseholdShareMask(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DefaultPayerDropdownRow(
-    selectedMember: FamilyMember?,
+fun DefaultPayerMultiSelectRow(
+    selectedMembers: List<FamilyMember>,
     allMembers: List<FamilyMember>,
     lang: Localization.Language,
     testTag: String,
-    onSelectMember: (Long?) -> Unit
+    onSelectionChanged: (List<Long>) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Box(modifier = Modifier.fillMaxWidth()) {
+    val selectedIds = remember(selectedMembers) { selectedMembers.map { it.id }.toSet() }
+    val summaryText = remember(selectedMembers, lang) {
+        if (selectedMembers.isNotEmpty()) {
+            selectedMembers.joinToString(", ") { it.name }
+        } else {
+            Localization.selectDefaultPayerLabel(lang)
+        }
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
         Surface(
             shape = RoundedCornerShape(10.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            border = BorderStroke(0.8.dp, Emerald700.copy(alpha = 0.25f)),
+            border = BorderStroke(
+                0.8.dp,
+                if (expanded || selectedMembers.isNotEmpty()) Emerald700.copy(alpha = 0.35f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+            ),
             modifier = Modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = 40.dp)
-                .clickable { expanded = true }
+                .defaultMinSize(minHeight = 44.dp)
+                .clickable { expanded = !expanded }
                 .testTag(testTag)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -607,51 +604,98 @@ private fun DefaultPayerDropdownRow(
                         imageVector = Icons.Default.CreditCard,
                         contentDescription = null,
                         tint = Emerald700,
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                     Text(
-                        text = "${Localization.defaultPayerShort(lang)}: ${selectedMember?.name ?: Localization.selectDefaultPayerLabel(lang)}",
-                        fontSize = 11.5.sp,
-                        fontWeight = if (selectedMember != null) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selectedMember != null) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        text = "${Localization.defaultPayerShort(lang)}: $summaryText",
+                        fontSize = 12.sp,
+                        fontWeight = if (selectedMembers.isNotEmpty()) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (selectedMembers.isNotEmpty()) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
                 Icon(
-                    imageVector = Icons.Default.ArrowDropDown,
-                    contentDescription = null,
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) Localization.close(lang) else Localization.selectDefaultPayerLabel(lang),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp)
                 )
             }
         }
 
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = FinsayMotion.ExpandEnter,
+            exit = FinsayMotion.ShrinkExit
         ) {
-            DropdownMenuItem(
-                text = { Text(Localization.noLinkedUserLabel(lang)) },
-                onClick = {
-                    expanded = false
-                    onSelectMember(null)
-                }
-            )
-            allMembers.forEach { member ->
-                DropdownMenuItem(
-                    text = {
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                FilterChip(
+                    selected = selectedIds.isEmpty(),
+                    onClick = { onSelectionChanged(emptyList()) },
+                    label = {
                         Text(
-                            text = member.name,
-                            fontWeight = if (member.id == selectedMember?.id) FontWeight.Bold else FontWeight.Normal,
-                            color = if (member.id == selectedMember?.id) Emerald700 else MaterialTheme.colorScheme.onSurface
+                            text = Localization.noLinkedUserLabel(lang),
+                            fontSize = 11.5.sp,
+                            maxLines = 1
                         )
                     },
-                    onClick = {
-                        expanded = false
-                        onSelectMember(member.id)
-                    }
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        selectedLabelColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.testTag("${testTag}_none")
                 )
+
+                allMembers.forEach { member ->
+                    val isSelected = selectedIds.contains(member.id)
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            val nextSet = selectedIds.toMutableSet().apply {
+                                if (isSelected) remove(member.id) else add(member.id)
+                            }
+                            val orderedIds = allMembers.filter { it.id in nextSet }.map { it.id }
+                            onSelectionChanged(orderedIds)
+                        },
+                        label = {
+                            Text(
+                                text = member.name,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1
+                            )
+                        },
+                        leadingIcon = {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Emerald700,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(member.avatarColorHex))
+                                )
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Emerald700.copy(alpha = 0.18f),
+                            selectedLabelColor = Emerald700
+                        ),
+                        modifier = Modifier.testTag("${testTag}_member_${member.id}")
+                    )
+                }
             }
         }
     }

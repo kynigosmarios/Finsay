@@ -52,7 +52,7 @@ internal class FirestoreTransactionsDelegate(
                     querySnapshot.documents.mapNotNull { doc ->
                         val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
                         if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                        obj
+                        obj?.takeIf { !it.isDeleted }
                     }
                 )
             }
@@ -93,7 +93,7 @@ internal class FirestoreTransactionsDelegate(
                     querySnapshot.documents.mapNotNull { doc ->
                         val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
                         if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                        obj
+                        obj?.takeIf { !it.isDeleted }
                     }
                 )
             }
@@ -137,6 +137,90 @@ internal class FirestoreTransactionsDelegate(
         }
     }
 
+    suspend fun archiveAllHouseholdTransactions(
+        householdId: String,
+        userId: String,
+        archiveBatchId: String
+    ): Int {
+        if (householdId.isBlank()) return 0
+        var archivedCount = 0
+        val archivedAt = Timestamp.now()
+
+        suspend fun archiveCollection(colRef: com.google.firebase.firestore.CollectionReference, matchHouseholdOnly: Boolean) {
+            val snap = colRef.get().await()
+            val toArchive = snap.documents.filter { doc ->
+                val alreadyDeleted = doc.getBoolean("isDeleted") == true
+                val matchesHousehold = !matchHouseholdOnly || doc.getString("householdId") == householdId
+                !alreadyDeleted && matchesHousehold
+            }
+            for (chunk in toArchive.chunked(400)) {
+                val batch = db.batch()
+                for (doc in chunk) {
+                    val updates = hashMapOf<String, Any>(
+                        "isDeleted" to true,
+                        "archivedAt" to archivedAt,
+                        "archivedByUid" to userId,
+                        "archiveBatchId" to archiveBatchId
+                    )
+                    if (doc.get("title") !is String) {
+                        updates["title"] = doc.getString("title") ?: ""
+                    }
+                    val rawAmt = (doc.get("amount") as? Number)?.toDouble()
+                    if (rawAmt == null || rawAmt < 0.0) {
+                        updates["amount"] = (rawAmt ?: 0.0).coerceAtLeast(0.0)
+                    }
+                    batch.update(doc.reference, updates)
+                    archivedCount++
+                }
+                batch.commit().await()
+            }
+        }
+
+        try {
+            val hDoc = db.collection("households").document(householdId)
+            archiveCollection(hDoc.collection("expenses"), matchHouseholdOnly = false)
+            archiveCollection(hDoc.collection("incomes"), matchHouseholdOnly = false)
+            if (userId.isNotBlank()) {
+                val uDoc = db.collection("users").document(userId)
+                archiveCollection(uDoc.collection("expenses"), matchHouseholdOnly = true)
+                archiveCollection(uDoc.collection("incomes"), matchHouseholdOnly = true)
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Error archiving household transactions: ${e.message}", e)
+            throw e
+        }
+        return archivedCount
+    }
+
+    suspend fun restoreArchivedHouseholdTransactions(
+        householdId: String,
+        archiveBatchId: String? = null
+    ): Int {
+        if (householdId.isBlank()) return 0
+        var restoredCount = 0
+        val hDoc = db.collection("households").document(householdId)
+
+        suspend fun restoreCollection(colRef: com.google.firebase.firestore.CollectionReference) {
+            val snap = colRef.whereEqualTo("isDeleted", true).get().await()
+            val toRestore = snap.documents.filter { doc ->
+                archiveBatchId.isNullOrBlank() || doc.getString("archiveBatchId") == archiveBatchId
+            }
+            for (chunk in toRestore.chunked(400)) {
+                val batch = db.batch()
+                for (doc in chunk) {
+                    batch.update(doc.reference, mapOf("isDeleted" to false))
+                    restoredCount++
+                }
+                batch.commit().await()
+            }
+        }
+
+        restoreCollection(hDoc.collection("expenses"))
+        restoreCollection(hDoc.collection("incomes"))
+        return restoredCount
+    }
+
     fun observeIncomes(householdId: String): Flow<List<FirebaseIncome>> {
         if (householdId.isBlank()) return flowOf(emptyList())
         return db.collection("households").document(householdId)
@@ -147,7 +231,7 @@ internal class FirestoreTransactionsDelegate(
                     querySnapshot.documents.mapNotNull { doc ->
                         val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
                         if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                        obj
+                        obj?.takeIf { !it.isDeleted }
                     }
                 )
             }
@@ -188,7 +272,7 @@ internal class FirestoreTransactionsDelegate(
                     querySnapshot.documents.mapNotNull { doc ->
                         val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
                         if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                        obj
+                        obj?.takeIf { !it.isDeleted }
                     }
                 )
             }
@@ -234,7 +318,7 @@ internal class FirestoreTransactionsDelegate(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }
             )
         } catch (_: Throwable) {
@@ -251,7 +335,7 @@ internal class FirestoreTransactionsDelegate(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }
             )
         } catch (_: Throwable) {
@@ -267,7 +351,7 @@ internal class FirestoreTransactionsDelegate(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }
             )
         } catch (t: Throwable) {
@@ -285,7 +369,7 @@ internal class FirestoreTransactionsDelegate(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }
             )
         } catch (t: Throwable) {
@@ -303,7 +387,7 @@ internal class FirestoreTransactionsDelegate(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }
             )
         } catch (t: Throwable) {
@@ -321,7 +405,7 @@ internal class FirestoreTransactionsDelegate(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }
             )
         } catch (t: Throwable) {

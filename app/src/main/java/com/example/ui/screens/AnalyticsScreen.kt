@@ -178,14 +178,14 @@ fun AnalyticsScreen(
     val periodExpenses = remember(expenses, filterScope, selectedPeriodKey, selectedYearKey) {
         when (filterScope) {
             "ALL" -> expenses
-            "YEAR" -> expenses.filter {
-                SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(it.timestamp)) == selectedYearKey
+            "YEAR" -> {
+                val yearFmt = SimpleDateFormat("yyyy", Locale.getDefault())
+                expenses.filter { yearFmt.format(Date(it.timestamp)) == selectedYearKey }
             }
             else -> {
                 val effKey = if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
-                expenses.filter {
-                    SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(it.timestamp)) == effKey
-                }
+                val monthFmt = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                expenses.filter { monthFmt.format(Date(it.timestamp)) == effKey }
             }
         }
     }
@@ -193,20 +193,20 @@ fun AnalyticsScreen(
     val periodIncomes = remember(incomes, filterScope, selectedPeriodKey, selectedYearKey) {
         when (filterScope) {
             "ALL" -> incomes
-            "YEAR" -> incomes.filter {
-                SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(it.timestamp)) == selectedYearKey
+            "YEAR" -> {
+                val yearFmt = SimpleDateFormat("yyyy", Locale.getDefault())
+                incomes.filter { yearFmt.format(Date(it.timestamp)) == selectedYearKey }
             }
             else -> {
                 val effKey = if (selectedPeriodKey == "CURRENT_MONTH") currentMonthKey else selectedPeriodKey
-                incomes.filter {
-                    SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(it.timestamp)) == effKey
-                }
+                val monthFmt = SimpleDateFormat("yyyy-MM", Locale.getDefault())
+                incomes.filter { monthFmt.format(Date(it.timestamp)) == effKey }
             }
         }
     }
 
-    val totalSpend = periodExpenses.sumOf { it.amount }
-    val totalIncome = periodIncomes.sumOf { it.amount }
+    val totalSpend = remember(periodExpenses) { periodExpenses.sumOf { it.amount } }
+    val totalIncome = remember(periodIncomes) { periodIncomes.sumOf { it.amount } }
     val netBalance = totalIncome - totalSpend
     val savingsRate = if (totalIncome > 0) ((netBalance / totalIncome) * 100).coerceIn(-100.0, 100.0) else 0.0
 
@@ -389,11 +389,17 @@ fun AnalyticsScreen(
         }
     }
 
-    val membersWithDeficit = members.mapNotNull { m ->
-        val paid = payerSpendMap[m] ?: 0.0
-        val income = memberIncomeMap[m] ?: 0.0
-        val deficit = paid - income
-        if (deficit > 0.01 && (paid > 0.0 || income > 0.0)) Triple(m, paid, income) else null
+    val membersWithDeficit = remember(members, payerSpendMap, memberIncomeMap) {
+        members.mapNotNull { m ->
+            val paid = payerSpendMap[m] ?: 0.0
+            val income = memberIncomeMap[m] ?: 0.0
+            val deficit = paid - income
+            if (deficit > 0.01 && (paid > 0.0 || income > 0.0)) Triple(m, paid, income) else null
+        }
+    }
+
+    val hasPeriodGoalDeposits = remember(periodExpenses) {
+        periodExpenses.any { SavingsGoalExpenseLinkHelper.isGoalDepositExpense(it) }
     }
 
     LazyColumn(
@@ -403,7 +409,7 @@ fun AnalyticsScreen(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 120.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
+        item(key = "period_selector", contentType = "period_selector") {
             AnalyticsPeriodSelectorCard(
                 filterScope = filterScope,
                 selectedPeriodKey = selectedPeriodKey,
@@ -423,7 +429,7 @@ fun AnalyticsScreen(
             )
         }
 
-        item {
+        item(key = "budget_alerts", contentType = "budget_alerts") {
             BudgetAlertsCard(
                 expenses = periodExpenses,
                 categories = categories,
@@ -441,7 +447,7 @@ fun AnalyticsScreen(
             )
         }
 
-        item {
+        item(key = "summary_kpi", contentType = "summary_kpi") {
             AnalyticsSummaryKpiCard(
                 activePeriodDisplay = activePeriodDisplay,
                 activeDrillDownPeriodKey = activeDrillDownPeriodKey,
@@ -459,7 +465,7 @@ fun AnalyticsScreen(
         }
 
         if (filterScope == "MONTH") {
-            item {
+            item(key = "month_forecast", contentType = "month_forecast") {
                 AnalyticsMonthForecastCard(
                     allExpenses = expenses,
                     allIncomes = incomes,
@@ -471,7 +477,7 @@ fun AnalyticsScreen(
             }
         }
 
-        item {
+        item(key = "family_income", contentType = "family_income") {
             AnalyticsFamilyIncomeCard(
                 periodIncomes = periodIncomes,
                 members = members,
@@ -489,7 +495,7 @@ fun AnalyticsScreen(
         }
 
         if (membersWithDeficit.isNotEmpty()) {
-            item {
+            item(key = "member_deficit_alert", contentType = "member_deficit_alert") {
                 AnalyticsMemberDeficitAlertCard(
                     membersWithDeficit = membersWithDeficit,
                     lang = lang
@@ -498,7 +504,7 @@ fun AnalyticsScreen(
         }
 
         if (hasFamilyWithKids) {
-            item {
+            item(key = "family_vs_kids", contentType = "family_vs_kids") {
                 AnalyticsFamilyVsKidsCard(
                     parentsTotalSpend = parentsTotalSpend,
                     kidsSpend = kidsSpend,
@@ -512,7 +518,7 @@ fun AnalyticsScreen(
                 )
             }
 
-            item {
+            item(key = "parents_for_kids", contentType = "parents_for_kids") {
                 AnalyticsParentsForKidsCard(
                     kidsMembers = kidsMembers,
                     individualSpendMap = individualSpendMap,
@@ -524,7 +530,7 @@ fun AnalyticsScreen(
             }
         }
 
-        item {
+        item(key = "members_breakdown", contentType = "members_breakdown") {
             AnalyticsMembersBreakdownCard(
                 displayedMembers = displayedMembers,
                 memberSpendMap = memberSpendMap,
@@ -544,7 +550,7 @@ fun AnalyticsScreen(
             )
         }
 
-        item {
+        item(key = "category_budgets", contentType = "category_budgets") {
             AnalyticsCategoryBudgetsCard(
                 categories = categories,
                 categorySpendMap = categorySpendMap,
@@ -556,9 +562,8 @@ fun AnalyticsScreen(
             )
         }
 
-        val hasPeriodGoalDeposits = periodExpenses.any { SavingsGoalExpenseLinkHelper.isGoalDepositExpense(it) }
         if (savingsGoals.isNotEmpty() || hasPeriodGoalDeposits) {
-            item {
+            item(key = "savings_goals", contentType = "savings_goals") {
                 AnalyticsSavingsGoalsCard(
                     savingsGoals = savingsGoals,
                     periodExpenses = periodExpenses,
@@ -572,7 +577,7 @@ fun AnalyticsScreen(
         }
 
         if (members.size >= 2) {
-            item {
+            item(key = "settle_up", contentType = "settle_up") {
                 AnalyticsSettleUpCard(
                     periodExpenses = periodExpenses,
                     members = members,
@@ -586,7 +591,7 @@ fun AnalyticsScreen(
             }
         }
 
-        item {
+        item(key = "data_export", contentType = "data_export") {
             AnalyticsDataExportCard(
                 expenses = expenses,
                 categories = categories,

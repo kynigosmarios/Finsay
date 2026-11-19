@@ -826,7 +826,8 @@ object GreekVoiceParser {
         prompt: String,
         categories: List<ExpenseCategory>,
         allMembers: List<FamilyMember>,
-        preferredDefaultPayer: FamilyMember? = null
+        preferredDefaultPayer: FamilyMember? = null,
+        preferredDefaultPayers: List<FamilyMember> = listOfNotNull(preferredDefaultPayer)
     ): ParsedVoiceExpense {
         val norm = normalizeGreek(prompt)
 
@@ -843,7 +844,7 @@ object GreekVoiceParser {
             cleanedNorm = cleanedNorm,
             allMembers = allMembers,
             amount = amount,
-            preferredDefaultPayer = preferredDefaultPayer
+            preferredDefaultPayers = preferredDefaultPayers
         )
         val (splitType, matchedMembers, memberDisplay) = beneficiaryInfo
 
@@ -961,18 +962,25 @@ object GreekVoiceParser {
         cleanedNorm: String,
         allMembers: List<FamilyMember>,
         amount: Double,
-        preferredDefaultPayer: FamilyMember? = null
+        preferredDefaultPayers: List<FamilyMember> = emptyList()
     ): Triple<ParsedPayerResult, Triple<String, List<FamilyMember>, String>, Set<String>> {
-        val defaultParent = preferredDefaultPayer?.takeIf { pref -> allMembers.any { it.id == pref.id } }
-            ?: allMembers.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+        val validPreferred = preferredDefaultPayers
+            .filter { pref -> allMembers.any { it.id == pref.id } }
+            .distinctBy { it.id }
+        val fallbackSingle = allMembers.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
             ?: allMembers.firstOrNull()
-        val defaultPayerId = defaultParent?.id ?: 0L
-        val defaultPayerName = defaultParent?.name ?: ""
+        val defaultPayersList = if (validPreferred.isNotEmpty()) validPreferred else listOfNotNull(fallbackSingle)
+        val defaultPayerId = defaultPayersList.firstOrNull()?.id ?: 0L
+        val defaultPayerName = if (defaultPayersList.size >= 2) {
+            defaultPayersList.joinToString(" & ") { it.name }
+        } else {
+            defaultPayersList.firstOrNull()?.name ?: ""
+        }
 
         val consumedWords = mutableSetOf<String>()
 
         fun buildPayerResult(payers: List<FamilyMember>, isExplicit: Boolean): ParsedPayerResult {
-            val list = if (payers.isNotEmpty()) payers else listOfNotNull(defaultParent)
+            val list = if (payers.isNotEmpty()) payers else defaultPayersList
             val primary = list.firstOrNull()
             val primaryId = primary?.id ?: defaultPayerId
             val displayName = if (list.size >= 2) {
@@ -1059,7 +1067,7 @@ object GreekVoiceParser {
             }
 
             val hasExplicit = matchedPayers.isNotEmpty()
-            val finalPayers = if (hasExplicit) matchedPayers else listOfNotNull(defaultParent)
+            val finalPayers = if (hasExplicit) matchedPayers else defaultPayersList
             val payerResult = buildPayerResult(finalPayers, hasExplicit)
             val finalBeneficiaries = beneficiaryResult ?: Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
 

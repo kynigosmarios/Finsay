@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.FlashOn
@@ -53,27 +55,27 @@ fun QuickActionChooserDialog(
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.96f)
-                .padding(10.dp)
-                .testTag("quick_action_chooser_dialog"),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
-            Column(
+        SmoothDialogContent {
+            Card(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
+                    .fillMaxWidth(0.96f)
+                    .padding(10.dp)
+                    .testTag("quick_action_chooser_dialog"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp)
                 ) {
-                    Column {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = "Finsay",
                             fontFamily = ModernFontFamily,
@@ -82,115 +84,105 @@ fun QuickActionChooserDialog(
                             letterSpacing = (-0.4).sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Choose entry method" else "Επιλέξτε τρόπο καταγραφής",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
 
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clickable { onDismiss() }
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = Localization.close(lang),
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clickable { onDismiss() }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = Localization.close(lang),
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Voice Command
+                    QuickActionItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Voice Command" else "Φωνητική εντολή",
+                        icon = Icons.Default.Mic,
+                        iconBgColor = Emerald700,
+                        iconTint = Color.White,
+                        borderColor = Emerald700.copy(alpha = 0.45f),
+                        testTag = "quick_action_voice_option",
+                        onClick = {
+                            onDismiss()
+                            onVoiceClick()
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Scan Receipt
+                    QuickActionItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Scan Receipt" else "Σάρωση Απόδειξης",
+                        icon = Icons.Default.CameraAlt,
+                        iconBgColor = Color(0xFFD97706),
+                        iconTint = Color.White,
+                        borderColor = Color(0xFFD97706).copy(alpha = 0.45f),
+                        testTag = "quick_action_scan_receipt_option",
+                        onClick = {
+                            onDismiss()
+                            onScanReceiptClick()
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Add Expense
+                    QuickActionItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Add Expense" else "Καταχώρηση Εξόδου",
+                        icon = Icons.Default.FlashOn,
+                        iconBgColor = Color(0xFF0284C7),
+                        iconTint = Color.White,
+                        borderColor = Color(0xFF0284C7).copy(alpha = 0.45f),
+                        testTag = "quick_action_manual_option",
+                        onClick = {
+                            onDismiss()
+                            onManualClick()
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Add Income
+                    QuickActionItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Add Income" else "Καταχώρηση Εσόδου",
+                        icon = Icons.Default.TrendingUp,
+                        iconBgColor = Color(0xFF059669),
+                        iconTint = Color.White,
+                        borderColor = Color(0xFF059669).copy(alpha = 0.45f),
+                        testTag = "quick_action_income_option",
+                        onClick = {
+                            onDismiss()
+                            onIncomeClick()
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Open App
+                    QuickActionItem(
+                        title = if (lang == Localization.Language.ENGLISH) "Open App" else "Άνοιγμα εφαρμογής",
+                        icon = Icons.Default.Dashboard,
+                        iconBgColor = MaterialTheme.colorScheme.surfaceVariant,
+                        iconTint = MaterialTheme.colorScheme.onSurface,
+                        borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                        testTag = "quick_action_open_app_option",
+                        onClick = {
+                            onDismiss()
+                            onOpenAppClick()
+                        }
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Option 1: 🎙️ 1. Φωνητική εντολή
-                QuickActionItem(
-                    title = if (lang == Localization.Language.ENGLISH) "1. Voice Command" else "1. Φωνητική εντολή",
-                    subtitle = if (lang == Localization.Language.ENGLISH) "Speak directly (e.g. \"€15 supermarket\")" else "Μιλήστε άμεσα (π.χ. «15€ σούπερ μάρκετ»)",
-                    icon = Icons.Default.Mic,
-                    iconBgColor = Emerald700,
-                    iconTint = Color.White,
-                    borderColor = Emerald700.copy(alpha = 0.45f),
-                    testTag = "quick_action_voice_option",
-                    onClick = {
-                        onDismiss()
-                        onVoiceClick()
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Option 2: 📸 2. Σάρωση Απόδειξης (OCR & QR)
-                QuickActionItem(
-                    title = if (lang == Localization.Language.ENGLISH) "2. Scan Receipt (OCR)" else "2. Σάρωση Απόδειξης (OCR)",
-                    subtitle = if (lang == Localization.Language.ENGLISH) "Photo or gallery receipt reader (Pro)" else "Φωτογραφία απόδειξης για αυτόματο ποσό & μαγαζί",
-                    icon = Icons.Default.FlashOn,
-                    iconBgColor = Color(0xFFD97706),
-                    iconTint = Color.White,
-                    borderColor = Color(0xFFD97706).copy(alpha = 0.45f),
-                    testTag = "quick_action_scan_receipt_option",
-                    onClick = {
-                        onDismiss()
-                        onScanReceiptClick()
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Option 3: ⚡ 3. Γρήγορη καταχώρηση εξόδου
-                QuickActionItem(
-                    title = if (lang == Localization.Language.ENGLISH) "3. Add Expense" else "3. Καταχώρηση Εξόδου",
-                    subtitle = if (lang == Localization.Language.ENGLISH) "Direct manual expense logging" else "Άμεση καταχώρηση ποσού, κατηγορίας & μελών",
-                    icon = Icons.Default.FlashOn,
-                    iconBgColor = Color(0xFF0284C7),
-                    iconTint = Color.White,
-                    borderColor = Color(0xFF0284C7).copy(alpha = 0.45f),
-                    testTag = "quick_action_manual_option",
-                    onClick = {
-                        onDismiss()
-                        onManualClick()
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Option 3: 💰 3. Καταχώρηση Εσόδου
-                QuickActionItem(
-                    title = if (lang == Localization.Language.ENGLISH) "3. Add Income" else "3. Καταχώρηση Εσόδου",
-                    subtitle = if (lang == Localization.Language.ENGLISH) "Member income (salary, rent, bonus)" else "Συνεισφορά μέλους (μισθός, ενοίκιο, bonus)",
-                    icon = Icons.Default.TrendingUp,
-                    iconBgColor = Color(0xFF059669),
-                    iconTint = Color.White,
-                    borderColor = Color(0xFF059669).copy(alpha = 0.45f),
-                    testTag = "quick_action_income_option",
-                    onClick = {
-                        onDismiss()
-                        onIncomeClick()
-                    }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Option 4: 🏠 4. Άνοιγμα εφαρμογής
-                QuickActionItem(
-                    title = if (lang == Localization.Language.ENGLISH) "4. Open App" else "4. Άνοιγμα εφαρμογής",
-                    subtitle = if (lang == Localization.Language.ENGLISH) "View expenses, analytics & settings" else "Προβολή εξόδων, εσόδων, στατιστικών & ρυθμίσεων",
-                    icon = Icons.Default.Dashboard,
-                    iconBgColor = MaterialTheme.colorScheme.surfaceVariant,
-                    iconTint = MaterialTheme.colorScheme.onSurface,
-                    borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    testTag = "quick_action_open_app_option",
-                    onClick = {
-                        onDismiss()
-                        onOpenAppClick()
-                    }
-                )
             }
         }
     }
@@ -199,7 +191,6 @@ fun QuickActionChooserDialog(
 @Composable
 private fun QuickActionItem(
     title: String,
-    subtitle: String,
     icon: ImageVector,
     iconBgColor: Color,
     iconTint: Color,
@@ -223,41 +214,36 @@ private fun QuickActionItem(
             Surface(
                 shape = CircleShape,
                 color = iconBgColor,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(38.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = title,
-                    fontSize = 14.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Text(
+                text = title,
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }

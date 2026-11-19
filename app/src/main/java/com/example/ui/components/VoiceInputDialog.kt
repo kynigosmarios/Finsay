@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -103,15 +104,16 @@ fun VoiceInputDialog(
         if (isListening) onStopListening()
         onDismiss()
     }) {
-        Card(
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .testTag("voice_input_dialog")
-        ) {
+        SmoothDialogContent {
+            Card(
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .testTag("voice_input_dialog")
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -166,7 +168,55 @@ fun VoiceInputDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                val monthlyFreeLimit = 15
+                val remainingVoiceEntries = (monthlyFreeLimit - monthlyUsage).coerceAtLeast(0)
+                if (!isPro && remainingVoiceEntries in 1..5) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    val reminderColor = if (remainingVoiceEntries <= 2) Color(0xFFDC2626) else Color(0xFFD97706)
+                    val reminderText = if (lang == Localization.Language.ENGLISH) {
+                        if (remainingVoiceEntries == 1) {
+                            "1 of $monthlyFreeLimit free voice entries left this month"
+                        } else {
+                            "$remainingVoiceEntries of $monthlyFreeLimit free voice entries left this month"
+                        }
+                    } else {
+                        if (remainingVoiceEntries == 1) {
+                            "Απομένει 1 από $monthlyFreeLimit δωρεάν φωνητικές καταχωρήσεις"
+                        } else {
+                            "Απομένουν $remainingVoiceEntries από $monthlyFreeLimit δωρεάν φωνητικές καταχωρήσεις"
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = reminderColor.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, reminderColor.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("voice_limit_reminder_banner")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WarningAmber,
+                                contentDescription = null,
+                                tint = reminderColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = reminderText,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = reminderColor,
+                                lineHeight = 15.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Pulsing Mic Animation
                 Box(
@@ -272,6 +322,7 @@ fun VoiceInputDialog(
                     )
                 }
             }
+        }
         }
     }
 }

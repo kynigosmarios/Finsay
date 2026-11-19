@@ -213,10 +213,157 @@ test("Registar can CRUD expenses and incomes and read members/categories, but CA
   );
   await assertFails(hRef.delete());
 
-  // Can leave household themselves
-  await assertSucceeds(
+  // Cannot remove self (leave household) — ONLY creator can remove users
+  await assertFails(
     hRef.update({
       memberUids: [CREATOR_UID, EDITOR_UID],
+    })
+  );
+  // Cannot downgrade/change own role to EDITOR
+  await assertFails(
+    hRef.update({
+      memberRoles: {
+        [CREATOR_UID]: "CREATOR",
+        [EDITOR_UID]: "EDITOR",
+        [REGISTAR_UID]: "EDITOR",
+      },
+    })
+  );
+});
+
+test("Editor CANNOT change own role, change others' roles, remove self, or remove others; ONLY creator can", async () => {
+  await seedSharedHousehold();
+  const editorDb = testEnv.authenticatedContext(EDITOR_UID).firestore();
+  const creatorDb = testEnv.authenticatedContext(CREATOR_UID).firestore();
+  const editorH = editorDb.collection("households").doc(HOUSEHOLD_ID);
+  const creatorH = creatorDb.collection("households").doc(HOUSEHOLD_ID);
+
+  // Editor cannot change own role to REGISTAR or CREATOR
+  await assertFails(
+    editorH.update({
+      memberRoles: {
+        [CREATOR_UID]: "CREATOR",
+        [EDITOR_UID]: "REGISTAR",
+        [REGISTAR_UID]: "REGISTAR",
+      },
+    })
+  );
+  await assertFails(
+    editorH.update({
+      memberRoles: {
+        [CREATOR_UID]: "CREATOR",
+        [EDITOR_UID]: "CREATOR",
+        [REGISTAR_UID]: "REGISTAR",
+      },
+    })
+  );
+
+  // Editor cannot remove self or another user from memberUids
+  await assertFails(
+    editorH.update({
+      memberUids: [CREATOR_UID, REGISTAR_UID],
+    })
+  );
+  await assertFails(
+    editorH.update({
+      memberUids: [CREATOR_UID, EDITOR_UID],
+    })
+  );
+
+  // Creator CAN change roles and remove users
+  await assertSucceeds(
+    creatorH.update({
+      memberRoles: {
+        [CREATOR_UID]: "CREATOR",
+        [EDITOR_UID]: "REGISTAR",
+        [REGISTAR_UID]: "EDITOR",
+      },
+    })
+  );
+  await assertSucceeds(
+    creatorH.update({
+      memberUids: [CREATOR_UID, EDITOR_UID],
+      memberRoles: {
+        [CREATOR_UID]: "CREATOR",
+        [EDITOR_UID]: "REGISTAR",
+      },
+    })
+  );
+});
+
+test("CREATOR, EDITOR, and REGISTAR can each set multiple default payers for themselves, but non-owners cannot modify others or roles", async () => {
+  await seedSharedHousehold();
+  const creatorH = testEnv.authenticatedContext(CREATOR_UID).firestore().collection("households").doc(HOUSEHOLD_ID);
+  const editorH = testEnv.authenticatedContext(EDITOR_UID).firestore().collection("households").doc(HOUSEHOLD_ID);
+  const registarH = testEnv.authenticatedContext(REGISTAR_UID).firestore().collection("households").doc(HOUSEHOLD_ID);
+
+  // Creator sets 2 default payers for self
+  await assertSucceeds(
+    creatorH.update({
+      [`memberDefaultPayers.${CREATOR_UID}`]: "10,20",
+      updatedAt: new Date(),
+    })
+  );
+
+  // Editor sets 2+ default payers for self
+  await assertSucceeds(
+    editorH.update({
+      [`memberDefaultPayers.${EDITOR_UID}`]: "10,20,30",
+      updatedAt: new Date(),
+    })
+  );
+
+  // Registar sets 2 default payers for self, and can clear to ""
+  await assertSucceeds(
+    registarH.update({
+      [`memberDefaultPayers.${REGISTAR_UID}`]: "20,30",
+      updatedAt: new Date(),
+    })
+  );
+  await assertSucceeds(
+    registarH.update({
+      [`memberDefaultPayers.${REGISTAR_UID}`]: "",
+      updatedAt: new Date(),
+    })
+  );
+
+  // Non-owners CANNOT modify another user's default payers
+  await assertFails(
+    editorH.update({
+      [`memberDefaultPayers.${CREATOR_UID}`]: "30",
+      updatedAt: new Date(),
+    })
+  );
+  await assertFails(
+    registarH.update({
+      [`memberDefaultPayers.${EDITOR_UID}`]: "10",
+      updatedAt: new Date(),
+    })
+  );
+
+  // Non-owners CANNOT piggyback role or memberUids changes onto a default payer update
+  await assertFails(
+    registarH.update({
+      [`memberDefaultPayers.${REGISTAR_UID}`]: "10,20",
+      memberUids: [CREATOR_UID, EDITOR_UID],
+    })
+  );
+  await assertFails(
+    editorH.update({
+      [`memberDefaultPayers.${EDITOR_UID}`]: "10,20",
+      memberRoles: {
+        [CREATOR_UID]: "CREATOR",
+        [EDITOR_UID]: "CREATOR",
+        [REGISTAR_UID]: "REGISTAR",
+      },
+    })
+  );
+
+  // Creator CAN still assign default payers for shared users
+  await assertSucceeds(
+    creatorH.update({
+      [`memberDefaultPayers.${REGISTAR_UID}`]: "10,30",
+      updatedAt: new Date(),
     })
   );
 });

@@ -71,6 +71,7 @@ import com.example.data.model.UserProfile
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
 import com.example.ui.viewmodel.OikoNomosViewModel
+import com.example.util.DefaultPayerHelper
 import com.example.util.Localization
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -87,12 +88,15 @@ fun ExodologioDetailsDialog(
     allMembers: List<FamilyMember> = emptyList(),
     connectedUsers: List<ConnectedHouseholdUser> = emptyList(),
     onAssignDefaultPayer: (uid: String, memberId: Long?) -> Unit = { _, _ -> },
+    onAssignDefaultPayers: (householdId: String, uid: String, memberIds: List<Long>) -> Unit = { _, uid, ids ->
+        onAssignDefaultPayer(uid, ids.firstOrNull())
+    },
     onSearchUser: (email: String, householdId: String) -> Unit = { _, _ -> },
     onClearLookup: () -> Unit = {},
     onAddSharedUser: (householdId: String, targetUser: UserProfile, role: HouseholdRole) -> Unit = { _, _, _ -> },
     onChangeSharedUserRole: (householdId: String, targetUid: String, targetEmail: String, newRole: HouseholdRole) -> Unit = { _, _, _, _ -> },
     onRemoveSharedUser: (householdId: String, targetUid: String, targetEmail: String) -> Unit = { _, _, _ -> },
-    onLeaveHousehold: ((Household) -> Unit)? = null,
+    @Suppress("UNUSED_PARAMETER") onLeaveHousehold: ((Household) -> Unit)? = null,
     appLanguage: String = "EL",
     currentUserId: String = "",
     onRenameHousehold: (String) -> Unit,
@@ -320,38 +324,6 @@ fun ExodologioDetailsDialog(
                                                     }
                                                 }
                                             }
-                                        } else if (onLeaveHousehold != null && householdsList.size > 1) {
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = Color(0xFFEF4444).copy(alpha = 0.10f),
-                                                modifier = Modifier
-                                                    .clickable {
-                                                        onLeaveHousehold(household)
-                                                        onDismiss()
-                                                    }
-                                                    .testTag("leave_household_details_${household.id}")
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Logout,
-                                                        contentDescription = Localization.leaveHouseholdAction(lang),
-                                                        tint = Color(0xFFEF4444),
-                                                        modifier = Modifier.size(14.dp)
-                                                    )
-                                                    Text(
-                                                        text = Localization.leaveHouseholdAction(lang),
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = Color(0xFFEF4444),
-                                                        maxLines = 1,
-                                                        softWrap = false
-                                                    )
-                                                }
-                                            }
                                         }
                                     }
 
@@ -433,7 +405,29 @@ fun ExodologioDetailsDialog(
                                         }
                                     }
 
-                                    AnimatedVisibility(visible = isShareExpanded) {
+                                    // Current user's own multi-select default payer picker (available to CREATOR, EDITOR & REGISTAR)
+                                    if (isSelected && allMembers.isNotEmpty() && currentUserId.isNotBlank()) {
+                                        val myDefaultPayers = DefaultPayerHelper.resolveAssignedDefaultPayers(
+                                            uid = currentUserId,
+                                            household = household,
+                                            members = allMembers
+                                        )
+                                        DefaultPayerMultiSelectRow(
+                                            selectedMembers = myDefaultPayers,
+                                            allMembers = allMembers,
+                                            lang = lang,
+                                            testTag = "default_payer_self_details_${household.id}",
+                                            onSelectionChanged = { memberIds ->
+                                                onAssignDefaultPayers(household.id, currentUserId, memberIds)
+                                            }
+                                        )
+                                    }
+
+                                    AnimatedVisibility(
+                                        visible = isShareExpanded,
+                                        enter = FinsayMotion.ExpandEnter,
+                                        exit = FinsayMotion.ShrinkExit
+                                    ) {
                                         HouseholdShareMask(
                                             household = household,
                                             appLanguage = appLanguage,
@@ -443,6 +437,7 @@ fun ExodologioDetailsDialog(
                                             allMembers = if (household.id == currentHousehold?.id) allMembers else emptyList(),
                                             connectedUsers = connectedUsers,
                                             onAssignDefaultPayer = onAssignDefaultPayer,
+                                            onAssignDefaultPayers = onAssignDefaultPayers,
                                             onSearchUser = onSearchUser,
                                             onClearLookup = onClearLookup,
                                             onAddSharedUser = onAddSharedUser,
@@ -544,20 +539,14 @@ fun ExodologioDetailsDialog(
                 )
             },
             text = {
-                Column {
-                    Text(
-                        text = if (isEn) "Enter new name for this household:" else "Εισάγετε νέο όνομα για το εξοδολόγιο:",
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = renameInput,
-                        onValueChange = { renameInput = it },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                OutlinedTextField(
+                    value = renameInput,
+                    onValueChange = { renameInput = it },
+                    placeholder = { Text(if (isEn) "Household name" else "Όνομα εξοδολογίου") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
             confirmButton = {
                 Button(
@@ -592,24 +581,14 @@ fun ExodologioDetailsDialog(
             shape = RoundedCornerShape(20.dp),
             title = { Text(if (isEn) "New Household" else "Νέο Εξοδολόγιο", fontWeight = FontWeight.Bold) },
             text = {
-                Column {
-                    Text(
-                        if (isEn)
-                            "Enter name for the new household (e.g. Home, Work, Vacation, Personal):"
-                        else
-                            "Δώστε όνομα για το νέο εξοδολόγιο (π.χ. Σπίτι, Εργασία, Εξοχικό, Ταξίδι):",
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = newHouseholdName,
-                        onValueChange = { newHouseholdName = it },
-                        placeholder = { Text(if (isEn) "e.g. Personal Expenses" else "π.χ. Προσωπικά Έξοδα") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
+                OutlinedTextField(
+                    value = newHouseholdName,
+                    onValueChange = { newHouseholdName = it },
+                    placeholder = { Text(if (isEn) "e.g. Home, Work, Trip" else "π.χ. Σπίτι, Εργασία, Ταξίδι") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
             },
             confirmButton = {
                 Button(

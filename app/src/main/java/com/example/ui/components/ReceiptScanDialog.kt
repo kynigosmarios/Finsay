@@ -256,6 +256,7 @@ fun ReceiptScanDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        SmoothDialogContent {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -295,33 +296,26 @@ fun ReceiptScanDialog(
                             }
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (isGreek) "Σάρωση Απόδειξης" else "Receipt Scanner",
-                                    fontSize = 17.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Amber700.copy(alpha = 0.15f)
-                                ) {
-                                    Text(
-                                        text = "PRO",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Amber700,
-                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isGreek) "OCR & QR αναγνώριση αποδείξεων" else "OCR & QR receipt reader",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = if (isGreek) "Σάρωση Απόδειξης" else "Receipt Scanner",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Amber700.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "PRO",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Amber700,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
 
@@ -345,8 +339,8 @@ fun ReceiptScanDialog(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (isGreek) "Φωτογραφίστε την απόδειξη ή επιλέξτε την από τη συλλογή σας για αυτόματη καταχώρηση ποσού & καταστήματος."
-                                else "Take a photo of your receipt or pick an image to auto-detect amount and merchant.",
+                                text = if (isGreek) "Φωτογραφίστε ή επιλέξτε απόδειξη από τη συλλογή."
+                                else "Take a photo or choose a receipt from gallery.",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -592,6 +586,7 @@ fun ReceiptScanDialog(
                     }
                 }
             }
+        }
         }
     }
 }

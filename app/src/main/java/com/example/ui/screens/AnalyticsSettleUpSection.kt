@@ -91,53 +91,26 @@ internal fun AnalyticsSettleUpCard(
                 .fillMaxWidth()
                 .padding(18.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.SwapHoriz,
+                iconTint = MaterialTheme.colorScheme.primary,
+                iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                title = if (isGreek) "Εκκαθάριση Εξόδων" else "Expense Settle-Up",
+                badge = {
                     Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(38.dp)
+                        shape = RoundedCornerShape(6.dp),
+                        color = Emerald700.copy(alpha = 0.12f)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.SwapHoriz,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = if (isGreek) "Εκκαθάριση Εξόδων" else "Expense Settle-Up",
-                            fontSize = 15.sp,
+                            text = if (settleUpResult.isBalanced) (if (isGreek) "ΙΣΟΣΚΕΛΙΣΜΕΝΟ" else "BALANCED") else "${settleUpResult.transfers.size} ${if (isGreek) "μεταφορές" else "transfers"}",
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = if (settleUpResult.isBalanced) Emerald700 else Amber700,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = Emerald700.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                text = if (settleUpResult.isBalanced) (if (isGreek) "ΙΣΟΣΚΕΛΙΣΜΕΝΟ" else "BALANCED") else "${settleUpResult.transfers.size} ${if (isGreek) "μεταφορές" else "transfers"}",
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (settleUpResult.isBalanced) Emerald700 else Amber700,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
                     }
                 }
-            }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
             if (settleUpResult.transfers.isEmpty()) {
@@ -306,7 +279,7 @@ internal fun AnalyticsSettleUpCard(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${if (isGreek) "Πλήρωσε:" else "Paid:"} ${String.format(Locale.GERMANY, "%.0f€", s.totalPaid)} | ${if (isGreek) "Μερίδιο:" else "Share:"} ${String.format(Locale.GERMANY, "%.0f€", s.totalShare)}",
+                            text = "${if (isGreek) "Πλ." else "Paid"} ${String.format(Locale.GERMANY, "%.0f€", s.totalPaid)} • ${if (isGreek) "Μερ." else "Share"} ${String.format(Locale.GERMANY, "%.0f€", s.totalShare)}",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -347,7 +320,7 @@ internal fun AnalyticsSettleUpCard(
                 Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isGreek) "Αντιγραφή Εκκαθάρισης για Κοινοποίηση" else "Copy Settlement Summary",
+                    text = if (isGreek) "Αντιγραφή" else "Copy",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )

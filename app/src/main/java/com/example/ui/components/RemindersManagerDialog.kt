@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,8 +90,11 @@ fun RemindersManagerDialog(
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
     defaultPayerMember: FamilyMember? = null,
+    defaultPayerMembers: List<FamilyMember> = listOfNotNull(defaultPayerMember),
     onSuggestCategory: ((String, String) -> ExpenseCategory?)? = null,
     onLearnCategory: ((String, Long, String, String) -> Unit)? = null,
+    isPro: Boolean = false,
+    onShowPremiumPaywall: (String) -> Unit = {},
     appLanguage: String = "EL",
     onDismiss: () -> Unit,
     onSaveReminder: (
@@ -170,19 +176,13 @@ fun RemindersManagerDialog(
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (isGreek) "Υπενθυμίσεις" else "Bill Reminders",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (isGreek) "Πάγιοι λογαριασμοί & ειδοποιήσεις" else "Scheduled expenses & push alerts",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = if (isGreek) "Υπενθυμίσεις" else "Bill Reminders",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -191,8 +191,12 @@ fun RemindersManagerDialog(
         // Action Bar: "+ Νέα Υπενθύμιση"
         Button(
             onClick = {
-                reminderToEdit = null
-                showEditor = true
+                if (!isPro && reminders.size >= 2) {
+                    onShowPremiumPaywall("recurring_expense_limit")
+                } else {
+                    reminderToEdit = null
+                    showEditor = true
+                }
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -250,20 +254,7 @@ fun RemindersManagerDialog(
                             fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (isGreek)
-                                "Προσθέστε πάγιους λογαριασμούς (ενοίκιο, ρεύμα, συνδρομές) για να σας εμφανίζεται κάρτα υπενθύμισης και να τα καταγράφετε με 1 πάτημα."
-                            else
-                                "Add recurring bills (rent, utilities, subscriptions) to get in-app reminder alerts and log them in 1 tap.",
-                            fontSize = 12.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            lineHeight = 17.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Quick suggestion chips
                         Text(
@@ -289,6 +280,10 @@ fun RemindersManagerDialog(
                                 FilterChip(
                                     selected = false,
                                     onClick = {
+                                        if (!isPro && reminders.size >= 2) {
+                                            onShowPremiumPaywall("recurring_expense_limit")
+                                            return@FilterChip
+                                        }
                                         val cleanName = name.substringAfter(" ")
                                         val matchedCat = categories.find { cat ->
                                             val cn = cat.name.lowercase()
@@ -327,15 +322,18 @@ fun RemindersManagerDialog(
                         }
                     }
                 } else {
-                    Column(
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .weight(1f),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        reminders.forEach { reminder ->
+                        items(
+                            items = reminders,
+                            key = { it.id },
+                            contentType = { "reminder_card" }
+                        ) { reminder ->
                             ReminderItemCard(
                                 reminder = reminder,
                                 isGreek = isGreek,
@@ -345,10 +343,10 @@ fun RemindersManagerDialog(
                                     showEditor = true
                                 },
                                 onDelete = { onDeleteReminder(reminder) },
-                                onLogNow = { onLogExpenseNow(reminder) }
+                                onLogNow = { onLogExpenseNow(reminder) },
+                                modifier = Modifier.animateItem()
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
                     }
                 }
     }
@@ -381,6 +379,9 @@ fun RemindersManagerDialog(
             categories = categories,
             members = members,
             defaultPayerMember = defaultPayerMember,
+            defaultPayerMembers = defaultPayerMembers,
+            isPro = isPro,
+            onShowPremiumPaywall = onShowPremiumPaywall,
             onSuggestCategory = onSuggestCategory,
             onLearnCategory = onLearnCategory,
             appLanguage = appLanguage,
@@ -430,7 +431,8 @@ private fun ReminderItemCard(
     onToggleActive: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onLogNow: () -> Unit
+    onLogNow: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val formattedTime = String.format(Locale.US, "%02d:%02d", reminder.reminderHour, reminder.reminderMinute)
     val scheduleText = RecurringScheduleHelper.scheduleSummary(
@@ -451,7 +453,7 @@ private fun ReminderItemCard(
             if (reminder.isActive) Emerald700.copy(alpha = 0.35f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier

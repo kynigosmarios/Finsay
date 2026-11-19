@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -93,14 +94,6 @@ internal fun ManualExpenseDateCard(
     formattedDate: String,
     onClick: () -> Unit
 ) {
-    Text(
-        text = Localization.dateLabel(lang),
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurface
-    )
-    Spacer(modifier = Modifier.height(6.dp))
-
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
@@ -115,7 +108,10 @@ internal fun ManualExpenseDateCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
                 Icon(
                     imageVector = Icons.Default.CalendarToday,
                     contentDescription = null,
@@ -124,12 +120,14 @@ internal fun ManualExpenseDateCard(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Text(
-                        text = if (isSelectedDateToday) Localization.today(lang) else Localization.date(lang),
-                        fontSize = 11.sp,
-                        color = Emerald700,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (isSelectedDateToday) {
+                        Text(
+                            text = Localization.today(lang),
+                            fontSize = 11.sp,
+                            color = Emerald700,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Text(
                         text = formattedDate,
                         fontSize = 13.sp,
@@ -139,18 +137,12 @@ internal fun ManualExpenseDateCard(
                 }
             }
 
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = Emerald100
-            ) {
-                Text(
-                    text = Localization.changeAction(lang),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Emerald700,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = Localization.changeAction(lang),
+                tint = Emerald700,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

@@ -427,7 +427,7 @@ internal class FirestoreStructureDelegate(
                     obj?.copy(
                         id = doc.id,
                         householdId = obj.householdId.ifBlank { householdId }
-                    )
+                    )?.takeIf { !it.isDeleted }
                 }.sortedWith(compareBy<FirebaseSavingsGoal> { it.title.lowercase() }.thenBy { it.id })
             }
             .catch { t ->
@@ -444,7 +444,7 @@ internal class FirestoreStructureDelegate(
             .map { snap ->
                 snap.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeSavingsGoal() } catch (_: Throwable) { null }
-                    obj?.copy(id = doc.id)
+                    obj?.copy(id = doc.id)?.takeIf { !it.isDeleted }
                 }.sortedWith(compareBy<FirebaseSavingsGoal> { it.title.lowercase() }.thenBy { it.id })
             }
             .catch { t ->
@@ -458,12 +458,12 @@ internal class FirestoreStructureDelegate(
         return try {
             val snapshot = db.collection("households").document(householdId).collection("savings_goals").get().await()
             val list = snapshot.documents.mapNotNull { doc ->
-                try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+                try { doc.toSafeSavingsGoal().copy(id = doc.id).takeIf { !it.isDeleted } } catch (_: Throwable) { null }
             }
             if (list.isNotEmpty()) list else {
                 val alt = db.collection("households").document(householdId).collection("savingsGoals").get().await()
                 alt.documents.mapNotNull { doc ->
-                    try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+                    try { doc.toSafeSavingsGoal().copy(id = doc.id).takeIf { !it.isDeleted } } catch (_: Throwable) { null }
                 }
             }
         } catch (_: Throwable) {
@@ -476,12 +476,12 @@ internal class FirestoreStructureDelegate(
         return try {
             val snapshot = db.collection("users").document(userId).collection("savings_goals").get().await()
             val list = snapshot.documents.mapNotNull { doc ->
-                try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+                try { doc.toSafeSavingsGoal().copy(id = doc.id).takeIf { !it.isDeleted } } catch (_: Throwable) { null }
             }
             if (list.isNotEmpty()) list else {
                 val alt = db.collection("users").document(userId).collection("savingsGoals").get().await()
                 alt.documents.mapNotNull { doc ->
-                    try { doc.toSafeSavingsGoal().copy(id = doc.id) } catch (_: Throwable) { null }
+                    try { doc.toSafeSavingsGoal().copy(id = doc.id).takeIf { !it.isDeleted } } catch (_: Throwable) { null }
                 }
             }
         } catch (_: Throwable) {
@@ -567,7 +567,7 @@ internal class FirestoreStructureDelegate(
                 snap.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }.sortedBy { it.title }
             }
             .catch { t ->
@@ -585,7 +585,7 @@ internal class FirestoreStructureDelegate(
                 snap.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null }
                     if (obj != null && obj.id.isBlank()) obj.id = doc.id
-                    obj
+                    obj?.takeIf { !it.isDeleted }
                 }.sortedBy { it.title }
             }
             .catch { t ->
@@ -598,10 +598,14 @@ internal class FirestoreStructureDelegate(
         if (householdId.isBlank()) return emptyList()
         return try {
             val snapshot = db.collection("households").document(householdId).collection("recurring_expenses").get().await()
-            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+            val list = snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeRecurringExpense().takeIf { !it.isDeleted } } catch (_: Throwable) { null }
+            }
             if (list.isNotEmpty()) list else {
                 val alt = db.collection("households").document(householdId).collection("recurringExpenses").get().await()
-                alt.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+                alt.documents.mapNotNull { doc ->
+                    try { doc.toSafeRecurringExpense().takeIf { !it.isDeleted } } catch (_: Throwable) { null }
+                }
             }
         } catch (_: Throwable) {
             emptyList()
@@ -612,14 +616,146 @@ internal class FirestoreStructureDelegate(
         if (userId.isBlank()) return emptyList()
         return try {
             val snapshot = db.collection("users").document(userId).collection("recurring_expenses").get().await()
-            val list = snapshot.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+            val list = snapshot.documents.mapNotNull { doc ->
+                try { doc.toSafeRecurringExpense().takeIf { !it.isDeleted } } catch (_: Throwable) { null }
+            }
             if (list.isNotEmpty()) list else {
                 val alt = db.collection("users").document(userId).collection("recurringExpenses").get().await()
-                alt.documents.mapNotNull { doc -> try { doc.toSafeRecurringExpense() } catch (_: Throwable) { null } }
+                alt.documents.mapNotNull { doc ->
+                    try { doc.toSafeRecurringExpense().takeIf { !it.isDeleted } } catch (_: Throwable) { null }
+                }
             }
         } catch (_: Throwable) {
             emptyList()
         }
+    }
+
+    suspend fun archiveAllHouseholdStructure(
+        householdId: String,
+        userId: String,
+        archiveBatchId: String
+    ): Int {
+        if (householdId.isBlank()) return 0
+        var archivedCount = 0
+        val archivedAt = Timestamp.now()
+
+        suspend fun archiveNamedStructure(
+            colRef: com.google.firebase.firestore.CollectionReference,
+            matchHouseholdOnly: Boolean
+        ) {
+            val snap = colRef.get().await()
+            val toArchive = snap.documents.filter { doc ->
+                val alreadyDeleted = doc.getBoolean("isDeleted") == true
+                val matchesHousehold = !matchHouseholdOnly || doc.getString("householdId") == householdId
+                !alreadyDeleted && matchesHousehold
+            }
+            for (chunk in toArchive.chunked(400)) {
+                val batch = db.batch()
+                for (doc in chunk) {
+                    val hasValidName = !doc.getString("name").isNullOrBlank()
+                    val updates: Map<String, Any> = if (hasValidName) {
+                        mapOf(
+                            "isDeleted" to true,
+                            "archivedAt" to archivedAt,
+                            "archivedByUid" to userId,
+                            "archiveBatchId" to archiveBatchId
+                        )
+                    } else {
+                        mapOf("isDeleted" to true)
+                    }
+                    batch.update(doc.reference, updates)
+                    archivedCount++
+                }
+                batch.commit().await()
+            }
+        }
+
+        suspend fun archiveGenericCollection(
+            colRef: com.google.firebase.firestore.CollectionReference,
+            matchHouseholdOnly: Boolean,
+            deactivateRecurring: Boolean = false
+        ) {
+            val snap = colRef.get().await()
+            val toArchive = snap.documents.filter { doc ->
+                val alreadyDeleted = doc.getBoolean("isDeleted") == true
+                val matchesHousehold = !matchHouseholdOnly || doc.getString("householdId") == householdId
+                !alreadyDeleted && matchesHousehold
+            }
+            for (chunk in toArchive.chunked(400)) {
+                val batch = db.batch()
+                for (doc in chunk) {
+                    val updates = hashMapOf<String, Any>(
+                        "isDeleted" to true,
+                        "archivedAt" to archivedAt,
+                        "archivedByUid" to userId,
+                        "archiveBatchId" to archiveBatchId
+                    )
+                    if (deactivateRecurring) {
+                        updates["isActive"] = false
+                    }
+                    batch.update(doc.reference, updates)
+                    archivedCount++
+                }
+                batch.commit().await()
+            }
+        }
+
+        try {
+            val hDoc = db.collection("households").document(householdId)
+            archiveNamedStructure(hDoc.collection("members"), matchHouseholdOnly = false)
+            archiveNamedStructure(hDoc.collection("categories"), matchHouseholdOnly = false)
+            archiveGenericCollection(hDoc.collection("savings_goals"), matchHouseholdOnly = false)
+            archiveGenericCollection(hDoc.collection("savingsGoals"), matchHouseholdOnly = false)
+            archiveGenericCollection(hDoc.collection("recurring_expenses"), matchHouseholdOnly = false, deactivateRecurring = true)
+            archiveGenericCollection(hDoc.collection("recurringExpenses"), matchHouseholdOnly = false, deactivateRecurring = true)
+
+            if (userId.isNotBlank()) {
+                val uDoc = db.collection("users").document(userId)
+                archiveNamedStructure(uDoc.collection("members"), matchHouseholdOnly = true)
+                archiveNamedStructure(uDoc.collection("categories"), matchHouseholdOnly = true)
+                archiveGenericCollection(uDoc.collection("savings_goals"), matchHouseholdOnly = true)
+                archiveGenericCollection(uDoc.collection("savingsGoals"), matchHouseholdOnly = true)
+                archiveGenericCollection(uDoc.collection("recurring_expenses"), matchHouseholdOnly = true, deactivateRecurring = true)
+                archiveGenericCollection(uDoc.collection("recurringExpenses"), matchHouseholdOnly = true, deactivateRecurring = true)
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "Error archiving household structure: ${e.message}", e)
+            throw e
+        }
+        return archivedCount
+    }
+
+    suspend fun restoreArchivedHouseholdStructure(
+        householdId: String,
+        archiveBatchId: String? = null
+    ): Int {
+        if (householdId.isBlank()) return 0
+        var restoredCount = 0
+        val hDoc = db.collection("households").document(householdId)
+
+        suspend fun restoreCollection(colRef: com.google.firebase.firestore.CollectionReference) {
+            val snap = colRef.whereEqualTo("isDeleted", true).get().await()
+            val toRestore = snap.documents.filter { doc ->
+                archiveBatchId.isNullOrBlank() || doc.getString("archiveBatchId") == archiveBatchId
+            }
+            for (chunk in toRestore.chunked(400)) {
+                val batch = db.batch()
+                for (doc in chunk) {
+                    batch.update(doc.reference, mapOf("isDeleted" to false))
+                    restoredCount++
+                }
+                batch.commit().await()
+            }
+        }
+
+        restoreCollection(hDoc.collection("members"))
+        restoreCollection(hDoc.collection("categories"))
+        restoreCollection(hDoc.collection("savings_goals"))
+        restoreCollection(hDoc.collection("savingsGoals"))
+        restoreCollection(hDoc.collection("recurring_expenses"))
+        restoreCollection(hDoc.collection("recurringExpenses"))
+        return restoredCount
     }
 
     suspend fun syncRecurringExpense(householdId: String, recurring: FirebaseRecurringExpense) {

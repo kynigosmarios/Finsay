@@ -4,6 +4,11 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -447,7 +452,14 @@ fun UserProfileDialog(
                     }
 
                     // 2. Personal Information Section (View Mode vs Spacious Edit Mode)
-                    if (isEditingProfile) {
+                    AnimatedContent(
+                        targetState = isEditingProfile,
+                        transitionSpec = {
+                            fadeIn(tween(220)) togetherWith fadeOut(tween(160))
+                        },
+                        label = "profileEditModeTransition"
+                    ) { editing ->
+                        if (editing) {
                         // ==========================================
                         // EDIT MODE: Beautiful, spacious full-width form
                         // ==========================================
@@ -868,28 +880,8 @@ fun UserProfileDialog(
                                         value = currentUser?.email ?: (userProfile?.email ?: (if (lang == Localization.Language.ENGLISH) "Not set" else "Δεν έχει οριστεί"))
                                     )
                                 }
-
-                                Spacer(modifier = Modifier.height(14.dp))
-
-                                OutlinedButton(
-                                    onClick = { isEditingProfile = true },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Emerald700),
-                                    border = BorderStroke(1.2.dp, Emerald700.copy(alpha = 0.5f)),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(46.dp)
-                                ) {
-                                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp), tint = Emerald700)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Edit Personal Information" else "Επεξεργασία Στοιχείων",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.5.sp,
-                                        color = Emerald700
-                                    )
-                                }
                             }
+                        }
                         }
                     }
 
@@ -1043,62 +1035,67 @@ fun UserProfileDialog(
                         }
                     }
 
-                    // 5. Sign Out Button
+                    // 5. Sign Out Button (Primary visual emphasis)
                     Button(
                         onClick = {
                             onDismiss()
                             onSignOut()
                         },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Emerald700,
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp)
+                            .height(48.dp)
                             .testTag("profile_dialog_signout_button")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Logout,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = Localization.signOutAccount(lang),
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 13.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontSize = 14.5.sp,
+                                color = Color.White
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                    // 7. Delete Account & Cloud Data (Google Play Policy Compliance)
-                    OutlinedButton(
+                    // 7. Delete Account & Cloud Data (Subtle low-emphasis destructive action)
+                    TextButton(
                         onClick = { showDeleteConfirmDialog = true },
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .height(48.dp)
                             .testTag("profile_delete_account_btn")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.DeleteForever,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(16.dp)
+                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.72f),
+                                modifier = Modifier.size(15.dp)
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = Localization.deleteAccountButton(lang),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.error
+                                fontWeight = FontWeight.Medium,
+                                fontSize = 12.5.sp,
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.72f)
                             )
                         }
                     }

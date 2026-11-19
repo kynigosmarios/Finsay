@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +38,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
@@ -85,12 +89,6 @@ internal fun ManualExpensePayerAndSplitSection(
             color = MaterialTheme.colorScheme.onSurface
         )
     }
-    Spacer(modifier = Modifier.height(2.dp))
-    Text(
-        text = Localization.payersSubtitle(lang),
-        fontSize = 11.5.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
     Spacer(modifier = Modifier.height(6.dp))
 
     FlowRow(
@@ -101,7 +99,6 @@ internal fun ManualExpensePayerAndSplitSection(
         members.forEach { member ->
             val isPayer = selectedPayerIds.contains(member.id)
             val avatarColor = Color(member.avatarColorHex)
-            val translatedRole = Localization.translateRole(member.role, lang)
 
             FilterChip(
                 selected = isPayer,
@@ -120,7 +117,7 @@ internal fun ManualExpensePayerAndSplitSection(
                         }
                     }
                 },
-                label = { Text("${member.name} ($translatedRole)", fontSize = 12.sp) },
+                label = { Text(member.name, fontSize = 12.sp) },
                 leadingIcon = {
                     Box(
                         modifier = Modifier
@@ -138,9 +135,14 @@ internal fun ManualExpensePayerAndSplitSection(
     }
 
     // Multi-payer allocation details card
-    if (selectedPayerIds.size > 1) {
-        Spacer(modifier = Modifier.height(12.dp))
-        Card(
+    AnimatedVisibility(
+        visible = selectedPayerIds.size > 1,
+        enter = FinsayMotion.ExpandEnter,
+        exit = FinsayMotion.ShrinkExit
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Card(
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -149,6 +151,16 @@ internal fun ManualExpensePayerAndSplitSection(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
+                val equalTabBg by animateColorAsState(
+                    targetValue = if (!isCustomPayerSplit) Emerald700 else Color.Transparent,
+                    animationSpec = tween(200),
+                    label = "equalTabBg"
+                )
+                val customTabBg by animateColorAsState(
+                    targetValue = if (isCustomPayerSplit) Emerald700 else Color.Transparent,
+                    animationSpec = tween(200),
+                    label = "customTabBg"
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -161,7 +173,7 @@ internal fun ManualExpensePayerAndSplitSection(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (!isCustomPayerSplit) Emerald700 else Color.Transparent)
+                            .background(equalTabBg)
                             .clickable { onCustomPayerSplitChange(false) }
                             .padding(vertical = 8.dp),
                         contentAlignment = Alignment.Center
@@ -178,7 +190,7 @@ internal fun ManualExpensePayerAndSplitSection(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (isCustomPayerSplit) Emerald700 else Color.Transparent)
+                            .background(customTabBg)
                             .clickable {
                                 onCustomPayerSplitChange(true)
                                 val share = if (currentAmount > 0) currentAmount / selectedPayerIds.size else 0.0
@@ -276,13 +288,6 @@ internal fun ManualExpensePayerAndSplitSection(
                         }
                     }
                 } else {
-                    Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Enter amount paid per member:" else "Ορίστε το ποσό που πλήρωσε κάθε μέλος:",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -425,6 +430,7 @@ internal fun ManualExpensePayerAndSplitSection(
                 }
             }
         }
+        }
     }
 
     Spacer(modifier = Modifier.height(16.dp))
@@ -445,12 +451,6 @@ internal fun ManualExpensePayerAndSplitSection(
             color = MaterialTheme.colorScheme.onSurface
         )
     }
-    Spacer(modifier = Modifier.height(2.dp))
-    Text(
-        text = if (lang == Localization.Language.ENGLISH) "e.g. Choose children to track expenses per child" else "π.χ. Επιλέξτε τα παιδιά για να γνωρίζετε πόσα αναλογούν σε αυτά",
-        fontSize = 11.5.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
     Spacer(modifier = Modifier.height(6.dp))
 
     Surface(
@@ -476,54 +476,53 @@ internal fun ManualExpensePayerAndSplitSection(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (lang == Localization.Language.ENGLISH) "Common to entire household (Family)" else "Κοινό έξοδο όλου του σπιτιού (Οικογένεια)",
+                text = if (lang == Localization.Language.ENGLISH) "Common to entire household" else "Κοινό για όλο το σπίτι",
                 fontSize = 13.sp,
                 fontWeight = if (isAllFamily) FontWeight.Bold else FontWeight.Normal
             )
         }
     }
 
-    if (!isAllFamily) {
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = if (lang == Localization.Language.ENGLISH) "Select participating members:" else "Επιλέξτε μέλη που συμμετέχουν:",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(6.dp))
+    AnimatedVisibility(
+        visible = !isAllFamily,
+        enter = FinsayMotion.ExpandEnter,
+        exit = FinsayMotion.ShrinkExit
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.height(8.dp))
 
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            members.forEach { member ->
-                val isChecked = selectedMemberIds.contains(member.id)
-                val avatarColor = Color(member.avatarColorHex)
-                val translatedRole = Localization.translateRole(member.role, lang)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                members.forEach { member ->
+                    val isChecked = selectedMemberIds.contains(member.id)
+                    val avatarColor = Color(member.avatarColorHex)
 
-                FilterChip(
-                    selected = isChecked,
-                    onClick = {
-                        if (isChecked) {
-                            selectedMemberIds.remove(member.id)
-                        } else {
-                            selectedMemberIds.add(member.id)
-                        }
-                    },
-                    label = { Text("${member.name} ($translatedRole)", fontSize = 12.sp) },
-                    leadingIcon = {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(avatarColor)
+                    FilterChip(
+                        selected = isChecked,
+                        onClick = {
+                            if (isChecked) {
+                                selectedMemberIds.remove(member.id)
+                            } else {
+                                selectedMemberIds.add(member.id)
+                            }
+                        },
+                        label = { Text(member.name, fontSize = 12.sp) },
+                        leadingIcon = {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(avatarColor)
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = avatarColor.copy(alpha = 0.2f)
                         )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = avatarColor.copy(alpha = 0.2f)
                     )
-                )
+                }
             }
         }
     }
@@ -536,19 +535,17 @@ internal fun ManualExpensePayerAndSplitSection(
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH) "Split calculation: " else "Υπολογισμός διαμοιρασμού: ",
+                    text = if (lang == Localization.Language.ENGLISH) "Per person" else "Ανά άτομο",
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH)
-                        String.format(Locale.US, "%.2f € / person", splitPerPerson)
-                    else
-                        String.format(Locale.US, "%.2f € / άτομο", splitPerPerson),
+                    text = String.format(Locale.US, "%.2f €", splitPerPerson),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Emerald700

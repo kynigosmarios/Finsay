@@ -69,6 +69,7 @@ fun HouseholdActivityDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        SmoothDialogContent {
         Card(
             shape = RoundedCornerShape(26.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -182,7 +183,8 @@ fun HouseholdActivityDialog(
                     ) {
                         items(
                             items = activities,
-                            key = { it.id.ifBlank { "${it.createdAt}_${it.actorUid}_${it.summaryEl}" } }
+                            key = { it.id.ifBlank { "${it.createdAt}_${it.actorUid}_${it.summaryEl}" } },
+                            contentType = { "activity_item" }
                         ) { item ->
                             val isDeleteAction = item.actionType.contains("DELETE", ignoreCase = true)
                             val isSettled = item.actionType.contains("SETTLED", ignoreCase = true)
@@ -206,6 +208,7 @@ fun HouseholdActivityDialog(
                                 border = BorderStroke(0.8.dp, badgeColor.copy(alpha = 0.25f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .animateItem()
                                     .testTag("activity_item_${item.id}")
                             ) {
                                 Row(
@@ -291,6 +294,7 @@ fun HouseholdActivityDialog(
                     )
                 }
             }
+        }
         }
     }
 }

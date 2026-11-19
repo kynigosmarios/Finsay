@@ -8,6 +8,7 @@ import com.example.data.model.FirebaseCategory
 import com.example.data.model.FirebaseMember
 import com.example.data.model.UserProfile
 import com.example.data.seed.FirestoreDataSeed
+import com.example.reminder.BillReminderManager
 import com.example.reminder.DailyReminderManager
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.BankNotificationSystemManager
@@ -255,6 +256,9 @@ internal class OikoNomosStructureDelegate(
                 vm.repository.replaceAllMembers(mapped)
             }
             mapped
+        } else if (remoteDeleted.isNotEmpty()) {
+            vm.repository.replaceAllMembers(emptyList())
+            emptyList()
         } else {
             val currentLocal = vm.repository.getAllMembersList()
             if (currentLocal.isNotEmpty() && !currentLocal.all { it.name == "Εγώ" }) {
@@ -387,6 +391,9 @@ internal class OikoNomosStructureDelegate(
                 vm.repository.replaceAllCategories(mapped)
             }
             mapped
+        } else if (remoteDeleted.isNotEmpty()) {
+            vm.repository.replaceAllCategories(emptyList())
+            emptyList()
         } else {
             val isMarios = vm.isMariosUser()
             val isMariosDefaultHousehold = currentHouseholdId == FirestoreDataSeed.DEFAULT_HOUSEHOLD_ID ||
@@ -865,9 +872,92 @@ internal class OikoNomosStructureDelegate(
         }
     }
 
+    fun clearCurrentHouseholdAllData() {
+        val household = vm._currentHousehold.value
+        val uid = vm._currentUser.value?.uid ?: vm.auth.currentUser?.uid ?: ""
+        val isEn = vm._appLanguage.value == "EN"
+        if (household == null || household.id.isBlank()) {
+            vm.showSnackbar(
+                if (isEn) "No active household selected" else "Δεν βρέθηκε ενεργό εξοδολόγιο"
+            )
+            return
+        }
+        if (!vm.isUserCreatorOfHousehold(household)) {
+            vm.showSnackbar(
+                if (isEn) "Only the household owner can clear all household data"
+                else "Μόνο ο ιδιοκτήτης μπορεί να εκκαθαρίσει όλα τα δεδομένα του εξοδολογίου"
+            )
+            return
+        }
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            vm._isSyncing.value = true
+            try {
+                // Cancel scheduled local bill reminders for this household
+                val existingRecurring = try {
+                    vm.repository.getAllRecurringExpensesList()
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                existingRecurring.forEach { rec ->
+                    try {
+                        BillReminderManager.cancelReminder(vm.getApplication(), rec.id)
+                    } catch (_: Exception) {}
+                }
+
+                // Soft-archive ALL household documents in Firebase Firestore (isDeleted = true + archiveBatchId)
+                // so that zero records are lost and the owner can restore them from Firebase if needed.
+                val archiveBatchId = vm.firestoreSyncRepo.archiveAllHouseholdData(household.id, uid)
+
+                // Clear local Room cache & in-memory state for this household (without signing out)
+                vm.pendingLocalExpenseIds.clear()
+                vm.pendingLocalIncomeIds.clear()
+                vm.savingsGoalCloudIdByLocalId.clear()
+                vm.pendingLocalSavingsGoals.clear()
+                vm.pendingDeletedSavingsGoals.clear()
+                vm.inFlightCreateGoalKeys.clear()
+                vm.lastHouseholdExpenses = emptyList()
+                vm.lastHouseholdIncomes = emptyList()
+                vm.lastHouseholdMembers = emptyList()
+                vm.lastHouseholdCategories = emptyList()
+                vm.lastHouseholdSavingsGoals = emptyList()
+                vm._allExpenses.value = emptyList()
+                vm._allIncomes.value = emptyList()
+                vm._allMembers.value = emptyList()
+                vm._allCategories.value = emptyList()
+                vm._allSavingsGoals.value = emptyList()
+                vm._pendingUndoDeletion.value = null
+                vm.undoCountdownJob?.cancel()
+                vm.repository.clearAllData()
+
+                // Log activity for household audit trail
+                vm.logHouseholdActivity(
+                    actionType = "HOUSEHOLD_CLEARED",
+                    targetType = "HOUSEHOLD",
+                    summaryEl = "Εκκαθαρίστηκαν όλα τα δεδομένα του εξοδολογίου (αντίγραφο στο Firebase: ${archiveBatchId.take(8)})",
+                    summaryEn = "Cleared all household data (archived in Firebase: ${archiveBatchId.take(8)})",
+                    amount = 0.0
+                )
+
+                vm.showSnackbar(
+                    if (isEn) "Household data cleared (safely archived in Firebase)"
+                    else "Τα δεδομένα του εξοδολογίου εκκαθαρίστηκαν (διατηρούνται στο Firebase)"
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                vm.showSnackbar(
+                    if (isEn) "Could not clear household data: ${e.message ?: "Error"}"
+                    else "Αποτυχία εκκαθάρισης δεδομένων εξοδολογίου"
+                )
+            } finally {
+                vm._isSyncing.value = false
+            }
+        }
+    }
+
     fun activateProFromBilling() {
         val cur = vm._userProfile.value
         if (cur != null) vm._userProfile.value = cur.copy(isPremium = true)
+        vm.syncBankCatcherProEntitlement()
         vm._premiumPaywallReason.value = null
         val uid = vm._currentUser.value?.uid ?: vm.auth.currentUser?.uid ?: return
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
@@ -961,8 +1051,16 @@ internal class OikoNomosStructureDelegate(
     }
 
     fun toggleBankAutoCatcher(enabled: Boolean) {
+        if (enabled && !vm.isCurrentUserPro()) {
+            BankNotificationSystemManager.setProEntitled(vm.getApplication(), false)
+            BankNotificationSystemManager.setAutoCatcherEnabled(vm.getApplication(), false)
+            vm._bankAutoCatcherEnabled.value = false
+            vm.showPremiumPaywall("bank_auto_catcher")
+            return
+        }
+        BankNotificationSystemManager.setProEntitled(vm.getApplication(), vm.isCurrentUserPro())
         BankNotificationSystemManager.setAutoCatcherEnabled(vm.getApplication(), enabled)
-        vm._bankAutoCatcherEnabled.value = enabled
+        vm._bankAutoCatcherEnabled.value = enabled && vm.isCurrentUserPro()
         val isEn = vm._appLanguage.value == "EN"
         vm.showSnackbar(
             if (enabled) {

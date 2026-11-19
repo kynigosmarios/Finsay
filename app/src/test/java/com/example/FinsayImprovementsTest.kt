@@ -15,6 +15,7 @@ import com.example.ui.components.GoalDeadlineDateHelper
 import com.example.ui.components.ManualExpenseSaveResolver
 import com.example.util.AnalyticsForecastHelper
 import com.example.util.BankNotificationHolder
+import com.example.util.DefaultPayerHelper
 import com.example.util.GreekVoiceParser
 import com.example.util.Localization
 import com.example.util.MerchantCategoryLearner
@@ -606,5 +607,120 @@ class FinsayImprovementsTest {
         assertEquals("Goal: Holidays", SavingsGoalExpenseLinkHelper.buildDepositExpenseTitle("Holidays", isEnglish = true))
         assertEquals("Κατάθεση στον στόχο «Διακοπές»", SavingsGoalExpenseLinkHelper.buildDepositExpenseNote("Διακοπές", "", isEnglish = false))
         assertEquals("Δώρο", SavingsGoalExpenseLinkHelper.buildDepositExpenseNote("Διακοπές", "  Δώρο  ", isEnglish = false))
+    }
+
+    @Test
+    fun `default payer helper supports multi-select 2 plus payers explicit clear and strict owner-only role removal rules`() {
+        val kid = FamilyMember(id = 30L, name = "Γιάννης", role = "Παιδί")
+        val trio = listOf(marios, vasiliki, kid)
+
+        // CSV parse & format deduplicates and ignores invalid IDs
+        assertEquals(listOf(10L, 20L, 30L), DefaultPayerHelper.parseMemberIdsCsv("10, 20, 10, abc, -5, 30"))
+        assertEquals("10,20,30", DefaultPayerHelper.formatMemberIdsCsv(listOf(10L, 20L, 10L, 0L, 30L)))
+
+        val household = Household(
+            id = "hh_multi",
+            name = "Οικογένεια",
+            ownerId = "uid_owner",
+            memberUids = listOf("uid_owner", "uid_editor", "uid_registar"),
+            memberRoles = mapOf(
+                "uid_owner" to HouseholdRole.CREATOR.key,
+                "uid_editor" to HouseholdRole.EDITOR.key,
+                "uid_registar" to HouseholdRole.REGISTAR.key
+            ),
+            memberDefaultPayers = mapOf(
+                "uid_owner" to "10,20",
+                "uid_editor" to "10,20,30",
+                "uid_registar" to "" // Explicitly cleared by registar
+            )
+        )
+
+        // 1. Multi-select resolution (2 and 3 members)
+        val ownerPayers = DefaultPayerHelper.resolveEffectiveDefaultPayers(
+            uid = "uid_owner",
+            household = household,
+            members = trio
+        )
+        assertEquals(listOf(10L, 20L), ownerPayers.map { it.id })
+
+        val editorPayers = DefaultPayerHelper.resolveEffectiveDefaultPayers(
+            uid = "uid_editor",
+            household = household,
+            members = trio
+        )
+        assertEquals(listOf(10L, 20L, 30L), editorPayers.map { it.id })
+
+        // 2. Explicit clear ("") must NOT fall back to legacy linkedUserUid in resolveAssignedDefaultPayers
+        val registarWithLegacyMember = FamilyMember(id = 40L, name = "Νίκος", role = "Γονέας", linkedUserUid = "uid_registar")
+        val registarAssigned = DefaultPayerHelper.resolveAssignedDefaultPayers(
+            uid = "uid_registar",
+            household = household,
+            members = trio + registarWithLegacyMember
+        )
+        assertTrue("Explicitly cleared default payers must remain empty", registarAssigned.isEmpty())
+
+        // 3. When key is absent from memberDefaultPayers, legacy linkedUserUid fallback still works
+        val legacyFallback = DefaultPayerHelper.resolveEffectiveDefaultPayers(
+            uid = "uid_marios",
+            household = household,
+            members = trio
+        )
+        assertEquals(listOf(10L), legacyFallback.map { it.id })
+
+        // 4. Equal split formatting for 2 payers and 3 payers
+        val split2 = DefaultPayerHelper.buildEqualPayerFields(listOf(marios, vasiliki), 12.0)
+        assertEquals(10L, split2.primaryId)
+        assertEquals("Μάριος & Βασιλική", split2.displayName)
+        assertEquals("10,20", split2.idsCsv)
+        assertEquals("10:6.00,20:6.00", split2.amountsCsv)
+
+        val split3 = DefaultPayerHelper.buildEqualPayerFields(trio, 30.0)
+        assertEquals("Μάριος & Βασιλική & Γιάννης", split3.displayName)
+        assertEquals("10,20,30", split3.idsCsv)
+        assertEquals("10:10.00,20:10.00,30:10.00", split3.amountsCsv)
+
+        // 5. Permission checks: CREATOR, EDITOR, REGISTAR can all set their OWN default payers
+        assertTrue(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_owner", "uid_owner"))
+        assertTrue(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_editor", "uid_editor"))
+        assertTrue(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_registar", "uid_registar"))
+        // CREATOR can also assign for shared users; EDITOR and REGISTAR CANNOT assign for others
+        assertTrue(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_owner", "uid_editor"))
+        assertTrue(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_owner", "uid_registar"))
+        assertFalse(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_editor", "uid_owner"))
+        assertFalse(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_editor", "uid_registar"))
+        assertFalse(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_registar", "uid_owner"))
+        assertFalse(DefaultPayerHelper.canAssignDefaultPayers(household, "uid_registar", "uid_editor"))
+
+        // 6. Strict Owner-Only Role Change & User Removal (NO self-role change, NO self-removal for EDITOR/REGISTAR)
+        assertTrue(DefaultPayerHelper.canModifyRolesOrRemoveUsers(household, "uid_owner"))
+        assertFalse(DefaultPayerHelper.canModifyRolesOrRemoveUsers(household, "uid_editor"))
+        assertFalse(DefaultPayerHelper.canModifyRolesOrRemoveUsers(household, "uid_registar"))
+        assertFalse(DefaultPayerHelper.canModifyRolesOrRemoveUsers(household, "uid_outsider"))
+    }
+
+    @Test
+    fun `greek voice parser splits equally across multiple preferredDefaultPayers when no explicit payer is spoken`() {
+        val withoutPayer = GreekVoiceParser.parse(
+            prompt = "12 ευρώ καφές",
+            categories = categories,
+            allMembers = members,
+            preferredDefaultPayers = listOf(marios, vasiliki)
+        )
+        assertFalse(withoutPayer.hasExplicitPayer)
+        assertEquals(marios.id, withoutPayer.payerMemberId)
+        assertEquals("Μάριος & Βασιλική", withoutPayer.payerMemberName)
+        assertEquals("10,20", withoutPayer.payerMemberIdsCsv)
+        assertEquals("10:6.00,20:6.00", withoutPayer.payerAmountsCsv)
+
+        val withExplicitPayer = GreekVoiceParser.parse(
+            prompt = "12 ευρώ καφές πλήρωσε η Βασιλική",
+            categories = categories,
+            allMembers = members,
+            preferredDefaultPayers = listOf(marios, vasiliki)
+        )
+        assertTrue(withExplicitPayer.hasExplicitPayer)
+        assertEquals(vasiliki.id, withExplicitPayer.payerMemberId)
+        assertEquals("Βασιλική", withExplicitPayer.payerMemberName)
+        assertEquals("20", withExplicitPayer.payerMemberIdsCsv)
     }
 }

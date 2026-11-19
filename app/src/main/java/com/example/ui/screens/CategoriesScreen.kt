@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.entity.ExpenseCategory
 import com.example.ui.components.CategoryIconHelper
+import com.example.ui.components.SmoothDialogContent
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
 import java.util.Locale
@@ -183,25 +184,6 @@ fun CategoriesScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = if (canManage) {
-                            if (lang == Localization.Language.ENGLISH)
-                                "Create categories to organize your expenses."
-                            else
-                                "Δημιουργήστε κατηγορίες για να οργανώσετε τα έξοδά σας."
-                        } else {
-                            if (lang == Localization.Language.ENGLISH)
-                                "No categories in this household."
-                            else
-                                "Δεν υπάρχουν κατηγορίες στο εξοδολόγιο."
-                        },
-                        fontSize = 13.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-
                     if (canManage) {
                         Spacer(modifier = Modifier.height(18.dp))
 
@@ -250,11 +232,15 @@ fun CategoriesScreen(
                     .padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                item {
+                item(key = "top_spacer", contentType = "spacer") {
                     Spacer(modifier = Modifier.height(2.dp))
                 }
 
-                itemsIndexed(categories, key = { _, c -> if (c.id > 0) "cat_${c.id}" else "cat_tmp_${c.name}" }) { index, category ->
+                itemsIndexed(
+                    items = categories,
+                    key = { _, c -> if (c.id > 0) "cat_${c.id}" else "cat_tmp_${c.name}" },
+                    contentType = { _, _ -> "category_card" }
+                ) { index, category ->
                     val color = if (category.colorHex != 0L) Color(category.colorHex) else Emerald700
 
                     Card(
@@ -310,8 +296,8 @@ fun CategoriesScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Spacer(modifier = Modifier.height(2.dp))
                                     if (category.monthlyBudget > 0.0) {
+                                        Spacer(modifier = Modifier.height(2.dp))
                                         val budgetColor = if (isDark) Color(0xFF34D399) else Emerald700
                                         Surface(
                                             shape = RoundedCornerShape(6.dp),
@@ -325,12 +311,6 @@ fun CategoriesScreen(
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
-                                    } else {
-                                        Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "No budget" else "Χωρίς όριο",
-                                            fontSize = 11.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                        )
                                     }
                                 }
                             }
@@ -426,7 +406,7 @@ fun CategoriesScreen(
                 }
 
                 if (canManage) {
-                    item {
+                    item(key = "deleted_categories_btn", contentType = "footer_button") {
                         Spacer(modifier = Modifier.height(10.dp))
                         OutlinedButton(
                             onClick = { showDeletedCategoriesDialog = true },
@@ -454,7 +434,7 @@ fun CategoriesScreen(
                     }
                 }
 
-                item {
+                item(key = "bottom_spacer", contentType = "spacer") {
                     Spacer(modifier = Modifier.height(80.dp))
                 }
             }
@@ -474,23 +454,14 @@ fun CategoriesScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = if (isGreek)
-                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε την κατηγορία «${cat.name}»;"
-                        else
-                            "Are you sure you want to delete category \"${cat.name}\"?",
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = if (isGreek)
-                            "Η κατηγορία θα μεταφερθεί στις «Διαγραμμένες Κατηγορίες», απ' όπου μπορείτε να την επαναφέρετε ανά πάσα στιγμή. Τα ήδη καταχωρημένα έξοδα και τα στατιστικά διατηρούνται 100% ανέπαφα."
-                        else
-                            "The category will be moved to \"Deleted Categories\", from where you can restore it anytime. Existing expenses and statistics remain intact.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = if (isGreek)
+                        "«${cat.name}» θα μεταφερθεί στις Διαγραμμένες. Τα έξοδα και στατιστικά διατηρούνται."
+                    else
+                        "\"${cat.name}\" will move to Deleted Categories. Existing expenses and stats remain intact.",
+                    fontSize = 13.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             },
             confirmButton = {
                 TextButton(
@@ -517,6 +488,7 @@ fun CategoriesScreen(
     // 2. Recycle Bin Dialog ("Διαγραμμένες Κατηγορίες")
     if (showDeletedCategoriesDialog) {
         Dialog(onDismissRequest = { showDeletedCategoriesDialog = false }) {
+            SmoothDialogContent {
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -550,19 +522,12 @@ fun CategoriesScreen(
                                 )
                             }
                         }
-                        Column {
-                            Text(
-                                text = if (isGreek) "Διαγραμμένες Κατηγορίες" else "Deleted Categories",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isGreek) "Επαναφορά ή οριστική κατάργηση" else "Restore or permanently delete",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = if (isGreek) "Διαγραμμένες Κατηγορίες" else "Deleted Categories",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
 
                     if (deletedCategories.isEmpty()) {
@@ -712,6 +677,7 @@ fun CategoriesScreen(
                         )
                     }
                 }
+            }
             }
         }
     }

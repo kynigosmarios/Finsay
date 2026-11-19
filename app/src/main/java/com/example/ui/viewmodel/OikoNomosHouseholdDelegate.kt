@@ -13,6 +13,7 @@ import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
 import com.example.data.repository.FirestoreSyncRepository
 import com.example.data.seed.FirestoreDataSeed
+import com.example.util.DefaultPayerHelper
 import com.example.util.StartupSafety
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.CancellationException
@@ -444,73 +445,74 @@ internal class OikoNomosHouseholdDelegate(
     }
 
     /**
-     * Feature 1.1: Enforces a 1-to-1 mapping between connected Firebase UID and a household FamilyMember.
-     * Passing memberId == null unlinks any existing mapping for targetUid.
+     * Allows ANY household member (CREATOR, EDITOR, or REGISTAR) to set 0, 1, 2, or more
+     * default payers for themselves on a household. The CREATOR may also configure default
+     * payers for shared users.
      */
-    fun assignUserDefaultPayer(targetUid: String, memberId: Long?) {
-        if (!vm.hasOwnerPermissions()) {
-            val isEn = vm._appLanguage.value == "EN"
-            vm.showSnackbar(if (isEn) "Only Creators or Editors can assign default payers" else "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να ορίσει προεπιλεγμένο πληρωτή")
+    fun assignUserDefaultPayers(householdId: String, targetUid: String, memberIds: List<Long>) {
+        val cleanUid = targetUid.trim()
+        val currentUserUid = vm._currentUser.value?.uid.orEmpty().trim()
+        if (cleanUid.isBlank() || currentUserUid.isBlank()) return
+
+        val resolvedHid = householdId.ifBlank { vm._currentHousehold.value?.id.orEmpty() }.trim()
+        val targetHousehold = vm._userHouseholds.value.find { it.id == resolvedHid }
+            ?: vm._currentHousehold.value?.takeIf { resolvedHid.isBlank() || it.id == resolvedHid }
+        val isEn = vm._appLanguage.value == "EN"
+
+        if (!DefaultPayerHelper.canAssignDefaultPayers(targetHousehold, currentUserUid, cleanUid)) {
+            vm.showSnackbar(
+                if (isEn) "Only the owner can change another user's default payer"
+                else "Μόνο ο ιδιοκτήτης μπορεί να αλλάξει τον προεπιλεγμένο πληρωτή άλλου χρήστη"
+            )
             return
         }
-        val cleanUid = targetUid.trim()
-        if (cleanUid.isBlank()) return
-        val householdId = vm._currentHousehold.value?.id.orEmpty()
-        val currentUserUid = vm._currentUser.value?.uid.orEmpty()
 
-        val prevMembers = vm._allMembers.value
-        val changedMembers = mutableListOf<FamilyMember>()
-        val updatedList = prevMembers.map { m ->
-            val updated = when {
-                memberId != null && m.id == memberId -> m.copy(linkedUserUid = cleanUid)
-                m.linkedUserUid == cleanUid -> m.copy(linkedUserUid = "")
-                else -> m
-            }
-            if (updated != m) changedMembers.add(updated)
-            updated
+        val validIds = memberIds.filter { it > 0L }.distinct()
+        val csv = DefaultPayerHelper.formatMemberIdsCsv(validIds)
+
+        if (resolvedHid.isNotBlank()) {
+            vm.prefs.edit().putString("default_payers_v2_${resolvedHid}_${cleanUid}", csv).apply()
+            vm._localDefaultPayersOverride.value = vm._localDefaultPayersOverride.value + ("$resolvedHid|$cleanUid" to csv)
         }
-        if (changedMembers.isEmpty()) return
 
-        vm._allMembers.value = updatedList
+        if (targetHousehold != null) {
+            val updatedMap = targetHousehold.memberDefaultPayers.toMutableMap().apply {
+                put(cleanUid, csv)
+            }
+            val optimisticHousehold = targetHousehold.copy(memberDefaultPayers = updatedMap)
+            vm._userHouseholds.value = vm._userHouseholds.value.map {
+                if (it.id == targetHousehold.id) optimisticHousehold else it
+            }
+            if (vm._currentHousehold.value?.id == targetHousehold.id) {
+                vm._currentHousehold.value = optimisticHousehold
+            }
+        }
+
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             vm.trackSyncStart()
             try {
-                vm.repository.updateMembers(changedMembers)
-                if (householdId.isNotBlank()) {
-                    changedMembers.forEach { m ->
-                        vm.firestoreSyncRepo.syncMember(
-                            householdId,
-                            FirebaseMember(
-                                id = m.id.toString(),
-                                householdId = householdId,
-                                userId = currentUserUid,
-                                name = m.name,
-                                role = m.role,
-                                avatarColorHex = m.avatarColorHex,
-                                voiceKeywords = m.voiceKeywords,
-                                isDefault = m.isDefault,
-                                sortOrder = m.sortOrder,
-                                linkedUserUid = m.linkedUserUid
-                            )
-                        )
+                if (resolvedHid.isNotBlank()) {
+                    val synced = vm.firestoreSyncRepo.updateUserDefaultPayers(resolvedHid, cleanUid, csv)
+                    if (synced != null) {
+                        vm._userHouseholds.value = vm._userHouseholds.value.map {
+                            if (it.id == resolvedHid) synced else it
+                        }
+                        if (vm._currentHousehold.value?.id == resolvedHid) {
+                            vm._currentHousehold.value = synced
+                        }
                     }
                 }
-                val isEn = vm._appLanguage.value == "EN"
-                val assignedMember = updatedList.find { memberId != null && it.id == memberId }
-                vm.showSnackbar(
-                    if (assignedMember != null) {
-                        if (isEn) "Default payer set to ${assignedMember.name}" else "Προεπιλεγμένος πληρωτής: ${assignedMember.name}"
-                    } else {
-                        if (isEn) "Default payer link removed" else "Αφαιρέθηκε η σύνδεση πληρωτή"
-                    }
-                )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                Log.w("OikoNomosVM", "assignUserDefaultPayer error: ${e.message}")
+                Log.w("OikoNomosVM", "assignUserDefaultPayers sync error: ${e.message}")
             } finally {
                 vm.trackSyncEnd()
             }
         }
+    }
+
+    fun assignUserDefaultPayer(targetUid: String, memberId: Long?) {
+        assignUserDefaultPayers(vm._currentHousehold.value?.id.orEmpty(), targetUid, listOfNotNull(memberId))
     }
 
     fun inviteMemberByEmail(email: String, role: String = "REGISTAR", @Suppress("UNUSED_PARAMETER") context: Context? = null, onComplete: ((Boolean, String) -> Unit)? = null) {
@@ -692,26 +694,11 @@ internal class OikoNomosHouseholdDelegate(
     }
 
     fun leaveSharedHousehold(household: Household) {
-        val user = vm._currentUser.value ?: return
-        val userEmail = user.email ?: vm._userProfile.value?.email ?: ""
         val isEn = vm._appLanguage.value == "EN"
-        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            try {
-                vm._isSyncing.value = true
-                vm.firestoreSyncRepo.leaveSharedHousehold(household.id, user.uid, userEmail)
-                val remaining = vm._userHouseholds.value.filter { it.id != household.id }
-                vm._userHouseholds.value = remaining
-                if (vm._currentHousehold.value?.id == household.id) {
-                    remaining.firstOrNull()?.let { switchExodologio(it) }
-                }
-                vm.showSnackbar(if (isEn) "You left the household \"${household.name}\"" else "Αποχωρήσατε από το εξοδολόγιο «${household.name}»")
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                vm.showSnackbar("Σφάλμα: ${e.localizedMessage}")
-            } finally {
-                vm._isSyncing.value = false
-            }
-        }
+        vm.showSnackbar(
+            if (isEn) "Only the household owner can remove users"
+            else "Μόνο ο ιδιοκτήτης μπορεί να αφαιρέσει χρήστες από το εξοδολόγιο"
+        )
     }
 
     fun renameHousehold(householdId: String, newName: String) {

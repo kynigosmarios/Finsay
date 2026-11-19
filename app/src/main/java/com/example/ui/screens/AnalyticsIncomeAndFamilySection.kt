@@ -1,5 +1,11 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.Income
+import com.example.ui.components.FinsayMotion
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.HomeDrillDownRequest
@@ -71,46 +79,21 @@ internal fun AnalyticsFamilyIncomeCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF10B981).copy(alpha = 0.15f),
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.TrendingUp,
-                                contentDescription = null,
-                                tint = Color(0xFF059669),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = Localization.familyIncome(lang),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.TrendingUp,
+                iconTint = Color(0xFF059669),
+                iconContainerColor = Color(0xFF10B981).copy(alpha = 0.14f),
+                title = Localization.familyIncome(lang),
+                trailing = {
+                    ChartTypeToggle(
+                        selectedType = chartTypeIncome,
+                        onSelectType = onSelectChartTypeIncome,
+                        activeColor = Color(0xFF059669),
+                        appLanguage = appLanguage
                     )
                 }
-
-                ChartTypeToggle(
-                    selectedType = chartTypeIncome,
-                    onSelectType = onSelectChartTypeIncome,
-                    activeColor = Color(0xFF059669),
-                    appLanguage = appLanguage
-                )
-            }
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -120,29 +103,24 @@ internal fun AnalyticsFamilyIncomeCard(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = Localization.noIncomesYet(lang),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = Localization.registerIncomeHint(lang),
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                    Text(
+                        text = Localization.noIncomesYet(lang),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
             } else {
                 val safeTotalIncome = totalIncome.coerceAtLeast(1.0)
 
-                if (chartTypeIncome == 1) {
+                AnimatedContent(
+                    targetState = chartTypeIncome,
+                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                    label = "income_chart_type"
+                ) { activeChartType ->
+                if (activeChartType == 1) {
                     val incomeSlices = members.mapNotNull { m ->
                         val inc = memberIncomeMap[m] ?: 0.0
                         if (inc > 0.001) {
@@ -196,91 +174,100 @@ internal fun AnalyticsFamilyIncomeCard(
                 } else {
                     val maxIncome = (memberIncomeMap.values + unassignedMemberIncomes).maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
 
-                    members.forEach { member ->
-                        val inc = memberIncomeMap[member] ?: 0.0
-                        val percent = ((inc / safeTotalIncome) * 100).toInt()
-                        val progress = (inc / maxIncome).toFloat().coerceIn(0f, 1f)
-                        val avatarColor = Color(member.avatarColorHex)
+                    Column {
+                        members.forEach { member ->
+                            val inc = memberIncomeMap[member] ?: 0.0
+                            val percent = ((inc / safeTotalIncome) * 100).toInt()
+                            val progress by animateFloatAsState(
+                                targetValue = (inc / maxIncome).toFloat().coerceIn(0f, 1f),
+                                animationSpec = FinsayMotion.ProgressSpec,
+                                label = "income_progress_${member.id}"
+                            )
+                            val avatarColor = Color(member.avatarColorHex)
 
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    onDrillDownToHome(
-                                        HomeDrillDownRequest(
-                                            periodKey = activeDrillDownPeriodKey,
-                                            typeFilter = "INCOME",
-                                            memberId = member.id,
-                                            specialFilter = AnalyticsSpecialFilter(
-                                                badgeLabel = "${Localization.income(lang)}: ${member.name}",
-                                                exactMemberId = member.id
-                                            )
-                                        )
-                                    )
-                                }
-                                .padding(vertical = 6.dp, horizontal = 2.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(28.dp)
-                                            .clip(CircleShape)
-                                            .background(avatarColor),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = member.name.take(1),
-                                            color = Color.White,
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = member.name,
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "${Localization.translateRole(member.role, lang)} • ${Localization.percentOfTotalIncome(percent, lang)}",
-                                            fontSize = 10.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                Text(
-                                    text = String.format(Locale.US, "+%.2f €", inc),
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Black,
-                                    color = if (inc > 0) Color(0xFF059669) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.height(6.dp))
-
-                            LinearProgressIndicator(
-                                progress = { progress },
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(6.dp)
-                                    .clip(CircleShape),
-                                color = if (inc > 0) avatarColor else Color.Transparent,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        }
-                    }
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        onDrillDownToHome(
+                                            HomeDrillDownRequest(
+                                                periodKey = activeDrillDownPeriodKey,
+                                                typeFilter = "INCOME",
+                                                memberId = member.id,
+                                                specialFilter = AnalyticsSpecialFilter(
+                                                    badgeLabel = "${Localization.income(lang)}: ${member.name}",
+                                                    exactMemberId = member.id
+                                                )
+                                            )
+                                        )
+                                    }
+                                    .padding(vertical = 6.dp, horizontal = 2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(28.dp)
+                                                .clip(CircleShape)
+                                                .background(avatarColor),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = member.name.take(1),
+                                                color = Color.White,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = member.name,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "${Localization.translateRole(member.role, lang)} • $percent%",
+                                                fontSize = 10.5.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
 
-                    if (unassignedMemberIncomes > 0.01) {
-                        val unassignedPct = ((unassignedMemberIncomes / safeTotalIncome) * 100).toInt()
-                        val unassignedProgress = (unassignedMemberIncomes / maxIncome).toFloat().coerceIn(0f, 1f)
+                                    Text(
+                                        text = String.format(Locale.US, "+%.2f €", inc),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (inc > 0) Color(0xFF059669) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                LinearProgressIndicator(
+                                    progress = { progress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(CircleShape),
+                                    color = if (inc > 0) avatarColor else Color.Transparent,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            }
+                        }
+
+                        if (unassignedMemberIncomes > 0.01) {
+                            val unassignedPct = ((unassignedMemberIncomes / safeTotalIncome) * 100).toInt()
+                            val unassignedProgress by animateFloatAsState(
+                                targetValue = (unassignedMemberIncomes / maxIncome).toFloat().coerceIn(0f, 1f),
+                                animationSpec = FinsayMotion.ProgressSpec,
+                                label = "income_progress_unassigned"
+                            )
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -328,7 +315,7 @@ internal fun AnalyticsFamilyIncomeCard(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = Localization.unassignedMemberIncome(unassignedPct, lang),
+                                            text = "$unassignedPct%",
                                             fontSize = 10.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -356,6 +343,8 @@ internal fun AnalyticsFamilyIncomeCard(
                             )
                         }
                     }
+                    }
+                }
                 }
 
                 if (categoryIncomeMap.isNotEmpty()) {
@@ -437,33 +426,13 @@ internal fun AnalyticsMemberDeficitAlertCard(
         border = BorderStroke(1.dp, Color(0xFFEF4444).copy(alpha = 0.45f)),
         modifier = Modifier.fillMaxWidth().testTag("members_deficit_alert_card")
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFEF4444).copy(alpha = 0.14f),
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Error,
-                            contentDescription = null,
-                            tint = Color(0xFFDC2626),
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = Localization.memberIncomeDeficitTitle(lang),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFDC2626)
-                )
-            }
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.Error,
+                iconTint = Color(0xFFDC2626),
+                iconContainerColor = Color(0xFFEF4444).copy(alpha = 0.14f),
+                title = Localization.memberIncomeDeficitTitle(lang)
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -553,46 +522,21 @@ internal fun AnalyticsFamilyVsKidsCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF0284C7).copy(alpha = 0.12f),
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.FamilyRestroom,
-                                contentDescription = null,
-                                tint = Color(0xFF0284C7),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = Localization.expenseDistribution(lang),
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.FamilyRestroom,
+                iconTint = Color(0xFF0284C7),
+                iconContainerColor = Color(0xFF0284C7).copy(alpha = 0.13f),
+                title = Localization.expenseDistribution(lang),
+                trailing = {
+                    ChartTypeToggle(
+                        selectedType = chartTypeFamily,
+                        onSelectType = onSelectChartTypeFamily,
+                        activeColor = Emerald700,
+                        appLanguage = appLanguage
                     )
                 }
-
-                ChartTypeToggle(
-                    selectedType = chartTypeFamily,
-                    onSelectType = onSelectChartTypeFamily,
-                    activeColor = Emerald700,
-                    appLanguage = appLanguage
-                )
-            }
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -600,7 +544,12 @@ internal fun AnalyticsFamilyVsKidsCard(
             val parentsPercent = ((parentsTotalSpend / safeTotal) * 100).toInt()
             val kidsPercent = ((kidsSpend / safeTotal) * 100).toInt()
 
-            if (chartTypeFamily == 1) {
+            AnimatedContent(
+                targetState = chartTypeFamily,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(160)) },
+                label = "family_chart_type"
+            ) { activeFamilyChart ->
+            if (activeFamilyChart == 1) {
                 PieChartView(
                     slices = listOf(
                         PieChartSlice(
@@ -642,6 +591,7 @@ internal fun AnalyticsFamilyVsKidsCard(
                     appLanguage = appLanguage
                 )
             } else {
+                Column {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -758,6 +708,8 @@ internal fun AnalyticsFamilyVsKidsCard(
                         )
                     }
                 }
+                }
+            }
             }
         }
     }
@@ -779,52 +731,27 @@ internal fun AnalyticsParentsForKidsCard(
         border = BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth().testTag("kids_spending_highlight_card")
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f, fill = false)
-                ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.FamilyRestroom,
+                iconTint = Color(0xFF4F46E5),
+                iconContainerColor = Color(0xFF6366F1).copy(alpha = 0.13f),
+                title = if (lang == Localization.Language.ENGLISH) "Parents' Expenses for Children" else "Έξοδα Γονέων για τα Παιδιά",
+                trailing = {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF6366F1).copy(alpha = 0.12f),
-                        modifier = Modifier.size(40.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF4F46E5).copy(alpha = 0.10f)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.FamilyRestroom,
-                                contentDescription = null,
-                                tint = Color(0xFF4F46E5),
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        Text(
+                            text = String.format(Locale.US, "%.2f €", kidsSpend),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF4338CA),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Parents' Expenses for Children" else "Έξοδα Γονέων για τα Παιδιά",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
                 }
-
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF4F46E5).copy(alpha = 0.10f)
-                ) {
-                    Text(
-                        text = String.format(Locale.US, "%.2f €", kidsSpend),
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF4338CA),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
-            }
+            )
 
             Spacer(modifier = Modifier.height(14.dp))
 

@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material3.Button
@@ -190,44 +192,39 @@ fun SavingsGoalDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
-            shape = RoundedCornerShape(26.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 480.dp)
-                .padding(horizontal = 20.dp, vertical = 16.dp)
-                .testTag("savings_goal_dialog")
-        ) {
-            Column(
+        SmoothDialogContent {
+            Card(
+                shape = RoundedCornerShape(26.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(22.dp)
+                    .widthIn(max = 480.dp)
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .testTag("savings_goal_dialog")
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(22.dp)
                 ) {
-                    Column {
+                    // Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = if (goalToEdit == null || goalToEdit.id == 0L) Localization.newGoal(lang) else Localization.editGoalTitle(lang),
                             fontSize = 19.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
                         )
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Set your target & deadline" else "Ορίστε το ποσό και την προθεσμία σας",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        IconButton(onClick = onDismiss) {
+                            Icon(Icons.Default.Close, contentDescription = Localization.close(lang))
+                        }
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = Localization.close(lang))
-                    }
-                }
 
                 Spacer(modifier = Modifier.height(18.dp))
 
@@ -339,11 +336,11 @@ fun SavingsGoalDialog(
                                     )
                                 }
                             }
-                            Text(
-                                text = if (deadline.isNotBlank()) Localization.changeAction(lang) else Localization.select(lang),
-                                fontSize = 12.sp,
-                                color = Emerald700,
-                                fontWeight = FontWeight.Bold
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = if (deadline.isNotBlank()) Localization.changeAction(lang) else Localization.select(lang),
+                                tint = Emerald700,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -363,47 +360,47 @@ fun SavingsGoalDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (positiveAmountDelta > 0.009) {
+                AnimatedVisibility(
+                    visible = positiveAmountDelta > 0.009,
+                    enter = FinsayMotion.ExpandEnter,
+                    exit = FinsayMotion.ShrinkExit
+                ) {
                     val deltaStr = if (kotlin.math.abs(positiveAmountDelta - positiveAmountDelta.toLong()) < 0.005) {
                         String.format(Locale.US, "%.0f€", positiveAmountDelta)
                     } else {
                         String.format(Locale.US, "%.2f€", positiveAmountDelta)
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Emerald700.copy(alpha = 0.08f),
-                        border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.25f)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Emerald700.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.25f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
                                 Text(
                                     text = if (isGreek) "Καταχώρηση (+$deltaStr) στα Έξοδα" else "Log (+$deltaStr) as Expense",
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp)
                                 )
-                                Text(
-                                    text = if (isGreek) "Εμφανίζεται στην Αρχική & στα Στατιστικά" else "Shows on Home & Statistics",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Switch(
+                                    checked = recordDeltaAsExpense,
+                                    onCheckedChange = { recordDeltaAsExpense = it },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = Emerald700
+                                    )
                                 )
                             }
-                            Switch(
-                                checked = recordDeltaAsExpense,
-                                onCheckedChange = { recordDeltaAsExpense = it },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color.White,
-                                    checkedTrackColor = Emerald700
-                                )
-                            )
                         }
                     }
                 }
@@ -450,6 +447,7 @@ fun SavingsGoalDialog(
                     }
                 }
             }
+        }
         }
     }
 }

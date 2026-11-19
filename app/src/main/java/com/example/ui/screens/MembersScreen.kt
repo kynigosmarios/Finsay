@@ -74,6 +74,7 @@ import androidx.compose.ui.window.Dialog
 import com.example.data.entity.Expense
 import com.example.data.entity.FamilyMember
 import com.example.data.model.Household
+import com.example.ui.components.SmoothDialogContent
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
@@ -214,25 +215,6 @@ fun MembersScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Text(
-                            text = if (canManage) {
-                                if (isGreek)
-                                    "Προσθέστε μέλη για να παρακολουθείτε ποιος πληρώνει τι."
-                                else
-                                    "Add members to track who pays what."
-                            } else {
-                                if (isGreek)
-                                    "Δεν υπάρχουν μέλη στο εξοδολόγιο."
-                                else
-                                    "No members in this household."
-                            },
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-
                         if (canManage) {
                             Spacer(modifier = Modifier.height(16.dp))
 
@@ -262,11 +244,15 @@ fun MembersScreen(
                         .padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    item {
+                    item(key = "top_spacer", contentType = "spacer") {
                         Spacer(modifier = Modifier.height(2.dp))
                     }
 
-                    itemsIndexed(members, key = { _, m -> if (m.id > 0) "member_${m.id}" else "mem_tmp_${m.name}" }) { index, member ->
+                    itemsIndexed(
+                        items = members,
+                        key = { _, m -> if (m.id > 0) "member_${m.id}" else "mem_tmp_${m.name}" },
+                        contentType = { _, _ -> "member_card" }
+                    ) { index, member ->
                         val color = Color(member.avatarColorHex)
 
                         Card(
@@ -445,7 +431,7 @@ fun MembersScreen(
 
                     // Recycle Bin / Soft-deleted members access button at the bottom
                     if (canManage) {
-                        item {
+                        item(key = "deleted_members_btn", contentType = "footer_button") {
                             Spacer(modifier = Modifier.height(10.dp))
                             OutlinedButton(
                                 onClick = { showDeletedMembersDialog = true },
@@ -473,7 +459,7 @@ fun MembersScreen(
                         }
                     }
 
-                    item {
+                    item(key = "bottom_spacer", contentType = "spacer") {
                         Spacer(modifier = Modifier.height(80.dp))
                     }
                 }
@@ -497,23 +483,14 @@ fun MembersScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = if (isGreek)
-                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε το μέλος «${m.name}»;"
-                        else
-                            "Are you sure you want to delete member \"${m.name}\"?",
-                        fontSize = 14.sp
-                    )
-                    Text(
-                        text = if (isGreek)
-                            "Το μέλος θα μεταφερθεί στα «Διαγραμμένα Μέλη», απ' όπου μπορείτε να το επαναφέρετε ανά πάσα στιγμή. Τα ήδη καταχωρημένα έξοδα και τα στατιστικά διατηρούνται 100% ανέπαφα."
-                        else
-                            "The member will be moved to \"Deleted Members\", from where you can restore it anytime. Existing expenses and statistics remain intact.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = if (isGreek)
+                        "«${m.name}» θα μεταφερθεί στα Διαγραμμένα. Τα έξοδα και στατιστικά διατηρούνται."
+                    else
+                        "\"${m.name}\" will move to Deleted Members. Existing expenses and stats remain intact.",
+                    fontSize = 13.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             },
             confirmButton = {
                 TextButton(
@@ -540,6 +517,7 @@ fun MembersScreen(
     // 2. Recycle Bin Dialog ("Διαγραμμένα Μέλη")
     if (showDeletedMembersDialog) {
         Dialog(onDismissRequest = { showDeletedMembersDialog = false }) {
+            SmoothDialogContent {
             Surface(
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
@@ -573,19 +551,12 @@ fun MembersScreen(
                                 )
                             }
                         }
-                        Column {
-                            Text(
-                                text = if (isGreek) "Διαγραμμένα Μέλη" else "Deleted Members",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isGreek) "Επαναφορά ή οριστική κατάργηση" else "Restore or permanently delete",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = if (isGreek) "Διαγραμμένα Μέλη" else "Deleted Members",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
 
                     if (deletedMembers.isEmpty()) {
@@ -730,6 +701,7 @@ fun MembersScreen(
                         )
                     }
                 }
+            }
             }
         }
     }

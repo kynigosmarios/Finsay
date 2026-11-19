@@ -267,6 +267,7 @@ fun ExpensesScreen(
     val isWithinBudget = totalExpensesAmount <= totalBudget
     val animatedBudgetProgress by animateFloatAsState(
         targetValue = (budgetPercent.coerceIn(0, 100) / 100f),
+        animationSpec = com.example.ui.components.FinsayMotion.ProgressSpec,
         label = "budget_progress"
     )
 
@@ -278,8 +279,7 @@ fun ExpensesScreen(
     }
 
     val displayItems = remember(monthExpenses, monthIncomes, selectedTypeFilter, categories, members, locale, lang) {
-        val dateTimeFormat = SimpleDateFormat("dd/MM/yyyy • HH:mm", locale)
-        val dateFormat = SimpleDateFormat("dd/MM/yyyy", locale)
+        val timeOnlyFormat = SimpleDateFormat("HH:mm", locale)
         val itemCal = Calendar.getInstance()
 
         val catById = categories.associateBy { it.id }
@@ -305,7 +305,7 @@ fun ExpensesScreen(
             val safeTs = if (exp.timestamp > 0L) exp.timestamp else System.currentTimeMillis()
             itemCal.timeInMillis = safeTs
             val hasTime = itemCal.get(Calendar.HOUR_OF_DAY) != 0 || itemCal.get(Calendar.MINUTE) != 0
-            val dateStr = if (hasTime) dateTimeFormat.format(Date(safeTs)) else dateFormat.format(Date(safeTs))
+            val dateStr = if (hasTime) timeOnlyFormat.format(Date(safeTs)) else ""
 
             val rawPayer = exp.getPayerCategoryOrNamesDisplay(members, lang)
             val cleanPayer = stripParen(rawPayer)
@@ -346,7 +346,7 @@ fun ExpensesScreen(
             val safeTs = if (inc.timestamp > 0L) inc.timestamp else System.currentTimeMillis()
             itemCal.timeInMillis = safeTs
             val hasTime = itemCal.get(Calendar.HOUR_OF_DAY) != 0 || itemCal.get(Calendar.MINUTE) != 0
-            val dateStr = if (hasTime) dateTimeFormat.format(Date(safeTs)) else dateFormat.format(Date(safeTs))
+            val dateStr = if (hasTime) timeOnlyFormat.format(Date(safeTs)) else ""
             val baseKey = if (inc.id > 0) "inc_${inc.id}" else "inc_c_${if (inc.cloudId.isNotBlank()) inc.cloudId else safeTs.toString()}_${inc.title.hashCode()}"
             val key = uniqueKey(baseKey)
 
@@ -433,7 +433,7 @@ fun ExpensesScreen(
             contentPadding = PaddingValues(bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "hero_dashboard_card") {
+            item(key = "hero_dashboard_card", contentType = "hero") {
                 ExpensesHeroDashboardCard(
                     currentMonthDisplay = currentMonthDisplay,
                     availableMonths = availableMonths,
@@ -458,7 +458,7 @@ fun ExpensesScreen(
                 )
             }
 
-            item(key = "search_bar_item") {
+            item(key = "search_bar_item", contentType = "search") {
                 ExpensesSearchBar(
                     searchQuery = searchQuery,
                     lang = lang,
@@ -466,7 +466,7 @@ fun ExpensesScreen(
                 )
             }
 
-            item(key = "filter_dropdowns_item") {
+            item(key = "filter_dropdowns_item", contentType = "filters") {
                 ExpensesFilterDropdowns(
                     members = members,
                     categories = categories,
@@ -479,7 +479,7 @@ fun ExpensesScreen(
             }
 
             if (activeSpecialFilter != null && activeSpecialFilter.badgeLabel.isNotBlank()) {
-                item(key = "active_special_filter_chip") {
+                item(key = "active_special_filter_chip", contentType = "special_filter") {
                     ActiveSpecialFilterBadge(
                         activeSpecialFilter = activeSpecialFilter,
                         lang = lang,
@@ -488,7 +488,7 @@ fun ExpensesScreen(
                 }
             }
 
-            item(key = "monthly_summary_card") {
+            item(key = "monthly_summary_card", contentType = "monthly_summary") {
                 MonthlySummaryExpandableCard(
                     currentMonthDisplay = currentMonthDisplay,
                     itemsCount = displayItems.size,
@@ -499,7 +499,7 @@ fun ExpensesScreen(
             }
 
             if (isInitialLoading) {
-                item(key = "loading_state") {
+                item(key = "loading_state", contentType = "loading") {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -510,7 +510,7 @@ fun ExpensesScreen(
                     }
                 }
             } else if (displayItems.isEmpty()) {
-                item(key = "empty_state") {
+                item(key = "empty_state", contentType = "empty") {
                     ExpensesEmptyStateCard(
                         isIncomeMode = selectedTypeFilter == "INCOME",
                         lang = lang,
@@ -520,10 +520,11 @@ fun ExpensesScreen(
                 }
             } else if (isMonthlyListExpanded) {
                 groupedItems.forEach { group ->
-                    item(key = "header_${group.key}") {
+                    item(key = "header_${group.key}", contentType = "day_header") {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .animateItem()
                                 .padding(horizontal = 20.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -549,21 +550,24 @@ fun ExpensesScreen(
 
                     items(
                         items = group.items,
-                        key = { it.key }
+                        key = { it.key },
+                        contentType = { if (it is ActivityItem.ExpenseItem) "expense_row" else "income_row" }
                     ) { item ->
                         when (item) {
                             is ActivityItem.ExpenseItem -> {
                                 ExpenseCardItem(
                                     item = item,
                                     onEditExpense = onEditExpense,
-                                    onDeleteExpense = { expenseToDelete = it }
+                                    onDeleteExpense = { expenseToDelete = it },
+                                    modifier = Modifier.animateItem()
                                 )
                             }
                             is ActivityItem.IncomeItem -> {
                                 IncomeCardItem(
                                     item = item,
                                     onEditIncome = onEditIncome,
-                                    onDeleteIncome = { incomeToDelete = it }
+                                    onDeleteIncome = { incomeToDelete = it },
+                                    modifier = Modifier.animateItem()
                                 )
                             }
                         }
@@ -578,7 +582,15 @@ fun ExpensesScreen(
         AlertDialog(
             onDismissRequest = { expenseToDelete = null },
             title = { Text(Localization.delete(lang)) },
-            text = { Text("Είστε βέβαιοι ότι θέλετε να διαγράψετε το έξοδο «${exp.title}» (${String.format(Locale.US, "%.2f €", exp.amount)});") },
+            text = {
+                Text(
+                    if (lang == Localization.Language.ENGLISH) {
+                        "Delete \"${exp.title}\" (${String.format(Locale.US, "%.2f €", exp.amount)})?"
+                    } else {
+                        "Διαγραφή «${exp.title}» (${String.format(Locale.US, "%.2f €", exp.amount)});"
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -602,7 +614,15 @@ fun ExpensesScreen(
         AlertDialog(
             onDismissRequest = { incomeToDelete = null },
             title = { Text(Localization.delete(lang)) },
-            text = { Text("Είστε βέβαιοι ότι θέλετε να διαγράψετε το έσοδο «${inc.title}» (${String.format(Locale.US, "%.2f €", inc.amount)});") },
+            text = {
+                Text(
+                    if (lang == Localization.Language.ENGLISH) {
+                        "Delete \"${inc.title}\" (${String.format(Locale.US, "%.2f €", inc.amount)})?"
+                    } else {
+                        "Διαγραφή «${inc.title}» (${String.format(Locale.US, "%.2f €", inc.amount)});"
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

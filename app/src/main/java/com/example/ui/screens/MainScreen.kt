@@ -10,16 +10,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import com.example.ui.components.FinsayMotion
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -139,6 +142,7 @@ import com.example.ui.components.VoiceConfirmationDialog
 import com.example.ui.components.VoiceInputDialog
 import com.example.ui.components.VoiceListeningOverlay
 import com.example.ui.components.VoiceMicButton
+import com.example.ui.components.WelcomeOnboardingCarouselDialog
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald400
@@ -239,6 +243,7 @@ fun MainScreen(
     val resolvedUsersByUid by viewModel.resolvedUsersByUid.collectAsStateWithLifecycle()
     val syncStatusState by viewModel.syncStatusState.collectAsStateWithLifecycle()
     val connectedHouseholdUsers by viewModel.connectedHouseholdUsers.collectAsStateWithLifecycle()
+    val defaultPayerMembers by viewModel.defaultPayerMembers.collectAsStateWithLifecycle()
     val defaultPayerMember by viewModel.defaultPayerMember.collectAsStateWithLifecycle()
     val pendingUndoDeletion by viewModel.pendingUndoDeletion.collectAsStateWithLifecycle()
     val householdActivities by viewModel.householdActivities.collectAsStateWithLifecycle()
@@ -267,6 +272,7 @@ fun MainScreen(
     val savingsGoals by viewModel.allSavingsGoals.collectAsStateWithLifecycle()
     val launchWithChooser by viewModel.launchWithChooser.collectAsStateWithLifecycle()
     val showOnboardingCarousel by viewModel.showOnboardingCarousel.collectAsStateWithLifecycle()
+    val showWelcomeCarousel by viewModel.showWelcomeCarousel.collectAsStateWithLifecycle()
     val dailyReminderEnabled by viewModel.dailyReminderEnabled.collectAsStateWithLifecycle()
     val dailyReminderHour by viewModel.dailyReminderHour.collectAsStateWithLifecycle()
     val dailyReminderMinute by viewModel.dailyReminderMinute.collectAsStateWithLifecycle()
@@ -593,8 +599,12 @@ fun MainScreen(
                 onSwitchClick = { viewModel.openExodologioManager() }
             )
 
-            // Bank Notification Auto-Catcher Banner
-            if (pendingBankTransactions.isNotEmpty()) {
+            // Bank Notification Auto-Catcher Banner (Pro-only)
+            AnimatedVisibility(
+                visible = isUserPro && bankAutoCatcherEnabled && pendingBankTransactions.isNotEmpty(),
+                enter = FinsayMotion.BannerEnter,
+                exit = FinsayMotion.BannerExit
+            ) {
                 BankNotificationBanner(
                     transactions = pendingBankTransactions,
                     appLanguage = appLanguage,
@@ -604,7 +614,11 @@ fun MainScreen(
             }
 
             // Bill / Expense Reminders Due Banner (CREATOR/EDITOR only per RBAC 4.2)
-            if (canManage && activeDueReminders.isNotEmpty()) {
+            AnimatedVisibility(
+                visible = canManage && activeDueReminders.isNotEmpty(),
+                enter = FinsayMotion.BannerEnter,
+                exit = FinsayMotion.BannerExit
+            ) {
                 ReminderNotificationBanner(
                     reminders = activeDueReminders,
                     appLanguage = appLanguage,
@@ -618,11 +632,52 @@ fun MainScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                Crossfade(
-                targetState = activeSubPage ?: currentTab,
-                animationSpec = tween(durationMillis = 150),
-                label = "tab_navigation_crossfade"
-            ) { route ->
+                AnimatedContent(
+                    targetState = activeSubPage ?: currentTab,
+                    transitionSpec = {
+                        val target = targetState
+                        val initial = initialState
+                        val enteringSubPage = target is InAppSubPage && initial !is InAppSubPage
+                        val leavingSubPage = target !is InAppSubPage && initial is InAppSubPage
+                        val tabSlideDir = if (target is Int && initial is Int) {
+                            if (target >= initial) 1 else -1
+                        } else 1
+
+                        when {
+                            enteringSubPage -> {
+                                (slideInHorizontally(
+                                    animationSpec = tween(FinsayMotion.SUBPAGE_ENTER_MS, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { fullWidth -> fullWidth / 5 }
+                                ) + fadeIn(tween(FinsayMotion.SUBPAGE_ENTER_MS, easing = FastOutSlowInEasing))) togetherWith
+                                    (slideOutHorizontally(
+                                        animationSpec = tween(FinsayMotion.SUBPAGE_EXIT_MS, easing = FastOutSlowInEasing),
+                                        targetOffsetX = { fullWidth -> -fullWidth / 14 }
+                                    ) + fadeOut(tween(150)))
+                            }
+                            leavingSubPage -> {
+                                (slideInHorizontally(
+                                    animationSpec = tween(FinsayMotion.SUBPAGE_ENTER_MS, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { fullWidth -> -fullWidth / 14 }
+                                ) + fadeIn(tween(FinsayMotion.SUBPAGE_ENTER_MS, easing = FastOutSlowInEasing))) togetherWith
+                                    (slideOutHorizontally(
+                                        animationSpec = tween(FinsayMotion.SUBPAGE_EXIT_MS, easing = FastOutSlowInEasing),
+                                        targetOffsetX = { fullWidth -> fullWidth / 5 }
+                                    ) + fadeOut(tween(160)))
+                            }
+                            else -> {
+                                (slideInHorizontally(
+                                    animationSpec = tween(FinsayMotion.TAB_DURATION_MS, easing = FastOutSlowInEasing),
+                                    initialOffsetX = { fullWidth -> (fullWidth / 14) * tabSlideDir }
+                                ) + fadeIn(tween(FinsayMotion.TAB_DURATION_MS, easing = FastOutSlowInEasing))) togetherWith
+                                    (slideOutHorizontally(
+                                        animationSpec = tween(160, easing = FastOutSlowInEasing),
+                                        targetOffsetX = { fullWidth -> -(fullWidth / 18) * tabSlideDir }
+                                    ) + fadeOut(tween(130)))
+                            }
+                        }.using(SizeTransform(clip = false))
+                    },
+                    label = "tab_navigation_animated_content"
+                ) { route ->
                 when (route) {
                     0 -> ExpensesScreen(
                         expenses = expenses,
@@ -756,12 +811,12 @@ fun MainScreen(
                         allMembers = members,
                         connectedUsers = connectedHouseholdUsers,
                         onAssignDefaultPayer = { uid, mid -> viewModel.assignUserDefaultPayer(uid, mid) },
+                        onAssignDefaultPayers = { hid, uid, ids -> viewModel.assignUserDefaultPayers(hid, uid, ids) },
                         onSearchUser = { email, hid -> viewModel.searchVerifiedUserForSharing(email, hid) },
                         onClearLookup = { viewModel.clearVerifiedUserLookupState() },
                         onAddSharedUser = { hid, user, role -> viewModel.shareHouseholdWithVerifiedUser(hid, user, role) },
                         onChangeSharedUserRole = { hid, uid, email, role -> viewModel.updateSharedUserRole(hid, uid, email, role) },
                         onRemoveSharedUser = { hid, uid, email -> viewModel.removeSharedUserFromHousehold(hid, uid, email) },
-                        onLeaveHousehold = { viewModel.leaveSharedHousehold(it) },
                         appLanguage = appLanguage,
                         currentUserId = currentUser?.uid.orEmpty(),
                         onRenameHousehold = { viewModel.renameCurrentHousehold(it) },
@@ -786,8 +841,11 @@ fun MainScreen(
                         categories = categories,
                         members = members,
                         defaultPayerMember = defaultPayerMember,
+                        defaultPayerMembers = defaultPayerMembers,
                         onSuggestCategory = { m, afm -> viewModel.suggestCategoryForMerchant(m, afm) },
                         onLearnCategory = { m, cid, cname, afm -> viewModel.learnCategoryForMerchant(m, cid, cname, afm) },
+                        isPro = isUserPro,
+                        onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
                         appLanguage = appLanguage,
                         onDismiss = { viewModel.dismissRemindersManagerDialog() },
                         onSaveReminder = { id, title, amount, categoryId, categoryName, dayOfMonth, reminderHour, reminderMinute, splitType, memberIds, memberNamesDisplay, note, payerId, payerName, payerIdsCsv, payerAmountsCsv, frequency, anchorMonth ->
@@ -845,6 +903,8 @@ fun MainScreen(
                         reminderMinute = dailyReminderMinute,
                         notificationConsentHandled = notificationConsentCompleted,
                         bankAutoCatcherEnabled = bankAutoCatcherEnabled,
+                        isPro = isUserPro,
+                        onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
                         onAcceptNotificationConsent = { viewModel.acceptNotificationConsent() },
                         onToggleReminder = { viewModel.toggleDailyReminder(it) },
                         onSetReminderTime = { h, m -> viewModel.setDailyReminderTime(h, m) },
@@ -855,7 +915,7 @@ fun MainScreen(
                         onCreateHousehold = { viewModel.createHousehold(it) },
                         onJoinHousehold = { viewModel.joinHousehold(it) },
                         onSignOut = { viewModel.signOutUser() },
-                        onClearAllDataAndSignOut = { viewModel.factoryResetAndSignOut() },
+                        onClearAllDataAndSignOut = { viewModel.clearCurrentHouseholdAllData() },
                         onMessage = { viewModel.showSnackbar(it) },
                         onDismiss = { viewModel.dismissSettingsDialog() }
                     )
@@ -905,13 +965,23 @@ fun MainScreen(
             )
 
             // Floating Voice Mic Button positioned identically to Scaffold's FAB, underneath BurgerMenuDrawer
-            if (activeSubPage == null) {
+            AnimatedVisibility(
+                visible = activeSubPage == null,
+                enter = scaleIn(
+                    initialScale = 0.82f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeIn(tween(160)),
+                exit = scaleOut(targetScale = 0.82f, animationSpec = tween(120)) + fadeOut(tween(120)),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+            ) {
                 VoiceMicButton(
                     isListening = isListening,
-                    onMicClick = { viewModel.openVoiceInputDialog() },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 16.dp)
+                    onMicClick = { viewModel.openVoiceInputDialog() }
                 )
             }
 
@@ -951,6 +1021,7 @@ fun MainScreen(
         categories = categories,
         members = members,
         defaultPayerMember = defaultPayerMember,
+        defaultPayerMembers = defaultPayerMembers,
         appLanguage = appLanguage,
         onConfirm = { title, amount, categoryId, categoryName, timestamp, splitType, memberIds, memberNamesDisplay, prompt, payerId, payerName, payerMemberIdsCsv, payerAmountsCsv ->
             viewModel.confirmVoiceExpense(
@@ -980,6 +1051,9 @@ fun MainScreen(
             members = members,
             appLanguage = appLanguage,
             defaultPayerMember = defaultPayerMember,
+            defaultPayerMembers = defaultPayerMembers,
+            isPro = isUserPro,
+            onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
             onSuggestCategory = { m, afm -> viewModel.suggestCategoryForMerchant(m, afm) },
             onLearnCategory = { m, cid, cname, afm -> viewModel.learnCategoryForMerchant(m, cid, cname, afm) },
             onDismiss = { viewModel.dismissManualExpenseDialog() },
@@ -1076,12 +1150,12 @@ fun MainScreen(
             allMembers = members,
             connectedUsers = connectedHouseholdUsers,
             onAssignDefaultPayer = { uid, mid -> viewModel.assignUserDefaultPayer(uid, mid) },
+            onAssignDefaultPayers = { hid, uid, ids -> viewModel.assignUserDefaultPayers(hid, uid, ids) },
             onSearchUser = { email, hid -> viewModel.searchVerifiedUserForSharing(email, hid) },
             onClearLookup = { viewModel.clearVerifiedUserLookupState() },
             onAddSharedUser = { hid, user, role -> viewModel.shareHouseholdWithVerifiedUser(hid, user, role) },
             onChangeSharedUserRole = { hid, uid, email, role -> viewModel.updateSharedUserRole(hid, uid, email, role) },
             onRemoveSharedUser = { hid, uid, email -> viewModel.removeSharedUserFromHousehold(hid, uid, email) },
-            onLeaveHousehold = { viewModel.leaveSharedHousehold(it) },
             appLanguage = appLanguage,
             currentUserId = currentUser?.uid.orEmpty(),
             onSelectHousehold = { viewModel.switchExodologio(it) },
@@ -1233,6 +1307,15 @@ fun MainScreen(
             currencySymbol = currencySymbol,
             appLanguage = appLanguage,
             onDismiss = { viewModel.dismissActivityDialog() }
+        )
+    }
+
+    // New-User Welcome Onboarding Carousel
+    if (showWelcomeCarousel) {
+        WelcomeOnboardingCarouselDialog(
+            appLanguage = appLanguage,
+            onDismiss = { viewModel.dismissWelcomeCarousel() },
+            onOpenProPaywall = { viewModel.showPremiumPaywall("welcome_carousel") }
         )
     }
 

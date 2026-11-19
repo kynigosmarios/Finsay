@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Euro
@@ -91,6 +95,7 @@ fun VoiceConfirmationDialog(
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
     defaultPayerMember: FamilyMember? = null,
+    defaultPayerMembers: List<FamilyMember> = listOfNotNull(defaultPayerMember),
     appLanguage: String = "EL",
     onConfirm: (
         title: String,
@@ -112,8 +117,15 @@ fun VoiceConfirmationDialog(
     if (pendingExpense == null) return
 
     val lang = Localization.Language.fromCode(appLanguage)
+    val validDefaultPayers = remember(members, defaultPayerMembers, defaultPayerMember) {
+        val list = defaultPayerMembers
+            .filter { dp -> members.any { it.id == dp.id } }
+            .distinctBy { it.id }
+        if (list.isNotEmpty()) list
+        else listOfNotNull(defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } })
+    }
 
-    val selectedPayerIds = remember(pendingExpense, members, defaultPayerMember) {
+    val selectedPayerIds = remember(pendingExpense, members, validDefaultPayers) {
         val list = mutableStateListOf<Long>()
         if (pendingExpense.payerMemberIdsCsv.isNotBlank()) {
             val ids = pendingExpense.payerMemberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
@@ -136,10 +148,13 @@ fun VoiceConfirmationDialog(
             }
         }
         if (list.isEmpty()) {
-            val def = (if (!pendingExpense.hasExplicitPayer) defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } } else null)
-                ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
-                ?: members.firstOrNull()
-            if (def != null) list.add(def.id)
+            if (!pendingExpense.hasExplicitPayer && validDefaultPayers.isNotEmpty()) {
+                list.addAll(validDefaultPayers.map { it.id })
+            } else {
+                val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                    ?: members.firstOrNull()
+                if (def != null) list.add(def.id)
+            }
         }
         list
     }
@@ -239,6 +254,7 @@ fun VoiceConfirmationDialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        SmoothDialogContent {
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
@@ -366,14 +382,6 @@ fun VoiceConfirmationDialog(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // Date
-                    Text(
-                        text = Localization.dateLabel(lang),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
@@ -397,12 +405,14 @@ fun VoiceConfirmationDialog(
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column {
-                                    Text(
-                                        text = if (isSelectedDateToday) Localization.today(lang) else Localization.date(lang),
-                                        fontSize = 11.sp,
-                                        color = Emerald700,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    if (isSelectedDateToday) {
+                                        Text(
+                                            text = Localization.today(lang),
+                                            fontSize = 11.sp,
+                                            color = Emerald700,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                     Text(
                                         text = displayDateFormat.format(Date(selectedTimestamp)).replaceFirstChar { it.uppercase() },
                                         fontSize = 13.sp,
@@ -412,18 +422,12 @@ fun VoiceConfirmationDialog(
                                 }
                             }
 
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Emerald100
-                            ) {
-                                Text(
-                                    text = Localization.changeAction(lang),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Emerald700,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = Localization.changeAction(lang),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                     }
 
@@ -490,11 +494,6 @@ fun VoiceConfirmationDialog(
                             )
                         }
                     }
-                    Text(
-                        text = Localization.payersSubtitle(lang),
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     Spacer(modifier = Modifier.height(6.dp))
 
                     FlowRow(
@@ -505,7 +504,6 @@ fun VoiceConfirmationDialog(
                         members.forEach { member ->
                             val isPayer = selectedPayerIds.contains(member.id)
                             val avatarColor = Color(member.avatarColorHex)
-                            val translatedRole = Localization.translateRole(member.role, lang)
 
                             FilterChip(
                                 selected = isPayer,
@@ -525,7 +523,7 @@ fun VoiceConfirmationDialog(
                                         }
                                     }
                                 },
-                                label = { Text("${member.name} ($translatedRole)", fontSize = 12.sp) },
+                                label = { Text(member.name, fontSize = 12.sp) },
                                 leadingIcon = {
                                     Box(
                                         modifier = Modifier
@@ -544,7 +542,12 @@ fun VoiceConfirmationDialog(
 
                     // Multi-payer allocation details card (when 2 or more payers selected)
                     val currentParsedAmt = amountText.toDoubleOrNull() ?: 0.0
-                    if (selectedPayerIds.size > 1) {
+                    AnimatedVisibility(
+                        visible = selectedPayerIds.size > 1,
+                        enter = FinsayMotion.ExpandEnter,
+                        exit = FinsayMotion.ShrinkExit
+                    ) {
+                        Column {
                         Spacer(modifier = Modifier.height(10.dp))
                         Card(
                             shape = RoundedCornerShape(18.dp),
@@ -556,6 +559,27 @@ fun VoiceConfirmationDialog(
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 // Full-width Segmented Tab Control
+                                val equalBg by animateColorAsState(
+                                    targetValue = if (!isCustomPayerSplit) Emerald700 else Color.Transparent,
+                                    animationSpec = tween(200),
+                                    label = "voice_payer_equal_bg"
+                                )
+                                val equalText by animateColorAsState(
+                                    targetValue = if (!isCustomPayerSplit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    animationSpec = tween(200),
+                                    label = "voice_payer_equal_text"
+                                )
+                                val customBg by animateColorAsState(
+                                    targetValue = if (isCustomPayerSplit) Emerald700 else Color.Transparent,
+                                    animationSpec = tween(200),
+                                    label = "voice_payer_custom_bg"
+                                )
+                                val customText by animateColorAsState(
+                                    targetValue = if (isCustomPayerSplit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    animationSpec = tween(200),
+                                    label = "voice_payer_custom_text"
+                                )
+
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -568,7 +592,7 @@ fun VoiceConfirmationDialog(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(if (!isCustomPayerSplit) Emerald700 else Color.Transparent)
+                                            .background(equalBg)
                                             .clickable { isCustomPayerSplit = false }
                                             .padding(vertical = 8.dp),
                                         contentAlignment = Alignment.Center
@@ -577,7 +601,7 @@ fun VoiceConfirmationDialog(
                                             text = Localization.payerSplitModeEqual(lang),
                                             fontSize = 12.5.sp,
                                             fontWeight = if (!isCustomPayerSplit) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (!isCustomPayerSplit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = equalText
                                         )
                                     }
 
@@ -585,7 +609,7 @@ fun VoiceConfirmationDialog(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(if (isCustomPayerSplit) Emerald700 else Color.Transparent)
+                                            .background(customBg)
                                             .clickable {
                                                 isCustomPayerSplit = true
                                                 val share = if (currentParsedAmt > 0) currentParsedAmt / selectedPayerIds.size else 0.0
@@ -602,7 +626,7 @@ fun VoiceConfirmationDialog(
                                             text = Localization.payerSplitModeCustom(lang),
                                             fontSize = 12.5.sp,
                                             fontWeight = if (isCustomPayerSplit) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isCustomPayerSplit) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = customText
                                         )
                                     }
                                 }
@@ -694,11 +718,6 @@ fun VoiceConfirmationDialog(
                                                         fontSize = 12.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    Text(
-                                                        text = " (${Localization.translateRole(m.role, lang)})",
-                                                        fontSize = 11.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
                                                 }
 
@@ -797,9 +816,8 @@ fun VoiceConfirmationDialog(
                                 }
                             }
                         }
+                        }
                     }
-
-                    Spacer(modifier = Modifier.height(16.dp))
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -813,17 +831,12 @@ fun VoiceConfirmationDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Member the expense concerns (Beneficiary):" else "Μέλος που αφορά το έξοδο (Σε ποιον αναλογεί):",
+                            text = if (lang == Localization.Language.ENGLISH) "Who is this for?" else "Σε ποιον αφορά;",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    Text(
-                        text = if (lang == Localization.Language.ENGLISH) "e.g. Select the children to track how much you spend for them!" else "π.χ. Επιλέξτε τα παιδιά για να γνωρίζετε πόσα ξοδεύετε για αυτά!",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                     Spacer(modifier = Modifier.height(6.dp))
 
                     // All Family Toggle
@@ -850,56 +863,55 @@ fun VoiceConfirmationDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Common to entire household (Family)" else "Κοινό έξοδο όλου του σπιτιού (Οικογένεια)",
+                                text = if (lang == Localization.Language.ENGLISH) "Shared across household" else "Κοινό για όλο το σπίτι",
                                 fontSize = 13.sp,
                                 fontWeight = if (isAllFamily) FontWeight.Bold else FontWeight.Normal
                             )
                         }
                     }
 
-                    if (!isAllFamily) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Select participating members:" else "Επιλέξτε ποια άτομα αφορά:",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
+                    AnimatedVisibility(
+                        visible = !isAllFamily,
+                        enter = FinsayMotion.ExpandEnter,
+                        exit = FinsayMotion.ShrinkExit
+                    ) {
+                        Column {
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            members.forEach { member ->
-                                val isChecked = selectedMemberIds.contains(member.id)
-                                val avatarColor = Color(member.avatarColorHex)
-                                val translatedRole = Localization.translateRole(member.role, lang)
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                members.forEach { member ->
+                                    val isChecked = selectedMemberIds.contains(member.id)
+                                    val avatarColor = Color(member.avatarColorHex)
 
-                                FilterChip(
-                                    selected = isChecked,
-                                    onClick = {
-                                        if (isChecked) {
-                                            if (selectedMemberIds.size > 1) {
-                                                selectedMemberIds.remove(member.id)
+                                    FilterChip(
+                                        selected = isChecked,
+                                        onClick = {
+                                            if (isChecked) {
+                                                if (selectedMemberIds.size > 1) {
+                                                    selectedMemberIds.remove(member.id)
+                                                }
+                                            } else {
+                                                selectedMemberIds.add(member.id)
                                             }
-                                        } else {
-                                            selectedMemberIds.add(member.id)
-                                        }
-                                    },
-                                    label = { Text("${member.name} ($translatedRole)", fontSize = 12.sp) },
-                                    leadingIcon = {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(12.dp)
-                                                .clip(CircleShape)
-                                                .background(avatarColor)
+                                        },
+                                        label = { Text(member.name, fontSize = 12.sp) },
+                                        leadingIcon = {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(12.dp)
+                                                    .clip(CircleShape)
+                                                    .background(avatarColor)
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = avatarColor.copy(alpha = 0.2f)
                                         )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = avatarColor.copy(alpha = 0.2f)
                                     )
-                                )
+                                }
                             }
                         }
                     }
@@ -917,15 +929,12 @@ fun VoiceConfirmationDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Split calculation: " else "Διαμοιρασμός: ",
+                                    text = if (lang == Localization.Language.ENGLISH) "Per person: " else "Ανά άτομο: ",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH)
-                                        String.format(Locale.US, "%.2f € / person", splitPerPerson)
-                                    else
-                                        String.format(Locale.US, "%.2f € / άτομο", splitPerPerson),
+                                    text = String.format(Locale.US, "%.2f €", splitPerPerson),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Emerald700
@@ -1006,10 +1015,13 @@ fun VoiceConfirmationDialog(
                             }
 
                             val finalPayerIds = selectedPayerIds.toList().ifEmpty {
-                                val def = defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } }
-                                    ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
-                                    ?: members.firstOrNull()
-                                if (def != null) listOf(def.id) else emptyList()
+                                if (validDefaultPayers.isNotEmpty()) {
+                                    validDefaultPayers.map { it.id }
+                                } else {
+                                    val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                                        ?: members.firstOrNull()
+                                    if (def != null) listOf(def.id) else emptyList()
+                                }
                             }
 
                             val finalPayerMember: FamilyMember? = if (finalPayerIds.isNotEmpty()) members.find { it.id == finalPayerIds[0] } else null
@@ -1078,6 +1090,7 @@ fun VoiceConfirmationDialog(
                     }
                 }
             }
+        }
         }
     }
 }

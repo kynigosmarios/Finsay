@@ -29,6 +29,7 @@ import com.example.util.AnalyticsExpenseFilterHelper
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.BankNotificationHolder
 import com.example.util.BankNotificationSystemManager
+import com.example.util.DefaultPayerHelper
 import com.example.util.GreekVoiceParser
 import com.example.util.HomeDrillDownRequest
 import com.example.util.NetworkConnectivityMonitor
@@ -263,15 +264,39 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         .catch { emit(emptyList()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val defaultPayerMember: StateFlow<FamilyMember?> = combine(
-        _currentUser,
-        _allMembers
-    ) { user, members ->
-        val uid = user?.uid.orEmpty()
-        members.firstOrNull { uid.isNotBlank() && it.linkedUserUid == uid }
-            ?: members.firstOrNull { it.isDefault }
-            ?: members.firstOrNull()
+    internal val _localDefaultPayersOverride = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    internal fun getLocalDefaultPayersCsv(householdId: String, uid: String): String? {
+        if (householdId.isBlank() || uid.isBlank()) return null
+        val mapKey = "$householdId|$uid"
+        _localDefaultPayersOverride.value[mapKey]?.let { return it }
+        val prefKey = "default_payers_v2_${householdId}_${uid}"
+        return if (prefs.contains(prefKey)) prefs.getString(prefKey, "") else null
     }
+
+    val defaultPayerMembers: StateFlow<List<FamilyMember>> = combine(
+        _currentUser,
+        _currentHousehold,
+        _allMembers,
+        _localDefaultPayersOverride
+    ) { user, household, members, overrides ->
+        val uid = user?.uid.orEmpty()
+        val hid = household?.id.orEmpty()
+        val localCsv = if (hid.isNotBlank() && uid.isNotBlank()) {
+            overrides["$hid|$uid"] ?: getLocalDefaultPayersCsv(hid, uid)
+        } else null
+        DefaultPayerHelper.resolveEffectiveDefaultPayers(
+            uid = uid,
+            household = household,
+            members = members,
+            localOverrideCsv = localCsv
+        )
+    }
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val defaultPayerMember: StateFlow<FamilyMember?> = defaultPayerMembers
+        .map { it.firstOrNull() }
         .catch { emit(null) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -287,8 +312,11 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     val showActivityDialog: StateFlow<Boolean> = _showActivityDialog.asStateFlow()
 
     // Onboarding & Consents
-    internal val _showOnboardingCarousel = MutableStateFlow(!prefs.getBoolean("onboarding_shown_v3", false))
+    internal val _showOnboardingCarousel = MutableStateFlow(false)
     val showOnboardingCarousel = _showOnboardingCarousel.asStateFlow()
+
+    internal val _showWelcomeCarousel = MutableStateFlow(false)
+    val showWelcomeCarousel = _showWelcomeCarousel.asStateFlow()
 
     internal val _notificationConsentCompleted = MutableStateFlow(
         prefs.getBoolean("notification_consent_handled_${auth.currentUser?.uid ?: "guest"}", false)
@@ -465,7 +493,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     val dailyReminderMinute = _dailyReminderMinute.asStateFlow()
 
     internal val _bankAutoCatcherEnabled = MutableStateFlow(
-        BankNotificationSystemManager.isAutoCatcherEnabled(getApplication())
+        BankNotificationSystemManager.isAutoCatcherActiveForPro(getApplication())
     )
     val bankAutoCatcherEnabled: StateFlow<Boolean> = _bankAutoCatcherEnabled.asStateFlow()
 
@@ -640,6 +668,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                     if (cachedProfile != null && (cachedProfile.uid == existingUser.uid || cachedProfile.email.equals(existingUser.email, ignoreCase = true))) {
                         _userProfile.value = cachedProfile
                     }
+                    syncBankCatcherProEntitlement()
                     val prewarmHid = getOrEnsureHouseholdId(existingUser)
                     if (prewarmHid.isNotBlank()) {
                         viewModelScope.launch(coroutineExceptionHandler) {
@@ -710,6 +739,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                     _currentHousehold.value = null
                     _userHouseholds.value = emptyList()
                     _showOnboardingCarousel.value = false
+                    _showWelcomeCarousel.value = false
+                    syncBankCatcherProEntitlement()
                     _allExpenses.value = emptyList()
                     _allIncomes.value = emptyList()
                     _allMembers.value = emptyList()
@@ -805,12 +836,23 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         householdIdOverride: String? = null
     ) = syncDelegate.logHouseholdActivity(actionType, targetType, summaryEl, summaryEn, amount, householdIdOverride)
 
-    internal fun resolveDefaultPayerMember(targetUserId: String? = null): FamilyMember? {
+    internal fun resolveDefaultPayerMembers(
+        targetUserId: String? = null,
+        household: Household? = _currentHousehold.value
+    ): List<FamilyMember> {
         val uid = targetUserId ?: _currentUser.value?.uid.orEmpty()
-        val members = _allMembers.value
-        return members.firstOrNull { uid.isNotBlank() && it.linkedUserUid == uid }
-            ?: members.firstOrNull { it.isDefault }
-            ?: members.firstOrNull()
+        val hid = household?.id.orEmpty()
+        val localCsv = if (hid.isNotBlank() && uid.isNotBlank()) getLocalDefaultPayersCsv(hid, uid) else null
+        return DefaultPayerHelper.resolveEffectiveDefaultPayers(
+            uid = uid,
+            household = household,
+            members = _allMembers.value,
+            localOverrideCsv = localCsv
+        )
+    }
+
+    internal fun resolveDefaultPayerMember(targetUserId: String? = null): FamilyMember? {
+        return resolveDefaultPayerMembers(targetUserId).firstOrNull()
     }
 
     internal fun getMonthlyVoiceUsageKey(): String {
@@ -848,8 +890,17 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun removeSharedUserFromHousehold(householdId: String, targetUid: String, targetEmail: String) = householdDelegate.removeSharedUserFromHousehold(householdId, targetUid, targetEmail)
     fun inviteMemberByEmail(email: String, role: String = "REGISTAR", context: Context? = null, onComplete: ((Boolean, String) -> Unit)? = null) = householdDelegate.inviteMemberByEmail(email, role, context, onComplete)
     fun removeMemberByEmail(email: String) = householdDelegate.removeMemberByEmail(email)
-    fun assignUserDefaultPayer(targetUid: String, memberId: Long?) = householdDelegate.assignUserDefaultPayer(targetUid, memberId)
+    fun assignUserDefaultPayer(targetUid: String, memberId: Long?) =
+        householdDelegate.assignUserDefaultPayers(_currentHousehold.value?.id.orEmpty(), targetUid, listOfNotNull(memberId))
+    fun assignUserDefaultPayers(householdId: String, targetUid: String, memberIds: List<Long>) =
+        householdDelegate.assignUserDefaultPayers(householdId, targetUid, memberIds)
     fun isCurrentUserPro(): Boolean = _userProfile.value?.isPremium == true || isMariosUser() || _currentHousehold.value?.isPremium == true
+
+    internal fun syncBankCatcherProEntitlement() {
+        val isPro = isCurrentUserPro()
+        BankNotificationSystemManager.setProEntitled(getApplication(), isPro)
+        _bankAutoCatcherEnabled.value = isPro && BankNotificationSystemManager.isAutoCatcherEnabled(getApplication())
+    }
     fun deleteHousehold(household: Household) = householdDelegate.deleteHousehold(household)
     suspend fun refreshUserHouseholds() = householdDelegate.refreshUserHouseholds()
     fun isMyHousehold(household: Household): Boolean = isUserCreatorOfHousehold(household)
@@ -886,6 +937,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun openPrivacyConsentDialog() { _showPrivacyConsentDialog.value = true }
     fun dismissPrivacyConsentDialog() { _showPrivacyConsentDialog.value = false }
     fun dismissOnboardingCarousel() = authDelegate.dismissOnboardingCarousel()
+    fun dismissWelcomeCarousel() = authDelegate.dismissWelcomeCarousel()
     fun openOnboardingGuide() {
         dismissAllSubPages()
         _showOnboardingCarousel.value = true
@@ -895,7 +947,13 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun refreshMonthlyVoiceUsage() { _monthlyVoiceUsage.value = prefs.getInt(getMonthlyVoiceUsageKey(), 0) }
     fun openVoiceInputDialog() = transactionDelegate.openVoiceInputDialog()
     fun dismissVoiceInputDialog() { _showVoiceInputDialog.value = false }
-    fun openReceiptScanDialog() { _showReceiptScanDialog.value = true }
+    fun openReceiptScanDialog() {
+        if (!isCurrentUserPro()) {
+            showPremiumPaywall("ocr_receipt")
+            return
+        }
+        _showReceiptScanDialog.value = true
+    }
     fun dismissReceiptScanDialog() { _showReceiptScanDialog.value = false }
     fun suggestCategoryForMerchant(merchantOrText: String, merchantAfm: String = ""): ExpenseCategory? =
         transactionDelegate.suggestCategoryForMerchant(merchantOrText, merchantAfm)
@@ -991,6 +1049,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun moveCategoryUp(category: ExpenseCategory) = structureDelegate.moveCategoryUp(category)
     fun moveCategoryDown(category: ExpenseCategory) = structureDelegate.moveCategoryDown(category)
     fun clearCurrentExodologioExpenses() = structureDelegate.clearCurrentExodologioExpenses()
+    fun clearCurrentHouseholdAllData() = structureDelegate.clearCurrentHouseholdAllData()
 
     // Simple UI State & Preferences Helpers
     fun openBurgerMenu() { _showBurgerMenu.value = true }
@@ -1026,7 +1085,13 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun dismissPremiumPaywall() { _premiumPaywallReason.value = null }
     fun activateProFromBilling() = structureDelegate.activateProFromBilling()
     fun unlockPro() = structureDelegate.unlockPro()
-    fun openExportReportDialog() { _showExportReportDialog.value = true }
+    fun openExportReportDialog() {
+        if (!isCurrentUserPro()) {
+            showPremiumPaywall("export_report")
+            return
+        }
+        _showExportReportDialog.value = true
+    }
     fun dismissExportReportDialog() { _showExportReportDialog.value = false }
     fun setLaunchWithChooser(enabled: Boolean) { _launchWithChooser.value = enabled; prefs.edit().putBoolean("launch_with_chooser", enabled).apply() }
     fun openSettingsDialog() {

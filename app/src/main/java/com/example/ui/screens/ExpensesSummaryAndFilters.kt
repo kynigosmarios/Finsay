@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -259,33 +260,35 @@ internal fun ExpensesHeroDashboardCard(
                         color = Color.White
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    if (totalBudget > 0.0) {
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF065F46).copy(alpha = 0.75f),
-                        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF065F46).copy(alpha = 0.75f),
+                            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.TrendingUp,
-                                contentDescription = null,
-                                tint = Color(0xFF6EE7B7),
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = if (isWithinBudget)
-                                    (if (lang == Localization.Language.ENGLISH) "Within budget" else "Εντός προϋπολογισμού")
-                                else
-                                    (if (lang == Localization.Language.ENGLISH) "Over budget" else "Εκτός προϋπολογισμού"),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF6EE7B7)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                                    contentDescription = null,
+                                    tint = if (isWithinBudget) Color(0xFF6EE7B7) else Color(0xFFFCA5A5),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = if (isWithinBudget)
+                                        (if (lang == Localization.Language.ENGLISH) "Within budget" else "Εντός προϋπολογισμού")
+                                    else
+                                        (if (lang == Localization.Language.ENGLISH) "Over budget" else "Εκτός προϋπολογισμού"),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isWithinBudget) Color(0xFF6EE7B7) else Color(0xFFFCA5A5)
+                                )
+                            }
                         }
                     }
 
@@ -386,6 +389,17 @@ internal fun ExpensesHeroDashboardCard(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    val expenseTabBg by androidx.compose.animation.animateColorAsState(
+                        targetValue = if (selectedTypeFilter == "EXPENSE") Color(0xFF10B981) else Color.Transparent,
+                        animationSpec = androidx.compose.animation.core.tween(180),
+                        label = "expense_tab_bg"
+                    )
+                    val incomeTabBg by androidx.compose.animation.animateColorAsState(
+                        targetValue = if (selectedTypeFilter == "INCOME") Color(0xFF10B981) else Color.Transparent,
+                        animationSpec = androidx.compose.animation.core.tween(180),
+                        label = "income_tab_bg"
+                    )
+
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = Color(0xFF023225),
@@ -402,14 +416,13 @@ internal fun ExpensesHeroDashboardCard(
                                     .weight(1f)
                                     .clickable { onTypeFilterChange("EXPENSE") },
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (selectedTypeFilter == "EXPENSE") Color(0xFF10B981) else Color.Transparent
+                                color = expenseTabBg
                             ) {
                                 Row(
                                     modifier = Modifier.padding(vertical = 9.dp),
                                     horizontalArrangement = Arrangement.Center,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(text = "💸 ", fontSize = 14.sp)
                                     Text(
                                         text = "${Localization.expenses(lang)} ($heroExpensesCount)",
                                         fontSize = 13.5.sp,
@@ -424,14 +437,13 @@ internal fun ExpensesHeroDashboardCard(
                                     .weight(1f)
                                     .clickable { onTypeFilterChange("INCOME") },
                                 shape = RoundedCornerShape(12.dp),
-                                color = if (selectedTypeFilter == "INCOME") Color(0xFF10B981) else Color.Transparent
+                                color = incomeTabBg
                             ) {
                                 Row(
                                     modifier = Modifier.padding(vertical = 9.dp),
                                     horizontalArrangement = Arrangement.Center,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(text = "💰 ", fontSize = 14.sp)
                                     Text(
                                         text = "${Localization.income(lang)} ($heroIncomesCount)",
                                         fontSize = 13.5.sp,
@@ -453,7 +465,7 @@ internal fun ExpensesHeroDashboardCard(
                         Text(
                             text = String.format(
                                 Locale.US,
-                                if (lang == Localization.Language.ENGLISH) "Expenses: %.2f € / Budget: %.2f €" else "Έξοδα: %.2f € / Budget: %.2f €",
+                                "%.2f € / %.2f €",
                                 totalExpensesAmount,
                                 totalBudget
                             ),
@@ -887,6 +899,11 @@ internal fun MonthlySummaryExpandableCard(
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit
 ) {
+    val chevronRotation by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(200),
+        label = "monthly_chevron"
+    )
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -908,31 +925,40 @@ internal fun MonthlySummaryExpandableCard(
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = Color(0xFFD1FAE5),
-                    modifier = Modifier.size(38.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.CalendarMonth,
                             contentDescription = null,
                             tint = Color(0xFF059669),
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 }
 
-                Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Text(
                         text = currentMonthDisplay,
                         fontSize = 14.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "$itemsCount συναλλαγές",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+                    ) {
+                        Text(
+                            text = "$itemsCount",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
@@ -947,10 +973,12 @@ internal fun MonthlySummaryExpandableCard(
                     color = Color(0xFF047857)
                 )
                 Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier
+                        .size(20.dp)
+                        .rotate(chevronRotation)
                 )
             }
         }

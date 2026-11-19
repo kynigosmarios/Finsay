@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -239,7 +240,8 @@ fun SavingsGoalsManagerDialog(
             ) {
                 items(
                     items = goals,
-                    key = { it.id }
+                    key = { it.id },
+                    contentType = { "savings_goal_card" }
                 ) { goal ->
                     SavingsGoalCard(
                         goal = goal,
@@ -248,7 +250,8 @@ fun SavingsGoalsManagerDialog(
                         canManage = canManage,
                         onDepositClick = { goalForDeposit = goal },
                         onEditClick = { onOpenGoalEditor(goal) },
-                        onDeleteClick = { goalPendingDelete = goal }
+                        onDeleteClick = { goalPendingDelete = goal },
+                        modifier = Modifier.animateItem()
                     )
                 }
             }
@@ -350,20 +353,6 @@ private fun EmptyGoalsSection(
             fontSize = 16.sp,
             color = MaterialTheme.colorScheme.onSurface
         )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = if (isGreek) {
-                "Προσθέστε έναν στόχο αποταμίευσης για αυτό το εξοδολόγιο."
-            } else {
-                "Add a savings goal for this household book."
-            },
-            fontSize = 12.5.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            lineHeight = 17.sp,
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-
         if (canManage) {
             Spacer(modifier = Modifier.height(14.dp))
             Text(
@@ -424,12 +413,18 @@ private fun SavingsGoalCard(
     canManage: Boolean,
     onDepositClick: () -> Unit,
     onEditClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val safeTarget = goal.targetAmount.coerceAtLeast(0.0)
     val safeCurrent = goal.currentAmount.coerceAtLeast(0.0)
     val remainingAmount = (safeTarget - safeCurrent).coerceAtLeast(0.0)
     val progress = if (safeTarget > 0.0) (safeCurrent / safeTarget).toFloat().coerceIn(0f, 1f) else 0f
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress,
+        animationSpec = FinsayMotion.ProgressSpec,
+        label = "savingsGoalProgress"
+    )
     val isCompleted = safeTarget > 0.0 && safeCurrent >= safeTarget
     val percent = (progress * 100f).toInt().coerceIn(0, 100)
 
@@ -443,7 +438,7 @@ private fun SavingsGoalCard(
             if (isCompleted) Emerald700.copy(alpha = 0.45f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
         ),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
@@ -537,7 +532,7 @@ private fun SavingsGoalCard(
             // Progress Bar + Saved / Target & Remaining
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LinearProgressIndicator(
-                    progress = { progress },
+                    progress = { animatedProgress },
                     color = Emerald700,
                     trackColor = Emerald700.copy(alpha = 0.14f),
                     strokeCap = StrokeCap.Round,
@@ -800,9 +795,9 @@ private fun GoalDepositDialog(
                         )
                         Text(
                             text = if (isGreek) {
-                                "Θα καταχωρηθεί αυτόματα και στα Έξοδα (Αρχική) & στα Στατιστικά."
+                                "Καταχωρείται αυτόματα και στα Έξοδα."
                             } else {
-                                "Will also be recorded automatically in Expenses (Home) & Statistics."
+                                "Automatically recorded in Expenses."
                             },
                             fontSize = 11.5.sp,
                             lineHeight = 15.sp,

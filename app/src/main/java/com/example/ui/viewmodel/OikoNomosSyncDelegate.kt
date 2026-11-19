@@ -169,6 +169,7 @@ internal class OikoNomosSyncDelegate(
             )
             vm._userProfile.value = profile
             persistProfileToPrefs(profile)
+            vm.syncBankCatcherProEntitlement()
 
             if (profile.appLanguage.isNotBlank() && !vm.prefs.getBoolean("user_explicitly_set_language_v2", false)) {
                 vm._appLanguage.value = profile.appLanguage
@@ -212,6 +213,10 @@ internal class OikoNomosSyncDelegate(
             val finalHouseholds = discoveredHouseholds.distinctBy { it.id }
             vm._userHouseholds.value = finalHouseholds
             vm._currentHousehold.value = activeHousehold
+            vm.syncBankCatcherProEntitlement()
+            if (!vm.prefs.getBoolean("onboarding_shown_${user.uid}", false)) {
+                vm._showWelcomeCarousel.value = true
+            }
             vm.prefs.edit()
                 .putString("last_household_id", activeHousehold.id)
                 .putString("user_household_${user.uid}", activeHousehold.id)
@@ -270,6 +275,7 @@ internal class OikoNomosSyncDelegate(
                     if (remoteProfile != null) {
                         vm._userProfile.value = remoteProfile
                         persistProfileToPrefs(remoteProfile)
+                        vm.syncBankCatcherProEntitlement()
                     }
                 }
         }
@@ -291,6 +297,7 @@ internal class OikoNomosSyncDelegate(
                             filtered.first()
                         }
                         vm._currentHousehold.value = updatedCur
+                        vm.syncBankCatcherProEntitlement()
                         vm.prefs.edit().putString("last_household_id", updatedCur.id).apply()
                         if (curId != updatedCur.id) {
                             vm.loadDeletedItems(updatedCur.id)
@@ -404,6 +411,7 @@ internal class OikoNomosSyncDelegate(
                 .collect { h ->
                     if (h != null) {
                         vm._currentHousehold.value = h
+                        vm.syncBankCatcherProEntitlement()
                         vm.prefs.edit().putString("last_household_id", h.id).apply()
                         vm._userHouseholds.value = vm._userHouseholds.value.map { if (it.id == h.id) h else it }
                             .ifEmpty { listOf(h) }

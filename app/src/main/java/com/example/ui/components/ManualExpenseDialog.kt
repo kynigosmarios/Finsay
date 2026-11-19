@@ -88,6 +88,9 @@ fun ManualExpenseDialog(
     members: List<FamilyMember>,
     appLanguage: String = "EL",
     defaultPayerMember: FamilyMember? = null,
+    defaultPayerMembers: List<FamilyMember> = listOfNotNull(defaultPayerMember),
+    isPro: Boolean = false,
+    onShowPremiumPaywall: (String) -> Unit = {},
     onSuggestCategory: ((merchantOrText: String, merchantAfm: String) -> ExpenseCategory?)? = null,
     onLearnCategory: ((merchantOrText: String, categoryId: Long, categoryName: String, merchantAfm: String) -> Unit)? = null,
     onDismiss: () -> Unit,
@@ -137,13 +140,22 @@ fun ManualExpenseDialog(
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
 
-    val fallbackDefaultPayer = remember(members, defaultPayerMember) {
-        defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } }
-            ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
-            ?: members.firstOrNull()
+    val fallbackDefaultPayers = remember(members, defaultPayerMembers, defaultPayerMember) {
+        val validConfigured = defaultPayerMembers
+            .filter { dp -> members.any { it.id == dp.id } }
+            .distinctBy { it.id }
+        if (validConfigured.isNotEmpty()) {
+            validConfigured
+        } else {
+            val single = defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } }
+                ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                ?: members.firstOrNull()
+            listOfNotNull(single)
+        }
     }
+    val fallbackDefaultPayer = fallbackDefaultPayers.firstOrNull()
 
-    val selectedPayerIds = remember(expenseToEdit, members, fallbackDefaultPayer) {
+    val selectedPayerIds = remember(expenseToEdit, members, fallbackDefaultPayers) {
         val list = mutableStateListOf<Long>()
         if (expenseToEdit != null) {
             val parsedIds = if (expenseToEdit.payerAmountsCsv.isNotBlank()) {
@@ -167,15 +179,15 @@ fun ManualExpenseDialog(
                     val matched = members.filter { m -> names.any { n -> n.equals(m.name, ignoreCase = true) || cleanPayer.contains(m.name, ignoreCase = true) } }
                     if (matched.isNotEmpty()) {
                         list.addAll(matched.map { it.id })
-                    } else if (fallbackDefaultPayer != null) {
-                        list.add(fallbackDefaultPayer.id)
+                    } else if (fallbackDefaultPayers.isNotEmpty()) {
+                        list.addAll(fallbackDefaultPayers.map { it.id })
                     }
                 }
-            } else if (fallbackDefaultPayer != null) {
-                list.add(fallbackDefaultPayer.id)
+            } else if (fallbackDefaultPayers.isNotEmpty()) {
+                list.addAll(fallbackDefaultPayers.map { it.id })
             }
-        } else if (fallbackDefaultPayer != null) {
-            list.add(fallbackDefaultPayer.id)
+        } else if (fallbackDefaultPayers.isNotEmpty()) {
+            list.addAll(fallbackDefaultPayers.map { it.id })
         }
         list
     }
@@ -270,6 +282,10 @@ fun ManualExpenseDialog(
     var isScanningReceipt by remember { mutableStateOf(false) }
 
     fun processReceiptBitmap(bitmap: Bitmap) {
+        if (!isPro) {
+            onShowPremiumPaywall("ocr_receipt")
+            return
+        }
         isScanningReceipt = true
         coroutineScope.launch {
             try {
@@ -414,16 +430,17 @@ fun ManualExpenseDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.88f)
-                .padding(vertical = 12.dp)
-                .testTag("manual_expense_dialog"),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
+        SmoothDialogContent {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .fillMaxHeight(0.88f)
+                    .padding(vertical = 12.dp)
+                    .testTag("manual_expense_dialog"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -454,7 +471,13 @@ fun ManualExpenseDialog(
                             color = Emerald100,
                             modifier = Modifier
                                 .size(32.dp)
-                                .clickable { showCameraChooserDialog = true }
+                                .clickable {
+                                    if (isPro) {
+                                        showCameraChooserDialog = true
+                                    } else {
+                                        onShowPremiumPaywall("ocr_receipt")
+                                    }
+                                }
                                 .testTag("receipt_scan_header_button")
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -742,6 +765,7 @@ fun ManualExpenseDialog(
                     }
                 }
             }
+        }
         }
     }
 }

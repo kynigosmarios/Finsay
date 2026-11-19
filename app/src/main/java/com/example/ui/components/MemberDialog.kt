@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +27,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -33,11 +37,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -47,6 +53,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -96,22 +103,71 @@ fun MemberDialog(
         mutableStateOf(memberToEdit?.linkedUserUid ?: "")
     }
     var errorText by remember(memberToEdit) { mutableStateOf<String?>(null) }
+    var showVoiceKeywordsHint by remember { mutableStateOf(false) }
+    var hasShownVoiceKeywordsHint by remember { mutableStateOf(false) }
+
+    if (showVoiceKeywordsHint) {
+        val isEnglish = lang == Localization.Language.ENGLISH
+        AlertDialog(
+            onDismissRequest = { showVoiceKeywordsHint = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = Emerald700,
+                    modifier = Modifier.size(26.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (isEnglish) "Voice Keywords" else "Φωνητικές Λέξεις",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isEnglish) {
+                        "Enter nicknames or alternative names separated by commas (e.g. mom, Helen, wife). When using voice entry, Finsay automatically recognizes this member whenever it hears any of these words."
+                    } else {
+                        "Γράψτε υποκοριστικά ή λέξεις χωρισμένες με κόμμα (π.χ. μαμά, Ελένη, γυναίκα). Στη φωνητική καταχώρηση, το Finsay αναγνωρίζει αυτόματα αυτό το μέλος μόλις ακούσει κάποια από αυτές."
+                    },
+                    fontSize = 13.5.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showVoiceKeywordsHint = false },
+                    modifier = Modifier.testTag("member_voice_hint_ok_btn")
+                ) {
+                    Text(
+                        text = if (isEnglish) "Got it" else "Κατάλαβα",
+                        fontWeight = FontWeight.Bold,
+                        color = Emerald700
+                    )
+                }
+            }
+        )
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .widthIn(max = 500.dp)
-                .fillMaxHeight(0.88f)
-                .padding(vertical = 12.dp)
-                .testTag("member_dialog"),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
+        SmoothDialogContent {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .widthIn(max = 500.dp)
+                    .fillMaxHeight(0.88f)
+                    .padding(vertical = 12.dp)
+                    .testTag("member_dialog"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -225,37 +281,43 @@ fun MemberDialog(
                         )
                     }
 
-                    if (showColorPalette) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            MemberPalette.forEach { colorVal ->
-                                val isSelected = selectedColor == colorVal
-                                Box(
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(colorVal))
-                                        .clickable {
-                                            selectedColor = colorVal
-                                            showColorPalette = false
+                    AnimatedVisibility(
+                        visible = showColorPalette,
+                        enter = FinsayMotion.ExpandEnter,
+                        exit = FinsayMotion.ShrinkExit
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                MemberPalette.forEach { colorVal ->
+                                    val isSelected = selectedColor == colorVal
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(colorVal))
+                                            .clickable {
+                                                selectedColor = colorVal
+                                                showColorPalette = false
+                                            }
+                                            .then(
+                                                if (isSelected) Modifier.border(2.dp, Emerald700, CircleShape)
+                                                else Modifier
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSelected) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = Color.White,
+                                                modifier = Modifier.size(18.dp)
+                                            )
                                         }
-                                        .then(
-                                            if (isSelected) Modifier.border(2.dp, Emerald700, CircleShape)
-                                             else Modifier
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isSelected) {
-                                        Icon(
-                                            Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint = Color.White,
-                                            modifier = Modifier.size(18.dp)
-                                        )
                                     }
                                 }
                             }
@@ -264,19 +326,42 @@ fun MemberDialog(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Voice keywords
+                    // Voice keywords (with instruction popup on first focus + help button)
                     OutlinedTextField(
                         value = voiceKeywords,
                         onValueChange = { voiceKeywords = it },
-                        label = { Text(Localization.voiceKeywordsLabel(lang)) },
-                        placeholder = { Text(Localization.memberKeywordsPlaceholder(lang)) },
-                        supportingText = {
+                        label = {
                             Text(
-                                if (lang == Localization.Language.ENGLISH) "Separate words/nicknames with commas" else "Διαχωρίστε με κόμμα λέξεις/ψευδώνυμα",
-                                fontSize = 11.sp
+                                text = Localization.voiceKeywordsLabel(lang),
+                                fontSize = 11.5.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text(Localization.memberKeywordsPlaceholder(lang)) },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { showVoiceKeywordsHint = true },
+                                modifier = Modifier.testTag("member_voice_keywords_info_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HelpOutline,
+                                    contentDescription = if (lang == Localization.Language.ENGLISH) "Voice keywords help" else "Οδηγίες φωνητικών λέξεων",
+                                    tint = Emerald700,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused && !hasShownVoiceKeywordsHint) {
+                                    hasShownVoiceKeywordsHint = true
+                                    showVoiceKeywordsHint = true
+                                }
+                            }
+                            .testTag("member_voice_keywords_input"),
                         shape = RoundedCornerShape(12.dp),
                         maxLines = 2
                     )
@@ -394,6 +479,7 @@ fun MemberDialog(
                     }
                 }
             }
+        }
         }
     }
 }

@@ -10,6 +10,7 @@ import com.example.data.model.toSafeHousehold
 import com.example.data.seed.FirestoreDataSeed
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
@@ -573,6 +574,7 @@ internal class FirestoreHouseholdDelegate(
         }
         val updatedEmails = existing.memberEmails.toMutableMap().apply { if (targetUid.isNotBlank()) remove(targetUid) }
         val updatedNames = existing.memberNames.toMutableMap().apply { if (targetUid.isNotBlank()) remove(targetUid) }
+        val updatedDefaultPayers = existing.memberDefaultPayers.toMutableMap().apply { if (targetUid.isNotBlank()) remove(targetUid) }
 
         hDocRef.update(
             mapOf(
@@ -581,6 +583,7 @@ internal class FirestoreHouseholdDelegate(
                 "memberRoles" to updatedRoles,
                 "memberEmails" to updatedEmails,
                 "memberNames" to updatedNames,
+                "memberDefaultPayers" to updatedDefaultPayers,
                 "updatedAt" to Timestamp.now()
             )
         ).await()
@@ -590,8 +593,40 @@ internal class FirestoreHouseholdDelegate(
             invitedEmails = updatedInvited,
             memberRoles = updatedRoles,
             memberEmails = updatedEmails,
-            memberNames = updatedNames
+            memberNames = updatedNames,
+            memberDefaultPayers = updatedDefaultPayers
         )
+    }
+
+    /**
+     * Updates a user's default payer member IDs (CSV, supporting 0, 1, 2, or more members).
+     * Uses FieldPath so Firestore rules allow any household member (CREATOR, EDITOR, REGISTAR)
+     * to update strictly their own UID entry, while CREATOR may also update shared users.
+     */
+    suspend fun updateUserDefaultPayers(
+        householdId: String,
+        targetUid: String,
+        memberIdsCsv: String
+    ): Household? {
+        val cleanHid = householdId.trim()
+        val cleanUid = targetUid.trim()
+        if (cleanHid.isBlank() || cleanUid.isBlank()) return null
+        val hDocRef = db.collection("households").document(cleanHid)
+        val now = Timestamp.now()
+        hDocRef.update(
+            FieldPath.of("memberDefaultPayers", cleanUid),
+            memberIdsCsv,
+            FieldPath.of("updatedAt"),
+            now
+        ).await()
+        val refreshed = try {
+            val snap = hDocRef.get().await()
+            if (snap.exists()) snap.toSafeHousehold() else null
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            null
+        }
+        return refreshed
     }
 
     suspend fun inviteMemberToHousehold(
@@ -643,51 +678,9 @@ internal class FirestoreHouseholdDelegate(
     }
 
     suspend fun leaveSharedHousehold(householdId: String, userId: String, userEmail: String) {
-        if (householdId.isBlank()) return
-        val cleanEmail = userEmail.trim()
-        val lowerEmail = cleanEmail.lowercase()
-        try {
-            if (userId.isNotBlank()) {
-                db.collection("users").document(userId).set(
-                    mapOf("householdIds" to FieldValue.arrayRemove(householdId)),
-                    SetOptions.merge()
-                ).await()
-            }
-            val hRef = db.collection("households").document(householdId)
-            val snap = hRef.get().await()
-            if (snap.exists()) {
-                val existing = snap.toSafeHousehold()
-                val updatedMembers = existing.memberUids.filterNot { it == userId }
-                val updatedInvited = if (cleanEmail.isNotBlank()) {
-                    existing.invitedEmails.filterNot { it.equals(cleanEmail, ignoreCase = true) }
-                } else existing.invitedEmails
-                val updatedRoles = existing.memberRoles.toMutableMap().apply {
-                    remove(userId)
-                    if (cleanEmail.isNotBlank()) {
-                        remove(cleanEmail)
-                        remove(lowerEmail)
-                    }
-                }
-                val updatedEmails = existing.memberEmails.toMutableMap().apply { remove(userId) }
-                val updatedNames = existing.memberNames.toMutableMap().apply { remove(userId) }
-                val existingDeleted = snap.safeStringList("deletedForUsers") ?: emptyList()
-                val updatedDeleted = (existingDeleted + userId).filter { it.isNotBlank() }.distinct()
-                hRef.update(
-                    mapOf(
-                        "memberUids" to updatedMembers,
-                        "invitedEmails" to updatedInvited,
-                        "memberRoles" to updatedRoles,
-                        "memberEmails" to updatedEmails,
-                        "memberNames" to updatedNames,
-                        "deletedForUsers" to updatedDeleted,
-                        "updatedAt" to Timestamp.now()
-                    )
-                ).await()
-            }
-        } catch (e: Exception) {
-            if (e is CancellationException) throw e
-            Log.w(TAG, "leaveSharedHousehold notice: ${e.message}")
-        }
+        // Policy: EDITOR and REGISTAR users cannot remove themselves from a shared household.
+        // Only the household owner (CREATOR) may remove users via removeSharedUser().
+        Log.w(TAG, "leaveSharedHousehold blocked for non-owner userId=$userId on householdId=$householdId")
     }
 
     suspend fun deleteUserEntireData(userId: String, householdIds: List<String> = emptyList()) {

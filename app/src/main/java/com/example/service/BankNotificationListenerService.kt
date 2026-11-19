@@ -49,7 +49,7 @@ class BankNotificationListenerService : NotificationListenerService() {
 
     fun scanActiveNotificationsInternal() {
         try {
-            if (!BankNotificationSystemManager.isAutoCatcherEnabled(this)) return
+            if (!BankNotificationSystemManager.isAutoCatcherActiveForPro(this)) return
             val active = activeNotifications ?: return
 
             // Identify groups that have concrete non-summary child notifications
@@ -72,7 +72,7 @@ class BankNotificationListenerService : NotificationListenerService() {
 
     private fun processStatusBarNotification(sbn: StatusBarNotification, hasGroupChildren: Boolean) {
         try {
-            if (!BankNotificationSystemManager.isAutoCatcherEnabled(this)) {
+            if (!BankNotificationSystemManager.isAutoCatcherActiveForPro(this)) {
                 return
             }
 

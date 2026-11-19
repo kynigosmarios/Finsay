@@ -121,6 +121,9 @@ class FirestoreSyncRepository(
     suspend fun removeSharedUser(householdId: String, targetUid: String, targetEmail: String): Household? =
         householdDelegate.removeSharedUser(householdId, targetUid, targetEmail)
 
+    suspend fun updateUserDefaultPayers(householdId: String, targetUid: String, memberIdsCsv: String): Household? =
+        householdDelegate.updateUserDefaultPayers(householdId, targetUid, memberIdsCsv)
+
     suspend fun inviteMemberToHousehold(householdId: String, email: String, role: String = "REGISTAR", targetUser: UserProfile? = null) =
         householdDelegate.inviteMemberToHousehold(householdId, email, role, targetUser)
 
@@ -247,6 +250,19 @@ class FirestoreSyncRepository(
 
     suspend fun clearAllExpenses(householdId: String, userId: String) =
         transactionsDelegate.clearAllExpenses(householdId, userId)
+
+    suspend fun archiveAllHouseholdData(householdId: String, userId: String): String {
+        val batchId = java.util.UUID.randomUUID().toString()
+        transactionsDelegate.archiveAllHouseholdTransactions(householdId, userId, batchId)
+        structureDelegate.archiveAllHouseholdStructure(householdId, userId, batchId)
+        return batchId
+    }
+
+    suspend fun restoreArchivedHouseholdData(householdId: String, archiveBatchId: String? = null): Int {
+        val txRestored = transactionsDelegate.restoreArchivedHouseholdTransactions(householdId, archiveBatchId)
+        val structRestored = structureDelegate.restoreArchivedHouseholdStructure(householdId, archiveBatchId)
+        return txRestored + structRestored
+    }
 
     fun observeIncomes(householdId: String): Flow<List<FirebaseIncome>> =
         transactionsDelegate.observeIncomes(householdId)

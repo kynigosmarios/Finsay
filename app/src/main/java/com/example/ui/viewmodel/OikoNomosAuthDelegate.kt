@@ -629,6 +629,8 @@ internal class OikoNomosAuthDelegate(
         vm._currentHousehold.value = null
         vm._userHouseholds.value = emptyList()
         vm._showOnboardingCarousel.value = false
+        vm._showWelcomeCarousel.value = false
+        vm.syncBankCatcherProEntitlement()
         vm._showUserProfileDialog.value = false
         vm._showExodologioDetailsDialog.value = false
         vm._showRemindersManagerDialog.value = false
@@ -690,6 +692,8 @@ internal class OikoNomosAuthDelegate(
         vm._currentHousehold.value = null
         vm._userHouseholds.value = emptyList()
         vm._showOnboardingCarousel.value = false
+        vm._showWelcomeCarousel.value = false
+        vm.syncBankCatcherProEntitlement()
         vm._showUserProfileDialog.value = false
         vm._showExodologioDetailsDialog.value = false
         vm._showRemindersManagerDialog.value = false
@@ -756,6 +760,8 @@ internal class OikoNomosAuthDelegate(
                 vm._userProfile.value = null
                 vm._currentHousehold.value = null
                 vm._userHouseholds.value = emptyList()
+                vm._showWelcomeCarousel.value = false
+                vm.syncBankCatcherProEntitlement()
                 vm._allExpenses.value = emptyList()
                 vm._allIncomes.value = emptyList()
                 vm._allMembers.value = emptyList()
@@ -913,6 +919,10 @@ internal class OikoNomosAuthDelegate(
 
     fun dismissOnboardingCarousel() {
         vm._showOnboardingCarousel.value = false
+    }
+
+    fun dismissWelcomeCarousel() {
+        vm._showWelcomeCarousel.value = false
         vm.prefs.edit().putBoolean("onboarding_shown_v3", true).apply()
         val uid = vm.auth.currentUser?.uid ?: vm._currentUser.value?.uid
         if (!uid.isNullOrBlank()) {

@@ -83,17 +83,6 @@ internal fun ExpensesEmptyStateCard(
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = if (isIncomeMode) {
-                    if (lang == Localization.Language.ENGLISH) "No incomes recorded for this month" else "Δεν υπάρχουν καταχωρημένα έσοδα για αυτόν τον μήνα"
-                } else {
-                    Localization.noExpensesForPeriod(lang)
-                },
-                fontSize = 12.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
             Spacer(modifier = Modifier.height(14.dp))
             Surface(
                 shape = RoundedCornerShape(12.dp),
@@ -133,7 +122,8 @@ internal fun ExpensesEmptyStateCard(
 internal fun ExpenseCardItem(
     item: ActivityItem.ExpenseItem,
     onEditExpense: (Expense) -> Unit,
-    onDeleteExpense: (Expense) -> Unit
+    onDeleteExpense: (Expense) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val expense = item.expense
     Surface(
@@ -141,7 +131,7 @@ internal fun ExpenseCardItem(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         tonalElevation = 1.dp,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 2.dp)
             .clickable { onEditExpense(expense) }
@@ -195,14 +185,16 @@ internal fun ExpenseCardItem(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = " • ${item.formattedDate}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = Color(0xFF64748B),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (item.formattedDate.isNotBlank()) {
+                            Text(
+                                text = " • ${item.formattedDate}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = Color(0xFF64748B),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 
@@ -320,7 +312,8 @@ internal fun ExpenseCardItem(
 internal fun IncomeCardItem(
     item: ActivityItem.IncomeItem,
     onEditIncome: (Income) -> Unit,
-    onDeleteIncome: (Income) -> Unit
+    onDeleteIncome: (Income) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val income = item.income
     Surface(
@@ -328,7 +321,7 @@ internal fun IncomeCardItem(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.3f)),
         tonalElevation = 1.dp,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 2.dp)
             .clickable { onEditIncome(income) }
@@ -382,14 +375,16 @@ internal fun IncomeCardItem(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = " • ${item.formattedDate}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = Color(0xFF64748B),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (item.formattedDate.isNotBlank()) {
+                            Text(
+                                text = " • ${item.formattedDate}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = Color(0xFF64748B),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 

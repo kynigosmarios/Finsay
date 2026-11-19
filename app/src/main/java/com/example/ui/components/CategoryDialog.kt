@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,8 +33,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Euro
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FormatColorText
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -40,11 +47,13 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -54,6 +63,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -98,22 +109,72 @@ fun CategoryDialog(
     }
     var voiceKeywords by remember(categoryToEdit) { mutableStateOf(categoryToEdit?.voiceKeywords ?: "") }
     var errorText by remember(categoryToEdit) { mutableStateOf<String?>(null) }
+    var isIconPickerExpanded by remember { mutableStateOf(false) }
+    var showVoiceKeywordsHint by remember { mutableStateOf(false) }
+    var hasShownVoiceKeywordsHint by remember { mutableStateOf(false) }
+
+    if (showVoiceKeywordsHint) {
+        val isEnglish = lang == Localization.Language.ENGLISH
+        AlertDialog(
+            onDismissRequest = { showVoiceKeywordsHint = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = Emerald700,
+                    modifier = Modifier.size(26.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (isEnglish) "Voice Keywords" else "Φωνητικές Λέξεις",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isEnglish) {
+                        "Enter words separated by commas (e.g. market, lidl, groceries). When you speak an expense, Finsay automatically matches this category whenever it hears any of these words."
+                    } else {
+                        "Γράψτε λέξεις-κλειδιά χωρισμένες με κόμμα (π.χ. σούπερ μάρκετ, lidl, ψώνια). Όταν καταχωρείτε έξοδο φωνητικά, το Finsay αναγνωρίζει αυτόματα αυτή την κατηγορία μόλις ακούσει κάποια από αυτές."
+                    },
+                    fontSize = 13.5.sp,
+                    lineHeight = 19.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showVoiceKeywordsHint = false },
+                    modifier = Modifier.testTag("category_voice_hint_ok_btn")
+                ) {
+                    Text(
+                        text = if (isEnglish) "Got it" else "Κατάλαβα",
+                        fontWeight = FontWeight.Bold,
+                        color = Emerald700
+                    )
+                }
+            }
+        )
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .widthIn(max = 520.dp)
-                .fillMaxHeight(0.92f)
-                .padding(vertical = 12.dp)
-                .testTag("category_dialog"),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
+        SmoothDialogContent {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .widthIn(max = 520.dp)
+                    .fillMaxHeight(0.92f)
+                    .padding(vertical = 12.dp)
+                    .testTag("category_dialog"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -165,26 +226,14 @@ fun CategoryDialog(
                         border = BorderStroke(1.5.dp, Color(selectedColorHex).copy(alpha = 0.5f))
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Ledger Appearance Preview" else "Προεπισκόπηση στο Εξοδολόγιο",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = "Live",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(selectedColorHex)
-                                )
-                            }
+                            Text(
+                                text = if (lang == Localization.Language.ENGLISH) "Preview" else "Προεπισκόπηση",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             // Simulated expense item inside ledger
                             Surface(
@@ -341,56 +390,146 @@ fun CategoryDialog(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 3. ICON SELECTION
-                    Text(
-                        text = Localization.categoryIconLabel(lang),
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.SemiBold
+                    // 3. ICON SELECTION (Collapsible)
+                    val selectedIconDisplay = remember(selectedIconKey, lang) {
+                        val rawLabel = CategoryIconHelper.availableIcons.find { it.first == selectedIconKey }?.second ?: selectedIconKey
+                        Localization.translateCategory(rawLabel, lang)
+                    }
+                    val iconChevronRotation by animateFloatAsState(
+                        targetValue = if (isIconPickerExpanded) 180f else 0f,
+                        animationSpec = tween(220),
+                        label = "category_icon_picker_chevron"
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isIconPickerExpanded) Color(selectedColorHex).copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { isIconPickerExpanded = !isIconPickerExpanded }
+                            .testTag("category_icon_picker_toggle")
                     ) {
-                        CategoryIconHelper.availableIcons.forEach { (key, label) ->
-                            val isSelected = selectedIconKey == key
-                            val displayLabel = Localization.translateCategory(label, lang)
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { selectedIconKey = key },
-                                label = { Text(displayLabel, fontSize = 11.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = CategoryIconHelper.getIcon(key),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
-                                        tint = if (isSelected) Color(selectedColorHex) else Color.Gray
-                                    )
-                                }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(selectedColorHex).copy(alpha = 0.16f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = CategoryIconHelper.getIcon(selectedIconKey),
+                                    contentDescription = null,
+                                    tint = Color(selectedColorHex),
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = Localization.categoryIconLabel(lang),
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = selectedIconDisplay,
+                                    fontSize = 11.5.sp,
+                                    color = Color(selectedColorHex),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .rotate(iconChevronRotation)
                             )
+                        }
+                    }
+
+                    AnimatedVisibility(
+                        visible = isIconPickerExpanded,
+                        enter = FinsayMotion.ExpandEnter,
+                        exit = FinsayMotion.ShrinkExit
+                    ) {
+                        FlowRow(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            CategoryIconHelper.availableIcons.forEach { (key, label) ->
+                                val isSelected = selectedIconKey == key
+                                val displayLabel = Localization.translateCategory(label, lang)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedIconKey = key },
+                                    label = { Text(displayLabel, fontSize = 11.sp) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = CategoryIconHelper.getIcon(key),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp),
+                                            tint = if (isSelected) Color(selectedColorHex) else Color.Gray
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // Voice Keywords
+                    // Voice Keywords (with instruction popup on first focus + help button)
                     OutlinedTextField(
                         value = voiceKeywords,
                         onValueChange = { voiceKeywords = it },
-                        label = { Text(Localization.categoryKeywordsLabel(lang)) },
-                        placeholder = { Text(Localization.categoryKeywordsPlaceholder(lang)) },
-                        supportingText = {
+                        label = {
                             Text(
-                                if (lang == Localization.Language.ENGLISH)
-                                    "Keywords that will be automatically detected via speech"
-                                else
-                                    "Λέξεις που θα αναγνωρίζονται αυτόματα στη φωνή",
-                                fontSize = 11.sp
+                                text = Localization.categoryKeywordsLabel(lang),
+                                fontSize = 11.5.sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text(Localization.categoryKeywordsPlaceholder(lang)) },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { showVoiceKeywordsHint = true },
+                                modifier = Modifier.testTag("category_voice_keywords_info_btn")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HelpOutline,
+                                    contentDescription = if (lang == Localization.Language.ENGLISH) "Voice keywords help" else "Οδηγίες φωνητικών λέξεων",
+                                    tint = Emerald700,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focusState ->
+                                if (focusState.isFocused && !hasShownVoiceKeywordsHint) {
+                                    hasShownVoiceKeywordsHint = true
+                                    showVoiceKeywordsHint = true
+                                }
+                            }
+                            .testTag("category_voice_keywords_input"),
                         shape = RoundedCornerShape(12.dp),
                         maxLines = 3
                     )
@@ -470,6 +609,7 @@ fun CategoryDialog(
                     }
                 }
             }
+        }
         }
     }
 }

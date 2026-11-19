@@ -1,8 +1,15 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -82,19 +90,10 @@ fun OnboardingCarouselDialog(
     val tabSections = remember(isEnglish) { GuideContentData.buildTabGuideSections(isEnglish) }
     val smartFeatures = remember(isEnglish) { GuideContentData.buildSmartFeatureItems(isEnglish) }
 
-    // Default first 2 tab sections expanded; user can toggle any section cleanly
-    val expandedTabs = remember {
-        mutableStateMapOf(
-            "home" to true,
-            "analytics" to true,
-            "members" to false,
-            "categories" to false,
-            "households" to false,
-            "reminders" to false,
-            "goals" to false,
-            "profile_settings" to false
-        )
-    }
+    // All items start collapsed so the Guide page stays calm and scannable
+    val expandedSteps = remember { mutableStateMapOf<Int, Boolean>() }
+    val expandedTabs = remember { mutableStateMapOf<String, Boolean>() }
+    val expandedFeatures = remember { mutableStateMapOf<String, Boolean>() }
 
     Column(
         modifier = modifier
@@ -145,23 +144,15 @@ fun OnboardingCarouselDialog(
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (isEnglish) "App Guide" else "Οδηγίες",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = if (isEnglish) "Complete Finsay manual & quick start" else "Πλήρης οδηγός χρήσης & πρώτα βήματα",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                Text(
+                    text = if (isEnglish) "App Guide" else "Οδηγίες",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -207,148 +198,147 @@ fun OnboardingCarouselDialog(
             }
         }
 
-        // Scrollable Section Content
-        LazyColumn(
+        // Scrollable Section Content with smooth directional transitions
+        AnimatedContent(
+            targetState = selectedSection,
+            transitionSpec = {
+                val forward = targetState > initialState
+                (slideInHorizontally(tween(FinsayMotion.TAB_DURATION_MS)) { if (forward) it / 8 else -it / 8 } +
+                    fadeIn(tween(FinsayMotion.TAB_DURATION_MS))) togetherWith
+                    (slideOutHorizontally(tween(FinsayMotion.TAB_DURATION_MS - 30)) { if (forward) -it / 10 else it / 10 } +
+                        fadeOut(tween(FinsayMotion.TAB_DURATION_MS - 40)))
+            },
+            label = "guideSectionTransition",
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            when (selectedSection) {
-                0 -> {
-                    item(key = "qs_hero") {
-                        GuideWelcomeHeroCard(isEnglish = isEnglish)
-                    }
-                    items(quickStartSteps, key = { "qs_${it.number}" }) { step ->
-                        QuickStartStepCard(
-                            step = step,
-                            isEnglish = isEnglish,
-                            onAddMember = onAddMember,
-                            onAddCategory = onAddCategory,
-                            onSeedCategories = onSeedCategories
-                        )
-                    }
-                    item(key = "qs_footer") {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(
-                                onClick = { selectedSection = 1 },
-                                shape = RoundedCornerShape(14.dp),
-                                border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.5f)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(46.dp)
-                                    .testTag("guide_explore_tabs_button")
-                            ) {
-                                Text(
-                                    text = if (isEnglish) "Explore what each tab does" else "Δείτε τι κάνει κάθε καρτέλα",
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.5.sp,
-                                    color = Emerald700
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = null,
-                                    tint = Emerald700,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-
-                            Button(
-                                onClick = onDismiss,
-                                shape = RoundedCornerShape(14.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .testTag("onboarding_next_button")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = if (isEnglish) "Get Started in Finsay" else "Ξεκινήστε στην εφαρμογή",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 14.5.sp,
-                                    color = Color.White
-                                )
-                            }
+                .weight(1f)
+        ) { sectionIndex ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                when (sectionIndex) {
+                    0 -> {
+                        item(key = "qs_hero", contentType = "hero") {
+                            GuideWelcomeHeroCard(isEnglish = isEnglish)
                         }
-                    }
-                }
-
-                1 -> {
-                    item(key = "tabs_intro") {
-                        val allExpanded = tabSections.all { expandedTabs[it.id] == true }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (isEnglish) "Tap any section to expand details" else "Πατήστε σε κάθε καρτέλα για λεπτομέρειες",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.weight(1f)
+                        item(key = "qs_toggle_all", contentType = "intro") {
+                            val allStepsExpanded = quickStartSteps.isNotEmpty() && quickStartSteps.all { expandedSteps[it.number] == true }
+                            GuideExpandCollapseAllRow(
+                                allExpanded = allStepsExpanded,
+                                isEnglish = isEnglish,
+                                onToggleAll = {
+                                    val nextState = !allStepsExpanded
+                                    quickStartSteps.forEach { expandedSteps[it.number] = nextState }
+                                }
                             )
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Emerald700.copy(alpha = 0.12f),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        val nextState = !allExpanded
-                                        tabSections.forEach { expandedTabs[it.id] = nextState }
-                                    }
-                            ) {
-                                Text(
-                                    text = if (allExpanded) {
-                                        if (isEnglish) "Collapse all" else "Σύμπτυξη όλων"
-                                    } else {
-                                        if (isEnglish) "Expand all" else "Ανάπτυξη όλων"
-                                    },
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Emerald700,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
+                        }
+                        items(quickStartSteps, key = { "qs_${it.number}" }, contentType = { "qs_step" }) { step ->
+                            QuickStartStepCard(
+                                step = step,
+                                isExpanded = expandedSteps[step.number] == true,
+                                onToggle = { expandedSteps[step.number] = !(expandedSteps[step.number] == true) },
+                                isEnglish = isEnglish,
+                                onAddMember = onAddMember,
+                                onAddCategory = onAddCategory,
+                                onSeedCategories = onSeedCategories
+                            )
+                        }
+                        item(key = "qs_footer", contentType = "footer") {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = { selectedSection = 1 },
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(46.dp)
+                                        .testTag("guide_explore_tabs_button")
+                                ) {
+                                    Text(
+                                        text = if (isEnglish) "Explore what each tab does" else "Δείτε τι κάνει κάθε καρτέλα",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.5.sp,
+                                        color = Emerald700
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = null,
+                                        tint = Emerald700,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                Button(
+                                    onClick = onDismiss,
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("onboarding_next_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isEnglish) "Get Started in Finsay" else "Ξεκινήστε στην εφαρμογή",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.5.sp,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     }
 
-                    items(tabSections, key = { "tab_${it.id}" }) { section ->
-                        TabGuideAccordionCard(
-                            section = section,
-                            isExpanded = expandedTabs[section.id] == true,
-                            onToggle = { expandedTabs[section.id] = !(expandedTabs[section.id] == true) }
-                        )
-                    }
-                }
+                    1 -> {
+                        item(key = "tabs_intro", contentType = "intro") {
+                            val allExpanded = tabSections.isNotEmpty() && tabSections.all { expandedTabs[it.id] == true }
+                            GuideExpandCollapseAllRow(
+                                allExpanded = allExpanded,
+                                isEnglish = isEnglish,
+                                onToggleAll = {
+                                    val nextState = !allExpanded
+                                    tabSections.forEach { expandedTabs[it.id] = nextState }
+                                }
+                            )
+                        }
 
-                else -> {
-                    item(key = "feat_intro") {
-                        Text(
-                            text = if (isEnglish) {
-                                "Discover all smart tools built into Finsay to save time and keep every euro organized:"
-                            } else {
-                                "Ανακαλύψτε όλα τα έξυπνα εργαλεία του Finsay για ταχύτητα, διαφάνεια και απόλυτο έλεγχο:"
-                            },
-                            fontSize = 12.5.sp,
-                            lineHeight = 18.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 2.dp)
-                        )
+                        items(tabSections, key = { "tab_${it.id}" }, contentType = { "tab_accordion" }) { section ->
+                            TabGuideAccordionCard(
+                                section = section,
+                                isExpanded = expandedTabs[section.id] == true,
+                                onToggle = { expandedTabs[section.id] = !(expandedTabs[section.id] == true) }
+                            )
+                        }
                     }
 
-                    items(smartFeatures, key = { "feat_${it.id}" }) { feature ->
-                        SmartFeatureGuideCard(feature = feature)
+                    else -> {
+                        item(key = "features_toggle_all", contentType = "intro") {
+                            val allFeaturesExpanded = smartFeatures.isNotEmpty() && smartFeatures.all { expandedFeatures[it.id] == true }
+                            GuideExpandCollapseAllRow(
+                                allExpanded = allFeaturesExpanded,
+                                isEnglish = isEnglish,
+                                onToggleAll = {
+                                    val nextState = !allFeaturesExpanded
+                                    smartFeatures.forEach { expandedFeatures[it.id] = nextState }
+                                }
+                            )
+                        }
+                        items(smartFeatures, key = { "feat_${it.id}" }, contentType = { "smart_feature" }) { feature ->
+                            SmartFeatureGuideCard(
+                                feature = feature,
+                                isExpanded = expandedFeatures[feature.id] == true,
+                                onToggle = { expandedFeatures[feature.id] = !(expandedFeatures[feature.id] == true) }
+                            )
+                        }
                     }
                 }
             }
@@ -365,9 +355,19 @@ private fun GuideSegmentPill(
     testTag: String,
     modifier: Modifier = Modifier
 ) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) Emerald700 else Color.Transparent,
+        animationSpec = tween(200),
+        label = "guidePillBg"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "guidePillContent"
+    )
     Surface(
         shape = RoundedCornerShape(11.dp),
-        color = if (selected) Emerald700 else Color.Transparent,
+        color = bgColor,
         modifier = modifier
             .height(40.dp)
             .clip(RoundedCornerShape(11.dp))
@@ -384,7 +384,7 @@ private fun GuideSegmentPill(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = contentColor,
                 modifier = Modifier.size(15.dp)
             )
             Spacer(modifier = Modifier.width(4.dp))
@@ -392,7 +392,7 @@ private fun GuideSegmentPill(
                 text = label,
                 fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
-                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -439,31 +439,76 @@ private fun GuideWelcomeHeroCard(isEnglish: Boolean) {
     }
 }
 
+@Composable
+private fun GuideExpandCollapseAllRow(
+    allExpanded: Boolean,
+    isEnglish: Boolean,
+    onToggleAll: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Emerald700.copy(alpha = 0.12f),
+            modifier = Modifier
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { onToggleAll() }
+        ) {
+            Text(
+                text = if (allExpanded) {
+                    if (isEnglish) "Collapse all" else "Σύμπτυξη όλων"
+                } else {
+                    if (isEnglish) "Expand all" else "Ανάπτυξη όλων"
+                },
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = Emerald700,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QuickStartStepCard(
     step: QuickStartStep,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
     isEnglish: Boolean,
     onAddMember: (() -> Unit)?,
     onAddCategory: (() -> Unit)?,
     onSeedCategories: (() -> Unit)?
 ) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(220),
+        label = "quickStartChevron_${step.number}"
+    )
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        border = BorderStroke(
+            1.dp,
+            if (isExpanded) step.accentColor.copy(alpha = 0.4f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .testTag("guide_step_header_${step.number}")
             ) {
                 Box(
                     modifier = Modifier
@@ -485,91 +530,119 @@ private fun QuickStartStepCard(
                         text = step.title,
                         fontSize = 14.5.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = step.whereLabel,
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = step.accentColor
+                        color = step.accentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+                Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = step.accentColor.copy(alpha = 0.12f),
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = step.icon,
                             contentDescription = null,
                             tint = step.accentColor,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(17.dp)
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .rotate(chevronRotation)
+                )
             }
 
-            Text(
-                text = step.description,
-                fontSize = 12.5.sp,
-                lineHeight = 18.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = FinsayMotion.ExpandEnter,
+                exit = FinsayMotion.ShrinkExit
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    Text(
+                        text = step.description,
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-            // Optional direct action buttons for Steps 1 & 2 when permitted
-            when (step.actionType) {
-                "ADD_MEMBER" -> if (onAddMember != null) {
-                    OutlinedButton(
-                        onClick = onAddMember,
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, step.accentColor.copy(alpha = 0.5f)),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(36.dp)
-                    ) {
-                        Text(
-                            text = if (isEnglish) "+ Add Member Now" else "+ Προσθήκη Μέλους τώρα",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = step.accentColor
-                        )
-                    }
-                }
-                "SEED_CATEGORIES" -> if (onSeedCategories != null || onAddCategory != null) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        if (onSeedCategories != null) {
-                            Button(
-                                onClick = onSeedCategories,
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = step.accentColor),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text(
-                                    text = if (isEnglish) "Add Standard Categories" else "Προσθήκη Βασικών Κατηγοριών",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                        if (onAddCategory != null) {
+                    // Optional direct action buttons for Steps 1 & 2 when permitted
+                    when (step.actionType) {
+                        "ADD_MEMBER" -> if (onAddMember != null) {
                             OutlinedButton(
-                                onClick = onAddCategory,
+                                onClick = onAddMember,
                                 shape = RoundedCornerShape(10.dp),
                                 border = BorderStroke(1.dp, step.accentColor.copy(alpha = 0.5f)),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 modifier = Modifier.height(36.dp)
                             ) {
                                 Text(
-                                    text = if (isEnglish) "+ New Category" else "+ Νέα Κατηγορία",
+                                    text = if (isEnglish) "+ Add Member Now" else "+ Προσθήκη Μέλους τώρα",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = step.accentColor
                                 )
+                            }
+                        }
+                        "SEED_CATEGORIES" -> if (onSeedCategories != null || onAddCategory != null) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                if (onSeedCategories != null) {
+                                    Button(
+                                        onClick = onSeedCategories,
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = step.accentColor),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isEnglish) "Add Standard Categories" else "Προσθήκη Βασικών Κατηγοριών",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                if (onAddCategory != null) {
+                                    OutlinedButton(
+                                        onClick = onAddCategory,
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(1.dp, step.accentColor.copy(alpha = 0.5f)),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(36.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isEnglish) "+ New Category" else "+ Νέα Κατηγορία",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = step.accentColor
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -643,18 +716,25 @@ private fun TabGuideAccordionCard(
                     )
                 }
                 Spacer(modifier = Modifier.width(6.dp))
+                val chevronRotation by animateFloatAsState(
+                    targetValue = if (isExpanded) 180f else 0f,
+                    animationSpec = tween(220),
+                    label = "guideChevron"
+                )
                 Icon(
-                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    imageVector = Icons.Default.ExpandMore,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier
+                        .size(22.dp)
+                        .rotate(chevronRotation)
                 )
             }
 
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = expandVertically(),
-                exit = shrinkVertically()
+                enter = FinsayMotion.ExpandEnter,
+                exit = FinsayMotion.ShrinkExit
             ) {
                 Column(
                     modifier = Modifier
@@ -692,23 +772,35 @@ private fun TabGuideAccordionCard(
 }
 
 @Composable
-private fun SmartFeatureGuideCard(feature: SmartFeatureItem) {
+private fun SmartFeatureGuideCard(
+    feature: SmartFeatureItem,
+    isExpanded: Boolean,
+    onToggle: () -> Unit
+) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(220),
+        label = "smartFeatureChevron_${feature.id}"
+    )
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        border = BorderStroke(
+            1.dp,
+            if (isExpanded) feature.accentColor.copy(alpha = 0.4f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggle() }
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .testTag("guide_feature_header_${feature.id}")
             ) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -724,72 +816,97 @@ private fun SmartFeatureGuideCard(feature: SmartFeatureItem) {
                         )
                     }
                 }
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = feature.title,
                     fontSize = 14.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(22.dp)
+                        .rotate(chevronRotation)
                 )
             }
 
-            Text(
-                text = feature.summary,
-                fontSize = 12.5.sp,
-                lineHeight = 18.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                feature.highlights.forEach { hl ->
-                    Row(verticalAlignment = Alignment.Top) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            tint = feature.accentColor,
-                            modifier = Modifier
-                                .padding(top = 2.dp)
-                                .size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(7.dp))
-                        Text(
-                            text = hl,
-                            fontSize = 12.sp,
-                            lineHeight = 17.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-
-            if (!feature.tipText.isNullOrBlank()) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = feature.accentColor.copy(alpha = 0.08f),
-                    border = BorderStroke(1.dp, feature.accentColor.copy(alpha = 0.22f)),
-                    modifier = Modifier.fillMaxWidth()
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = FinsayMotion.ExpandEnter,
+                exit = FinsayMotion.ShrinkExit
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(7.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lightbulb,
-                            contentDescription = null,
-                            tint = feature.accentColor,
-                            modifier = Modifier
-                                .padding(top = 1.dp)
-                                .size(15.dp)
-                        )
-                        Text(
-                            text = feature.tipText,
-                            fontSize = 11.5.sp,
-                            lineHeight = 16.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    Text(
+                        text = feature.summary,
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        feature.highlights.forEach { hl ->
+                            Row(verticalAlignment = Alignment.Top) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = feature.accentColor,
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(7.dp))
+                                Text(
+                                    text = hl,
+                                    fontSize = 12.sp,
+                                    lineHeight = 17.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    if (!feature.tipText.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = feature.accentColor.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, feature.accentColor.copy(alpha = 0.22f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.Top,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lightbulb,
+                                    contentDescription = null,
+                                    tint = feature.accentColor,
+                                    modifier = Modifier
+                                        .padding(top = 1.dp)
+                                        .size(15.dp)
+                                )
+                                Text(
+                                    text = feature.tipText,
+                                    fontSize = 11.5.sp,
+                                    lineHeight = 16.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
                     }
                 }
             }

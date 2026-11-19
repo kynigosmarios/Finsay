@@ -1,6 +1,9 @@
 package com.example.ui.components
 
 import android.app.DatePickerDialog
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -186,6 +189,7 @@ fun ExportReportDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        SmoothDialogContent {
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -224,19 +228,12 @@ fun ExportReportDialog(
                             }
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Export Report" else "Εξαγωγή Αναφοράς",
-                                fontSize = 17.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "In real Excel & PDF format" else "Σε μορφή Excel & PDF",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = if (lang == Localization.Language.ENGLISH) "Export Report" else "Εξαγωγή Αναφοράς",
+                            fontSize = 17.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = Localization.close(lang))
@@ -291,91 +288,104 @@ fun ExportReportDialog(
                 }
 
                 // Sub-selectors for Single Day or Date Range
-                if (selectedFilterIndex == 1) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showSingleDatePicker() }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                AnimatedVisibility(
+                    visible = selectedFilterIndex == 1,
+                    enter = FinsayMotion.ExpandEnter,
+                    exit = FinsayMotion.ShrinkExit
+                ) {
+                    Column {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showSingleDatePicker() }
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Emerald700, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Emerald700, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (lang == Localization.Language.ENGLISH) "Select day:" else "Επιλογή ημέρας:",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Select day:" else "Επιλογή ημέρας:",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = dateSdf.format(selectedSingleDayTimestamp),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Emerald700
                                 )
                             }
-                            Text(
-                                text = dateSdf.format(selectedSingleDayTimestamp),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Emerald700
-                            )
                         }
                     }
-                } else if (selectedFilterIndex == 2) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // From
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { showRangeStartDatePicker() }
+                }
+                AnimatedVisibility(
+                    visible = selectedFilterIndex == 2,
+                    enter = FinsayMotion.ExpandEnter,
+                    exit = FinsayMotion.ShrinkExit
+                ) {
+                    Column {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "From" else "Από",
-                                    fontSize = 10.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = dateSdf.format(rangeStartTimestamp),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Emerald700
-                                )
+                            // From
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showRangeStartDatePicker() }
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = if (lang == Localization.Language.ENGLISH) "From" else "Από",
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = dateSdf.format(rangeStartTimestamp),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Emerald700
+                                    )
+                                }
                             }
-                        }
 
-                        // To
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { showRangeEndDatePicker() }
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "To" else "Έως",
-                                    fontSize = 10.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = dateSdf.format(rangeEndTimestamp),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Emerald700
-                                )
+                            // To
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { showRangeEndDatePicker() }
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(
+                                        text = if (lang == Localization.Language.ENGLISH) "To" else "Έως",
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = dateSdf.format(rangeEndTimestamp),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Emerald700
+                                    )
+                                }
                             }
                         }
                     }
@@ -477,6 +487,7 @@ fun ExportReportDialog(
                 }
             }
         }
+        }
     }
 }
 
@@ -487,17 +498,33 @@ private fun FilterPill(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val containerColor by animateColorAsState(
+        targetValue = if (isSelected) Emerald700 else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = tween(200),
+        label = "export_pill_bg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        animationSpec = tween(200),
+        label = "export_pill_border"
+    )
+    val textColor by animateColorAsState(
+        targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(200),
+        label = "export_pill_text"
+    )
+
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = if (isSelected) Emerald700 else MaterialTheme.colorScheme.surfaceVariant,
-        border = BorderStroke(1.dp, if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor),
         modifier = modifier.clickable { onClick() }
     ) {
         Text(
             text = title,
             fontSize = 11.5.sp,
             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+            color = textColor,
             modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             maxLines = 1

@@ -1,11 +1,15 @@
 package com.example.ui.components
 
 import android.app.TimePickerDialog
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -82,6 +86,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.Household
 import com.example.data.model.UserProfile
+import com.example.service.BankNotificationListenerService
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
@@ -101,6 +106,8 @@ fun AppSettingsDialog(
     reminderMinute: Int = 30,
     notificationConsentHandled: Boolean = false,
     bankAutoCatcherEnabled: Boolean = true,
+    isPro: Boolean = false,
+    onShowPremiumPaywall: (String) -> Unit = {},
     onAcceptNotificationConsent: () -> Unit = {},
     onToggleReminder: (Boolean) -> Unit = {},
     onSetReminderTime: (Int, Int) -> Unit = { _, _ -> },
@@ -186,19 +193,13 @@ fun AppSettingsDialog(
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = Localization.appSettings(lang),
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = Localization.appSettingsSubtitle(lang),
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = Localization.appSettings(lang),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
 
@@ -315,70 +316,28 @@ fun AppSettingsDialog(
                                     )
                                 }
 
-                                if (reminderEnabled) {
-                                    Spacer(modifier = Modifier.height(14.dp))
+                                AnimatedVisibility(
+                                    visible = reminderEnabled,
+                                    enter = FinsayMotion.ExpandEnter,
+                                    exit = FinsayMotion.ShrinkExit
+                                ) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Spacer(modifier = Modifier.height(14.dp))
 
-                                    var timeInput by remember(reminderHour, reminderMinute) {
-                                        mutableStateOf("%02d:%02d".format(reminderHour, reminderMinute))
-                                    }
-                                    val focusManager = LocalFocusManager.current
-                                    val keyboardController = LocalSoftwareKeyboardController.current
-
-                                    // Function to commit time parsing
-                                    fun commitTime(str: String) {
-                                        val parts = str.trim().split(":", ".")
-                                        if (parts.size == 2) {
-                                            val h = parts[0].toIntOrNull()
-                                            val m = parts[1].toIntOrNull()
-                                            if (h != null && m != null && h in 0..23 && m in 0..59) {
-                                                onSetReminderTime(h, m)
-                                                timeInput = "%02d:%02d".format(h, m)
-                                            }
+                                        var timeInput by remember(reminderHour, reminderMinute) {
+                                            mutableStateOf("%02d:%02d".format(reminderHour, reminderMinute))
                                         }
-                                    }
+                                        val focusManager = LocalFocusManager.current
+                                        val keyboardController = LocalSoftwareKeyboardController.current
 
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
                                         Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier.clickable {
-                                                TimePickerDialog(
-                                                    context,
-                                                    { _, pickedHour, pickedMinute ->
-                                                        onSetReminderTime(pickedHour, pickedMinute)
-                                                        timeInput = "%02d:%02d".format(pickedHour, pickedMinute)
-                                                    },
-                                                    reminderHour,
-                                                    reminderMinute,
-                                                    true
-                                                ).show()
-                                            }
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Schedule,
-                                                contentDescription = null,
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = if (lang == Localization.Language.ENGLISH) "Reminder Time:" else "Ώρα ειδοποίησης:",
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .clickable {
-                                                    focusManager.clearFocus()
-                                                    keyboardController?.hide()
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.clickable {
                                                     TimePickerDialog(
                                                         context,
                                                         { _, pickedHour, pickedMinute ->
@@ -390,8 +349,22 @@ fun AppSettingsDialog(
                                                         true
                                                     ).show()
                                                 }
-                                                .testTag("reminder_time_picker_button")
-                                        ) {
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Schedule,
+                                                    contentDescription = null,
+                                                    tint = Emerald700,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = if (lang == Localization.Language.ENGLISH) "Reminder Time" else "Ώρα ειδοποίησης",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+
                                             Surface(
                                                 shape = RoundedCornerShape(10.dp),
                                                 color = MaterialTheme.colorScheme.surface,
@@ -399,6 +372,22 @@ fun AppSettingsDialog(
                                                 modifier = Modifier
                                                     .width(88.dp)
                                                     .height(40.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .clickable {
+                                                        focusManager.clearFocus()
+                                                        keyboardController?.hide()
+                                                        TimePickerDialog(
+                                                            context,
+                                                            { _, pickedHour, pickedMinute ->
+                                                                onSetReminderTime(pickedHour, pickedMinute)
+                                                                timeInput = "%02d:%02d".format(pickedHour, pickedMinute)
+                                                            },
+                                                            reminderHour,
+                                                            reminderMinute,
+                                                            true
+                                                        ).show()
+                                                    }
+                                                    .testTag("reminder_time_picker_button")
                                             ) {
                                                 Box(
                                                     contentAlignment = Alignment.Center,
@@ -414,23 +403,6 @@ fun AppSettingsDialog(
                                                     )
                                                 }
                                             }
-
-                                            Spacer(modifier = Modifier.width(6.dp))
-
-                                            Surface(
-                                                shape = CircleShape,
-                                                color = Emerald700.copy(alpha = 0.12f),
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Box(contentAlignment = Alignment.Center) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Schedule,
-                                                        contentDescription = "Pick Time",
-                                                        tint = Emerald700,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
-                                            }
                                         }
                                     }
                                 }
@@ -440,6 +412,39 @@ fun AppSettingsDialog(
 
 
                     // Section: Ανάγνωση Τραπεζικών Push (Bank Auto-Catcher)
+                    val openBankNotificationAccessSettings = {
+                        val componentName = ComponentName(context, BankNotificationListenerService::class.java)
+                        val openedDirect = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            try {
+                                val detailIntent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).apply {
+                                    putExtra(
+                                        Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                                        componentName.flattenToString()
+                                    )
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(detailIntent)
+                                true
+                            } catch (_: Exception) {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                        if (!openedDirect) {
+                            try {
+                                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                            } catch (_: Exception) {
+                                onMessage(
+                                    if (lang == Localization.Language.ENGLISH)
+                                        "Go to Settings > Notifications > Notification access to enable Finsay"
+                                    else
+                                        "Μεταβείτε στις Ρυθμίσεις > Ειδοποιήσεις για ενεργοποίηση του Finsay"
+                                )
+                            }
+                        }
+                    }
+
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
@@ -447,102 +452,89 @@ fun AppSettingsDialog(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(14.dp)
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Emerald700.copy(alpha = 0.12f),
+                                    modifier = Modifier.size(34.dp)
                                 ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = Emerald700.copy(alpha = 0.12f),
-                                        modifier = Modifier.size(34.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.AccountBalance,
-                                                contentDescription = null,
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(12.dp))
-
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "Bank Push Reader" else "Ανάγνωση Τραπεζικών Push",
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.AccountBalance,
+                                            contentDescription = null,
+                                            tint = Emerald700,
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
-
-                                    Switch(
-                                        checked = bankAutoCatcherEnabled,
-                                        onCheckedChange = { isChecked ->
-                                            onToggleBankAutoCatcher(isChecked)
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = Color.White,
-                                            checkedTrackColor = Emerald700
-                                        ),
-                                        modifier = Modifier.testTag("bank_auto_catcher_switch")
-                                    )
                                 }
 
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.width(12.dp))
 
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
+                                    Text(
+                                        text = if (lang == Localization.Language.ENGLISH) "Bank Push Reader" else "Ανάγνωση Τραπεζικών Push",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
                                     Surface(
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = Emerald700.copy(alpha = 0.12f),
-                                        border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.35f)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Amber700.copy(alpha = 0.15f),
+                                        border = BorderStroke(1.dp, Amber700.copy(alpha = 0.45f))
+                                    ) {
+                                        Text(
+                                            text = "Pro",
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Amber700,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { showBankInfoDialog = true },
                                         modifier = Modifier
-                                            .size(38.dp)
-                                            .clickable { showBankInfoDialog = true }
+                                            .size(28.dp)
                                             .testTag("bank_push_info_button")
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.Info,
-                                                contentDescription = if (lang == Localization.Language.ENGLISH) "Info" else "Πληροφορίες",
-                                                tint = Emerald700,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                        }
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            try {
-                                                context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                                            } catch (e: Exception) {
-                                                onMessage("Μεταβείτε στις Ρυθμίσεις > Ειδοποιήσεις για ενεργοποίηση")
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .height(38.dp)
-                                            .testTag("enable_notification_listener_button"),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = Emerald700)
-                                    ) {
-                                        Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "Configure Access" else "Ρύθμιση Πρόσβασης",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = if (lang == Localization.Language.ENGLISH) "Info" else "Πληροφορίες",
+                                            tint = Emerald700,
+                                            modifier = Modifier.size(16.dp)
                                         )
                                     }
                                 }
+
+                                Switch(
+                                    checked = bankAutoCatcherEnabled && isPro,
+                                    onCheckedChange = { isChecked ->
+                                        if (isChecked && !isPro) {
+                                            onShowPremiumPaywall("bank_auto_catcher")
+                                        } else {
+                                            onToggleBankAutoCatcher(isChecked)
+                                            if (isChecked) {
+                                                openBankNotificationAccessSettings()
+                                            }
+                                        }
+                                    },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Color.White,
+                                        checkedTrackColor = Emerald700
+                                    ),
+                                    modifier = Modifier.testTag("bank_auto_catcher_switch")
+                                )
                             }
                         }
                     }
@@ -571,7 +563,7 @@ fun AppSettingsDialog(
                         }
                     }
 
-                    // Section: Διαχείριση Δεδομένων (Data Reset Row)
+                    // Section: Διαχείριση Δεδομένων (Clear Household Data Row)
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Surface(
                             shape = RoundedCornerShape(16.dp),
@@ -580,38 +572,41 @@ fun AppSettingsDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { showResetConfirmDialog = true }
+                                .testTag("clear_household_data_row")
                         ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(34.dp)
+                                    modifier = Modifier.size(32.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             imageVector = Icons.Default.DeleteSweep,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.error,
-                                            modifier = Modifier.size(18.dp)
+                                            modifier = Modifier.size(17.dp)
                                         )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.width(12.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
 
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = Localization.clearAllData(lang),
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
+                                Text(
+                                    text = Localization.clearAllData(lang),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
                     }
@@ -626,17 +621,19 @@ fun AppSettingsDialog(
             shape = RoundedCornerShape(22.dp),
             title = {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH) "Reset All Data?" else "Πλήρης Εκκαθάριση;",
+                    text = if (lang == Localization.Language.ENGLISH) "Clear Household Data?" else "Εκκαθάριση Δεδομένων Εξοδολογίου;",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
+                    fontSize = 17.sp
                 )
             },
             text = {
+                val householdTitle = household?.name?.ifBlank { null }
+                    ?: if (lang == Localization.Language.ENGLISH) "active household" else "τρέχον εξοδολόγιο"
                 Text(
                     text = if (lang == Localization.Language.ENGLISH)
-                        "All local expenses will be wiped and you will be signed out so the app returns to its initial clean state."
+                        "All expenses, incomes, members, categories, goals, and reminders of \"$householdTitle\" will be cleared. A backup remains safely stored in Firebase so the owner can restore it if needed."
                     else
-                        "Θα διαγραφούν όλα τα τοπικά έξοδα και θα αποσυνδεθείτε από τον λογαριασμό σας ώστε η εφαρμογή να επανέλθει στην αρχική της κατάσταση.",
+                        "Θα εκκαθαριστούν όλα τα έξοδα, έσοδα, μέλη, κατηγορίες, στόχοι και υπενθυμίσεις από το «$householdTitle». Τα δεδομένα διατηρούνται με ασφάλεια στο Firebase για επαναφορά από τον ιδιοκτήτη αν χρειαστεί.",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -649,10 +646,11 @@ fun AppSettingsDialog(
                         onClearAllDataAndSignOut()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("confirm_clear_household_data_btn")
                 ) {
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Clear & Sign Out" else "Εκκαθάριση & Αποσύνδεση",
+                        text = if (lang == Localization.Language.ENGLISH) "Clear Data" else "Εκκαθάριση",
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.5.sp
                     )
@@ -742,15 +740,31 @@ private fun LanguageOptionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val bgColor by animateColorAsState(
+        targetValue = if (isSelected) Emerald700.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        animationSpec = tween(200),
+        label = "langBg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+        animationSpec = tween(200),
+        label = "langBorder"
+    )
+    val textColor by animateColorAsState(
+        targetValue = if (isSelected) Emerald700 else MaterialTheme.colorScheme.onSurface,
+        animationSpec = tween(200),
+        label = "langText"
+    )
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) Emerald700.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = bgColor,
         border = BorderStroke(
             width = if (isSelected) 1.5.dp else 1.dp,
-            color = if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+            color = borderColor
         ),
         modifier = modifier
             .height(58.dp)
+            .clip(RoundedCornerShape(14.dp))
             .clickable { onClick() }
     ) {
         Row(
@@ -767,7 +781,7 @@ private fun LanguageOptionCard(
                     text = title,
                     fontSize = 13.sp,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (isSelected) Emerald700 else MaterialTheme.colorScheme.onSurface
+                    color = textColor
                 )
             }
             if (isSelected) {
@@ -797,15 +811,31 @@ private fun ThemeCardOption(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val bgColor by animateColorAsState(
+        targetValue = if (isSelected) Emerald700.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        animationSpec = tween(200),
+        label = "themeBg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+        animationSpec = tween(200),
+        label = "themeBorder"
+    )
+    val iconTint by animateColorAsState(
+        targetValue = if (isSelected) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "themeTint"
+    )
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = if (isSelected) Emerald700.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        color = bgColor,
         border = BorderStroke(
             width = if (isSelected) 1.5.dp else 1.dp,
-            color = if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+            color = borderColor
         ),
         modifier = modifier
             .height(46.dp)
+            .clip(RoundedCornerShape(14.dp))
             .clickable { onClick() }
     ) {
         Box(
@@ -816,7 +846,7 @@ private fun ThemeCardOption(
                 imageVector = icon,
                 contentDescription = null,
                 modifier = Modifier.size(22.dp),
-                tint = if (isSelected) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant
+                tint = iconTint
             )
         }
     }

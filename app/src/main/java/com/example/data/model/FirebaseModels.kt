@@ -60,6 +60,7 @@ data class Household(
     var memberRoles: Map<String, String> = emptyMap(), // uid or email -> "CREATOR", "EDITOR", or "REGISTAR"
     var memberEmails: Map<String, String> = emptyMap(), // uid -> email
     var memberNames: Map<String, String> = emptyMap(), // uid -> displayName
+    var memberDefaultPayers: Map<String, String> = emptyMap(), // uid -> CSV of default payer FamilyMember IDs
     var pendingInviteRole: String = "REGISTAR",
     var isPremium: Boolean = false,
     var createdAt: Timestamp? = null,
@@ -85,6 +86,7 @@ data class FirebaseExpense(
     var payerAmountsCsv: String = "",
     var createdByUid: String = "",
     var createdByName: String = "",
+    var isDeleted: Boolean = false,
     var createdAt: Timestamp? = null
 )
 
@@ -129,6 +131,7 @@ data class FirebaseIncome(
     var note: String = "",
     var createdByUid: String = "",
     var createdByName: String = "",
+    var isDeleted: Boolean = false,
     var createdAt: Timestamp? = null
 )
 
@@ -178,6 +181,7 @@ data class FirebaseSavingsGoal(
     var iconKey: String = "vacation",
     var colorHex: Long = 0xFF059669,
     var note: String = "",
+    var isDeleted: Boolean = false,
     var createdAt: Timestamp? = null
 )
 
@@ -205,6 +209,7 @@ data class FirebaseRecurringExpense(
     var payerMemberIdsCsv: String = "",
     var payerAmountsCsv: String = "",
     var anchorMonth: Int = 0,
+    var isDeleted: Boolean = false,
     var createdAt: Timestamp? = null
 )
 

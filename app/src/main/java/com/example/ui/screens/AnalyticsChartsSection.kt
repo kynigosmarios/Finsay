@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -51,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +75,80 @@ data class PieChartSlice(
     val color: Color,
     val onClick: (() -> Unit)? = null
 )
+
+@Composable
+internal fun AnalyticsSectionHeader(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    iconContainerColor: Color = iconTint.copy(alpha = 0.13f),
+    badge: (@Composable () -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = if (trailing != null) 8.dp else 0.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(11.dp),
+                color = iconContainerColor,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f, fill = false)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 15.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (badge != null) {
+                        badge()
+                    }
+                }
+                if (!subtitle.isNullOrBlank()) {
+                    Text(
+                        text = subtitle,
+                        fontSize = 11.5.sp,
+                        color = subtitleColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+        if (trailing != null) {
+            trailing()
+        }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -231,9 +308,19 @@ internal fun ChartTypeToggle(
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val barBg by animateColorAsState(
+                targetValue = if (selectedType == 0) activeColor else Color.Transparent,
+                animationSpec = tween(200),
+                label = "chart_toggle_bar_bg"
+            )
+            val barTint by animateColorAsState(
+                targetValue = if (selectedType == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                animationSpec = tween(200),
+                label = "chart_toggle_bar_tint"
+            )
             Surface(
                 shape = RoundedCornerShape(7.dp),
-                color = if (selectedType == 0) activeColor else Color.Transparent,
+                color = barBg,
                 modifier = Modifier
                     .size(30.dp)
                     .clip(RoundedCornerShape(7.dp))
@@ -243,15 +330,25 @@ internal fun ChartTypeToggle(
                     Icon(
                         imageVector = Icons.Default.BarChart,
                         contentDescription = Localization.barChartView(lang),
-                        tint = if (selectedType == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = barTint,
                         modifier = Modifier.size(17.dp)
                     )
                 }
             }
 
+            val pieBg by animateColorAsState(
+                targetValue = if (selectedType == 1) activeColor else Color.Transparent,
+                animationSpec = tween(200),
+                label = "chart_toggle_pie_bg"
+            )
+            val pieTint by animateColorAsState(
+                targetValue = if (selectedType == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                animationSpec = tween(200),
+                label = "chart_toggle_pie_tint"
+            )
             Surface(
                 shape = RoundedCornerShape(7.dp),
-                color = if (selectedType == 1) activeColor else Color.Transparent,
+                color = pieBg,
                 modifier = Modifier
                     .size(30.dp)
                     .clip(RoundedCornerShape(7.dp))
@@ -261,7 +358,7 @@ internal fun ChartTypeToggle(
                     Icon(
                         imageVector = Icons.Default.PieChart,
                         contentDescription = Localization.pieChartView(lang),
-                        tint = if (selectedType == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = pieTint,
                         modifier = Modifier.size(17.dp)
                     )
                 }
@@ -317,9 +414,19 @@ internal fun AnalyticsPeriodSelectorCard(
 
                 scopes.forEach { (scopeKey, label, icon) ->
                     val isSelected = filterScope == scopeKey
+                    val pillBg by animateColorAsState(
+                        targetValue = if (isSelected) Emerald700 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        animationSpec = tween(200),
+                        label = "scope_bg_$scopeKey"
+                    )
+                    val pillContent by animateColorAsState(
+                        targetValue = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        animationSpec = tween(200),
+                        label = "scope_fg_$scopeKey"
+                    )
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (isSelected) Emerald700 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        color = pillBg,
                         border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
                         modifier = Modifier
                             .weight(1f)
@@ -335,7 +442,7 @@ internal fun AnalyticsPeriodSelectorCard(
                             Icon(
                                 imageVector = icon,
                                 contentDescription = null,
-                                tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = pillContent,
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -343,7 +450,7 @@ internal fun AnalyticsPeriodSelectorCard(
                                 text = label,
                                 fontSize = 13.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                color = pillContent
                             )
                         }
                     }
@@ -598,9 +705,9 @@ internal fun AnalyticsPeriodSelectorCard(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = if (lang == Localization.Language.ENGLISH)
-                                    "All-Time Records ($periodExpensesCount expenses, $periodIncomesCount incomes)"
+                                    "$periodExpensesCount expenses • $periodIncomesCount incomes"
                                 else
-                                    "Σύνολο Όλων των Εγγραφών ($periodExpensesCount έξοδα, $periodIncomesCount έσοδα)",
+                                    "$periodExpensesCount έξοδα • $periodIncomesCount έσοδα",
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Emerald700
@@ -634,45 +741,15 @@ internal fun AnalyticsSummaryKpiCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Emerald100,
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.PieChart,
-                                contentDescription = null,
-                                tint = Emerald700,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text(
-                            text = Localization.statisticalAnalysis(lang),
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = activePeriodDisplay,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
+        Column(modifier = Modifier.padding(18.dp)) {
+            AnalyticsSectionHeader(
+                icon = Icons.Default.PieChart,
+                iconTint = Emerald700,
+                iconContainerColor = Emerald100,
+                title = Localization.statisticalAnalysis(lang)
+            )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -825,13 +902,6 @@ internal fun AnalyticsSummaryKpiCard(
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1
                         )
-                        Text(
-                            text = Localization.dailyAverageUnit(lang),
-                            fontSize = 9.5.sp,
-                            color = MaterialTheme.colorScheme.outline,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
                     }
                 }
 
@@ -874,13 +944,6 @@ internal fun AnalyticsSummaryKpiCard(
                             fontWeight = FontWeight.Bold,
                             color = savingsColor,
                             maxLines = 1
-                        )
-                        Text(
-                            text = if (netBalance >= 0) Localization.withinLimit(lang) else Localization.deficitLabel(lang),
-                            fontSize = 9.5.sp,
-                            color = savingsColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }

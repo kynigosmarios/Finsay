@@ -11,6 +11,7 @@ import com.example.data.model.FirebaseIncome
 import com.example.util.BankNotificationHolder
 import com.example.util.BankNotificationParser
 import com.example.util.BankNotificationSystemManager
+import com.example.util.DefaultPayerHelper
 import com.example.util.GreekVoiceParser
 import com.example.util.MerchantCategoryLearner
 import com.example.util.PendingBankTransaction
@@ -80,10 +81,8 @@ internal class OikoNomosTransactionDelegate(
         val categories = vm._allCategories.value
         val matchedCategory = BankNotificationParser.categorizeMerchant(tx.merchantName, tx.rawText, categories)
             ?: suggestCategoryForMerchant(tx.merchantName.ifBlank { tx.rawText })
-        val defaultPayer = vm.resolveDefaultPayerMember()
-        val defaultPayerId = defaultPayer?.id ?: 0L
-        val defaultPayerName = defaultPayer?.name ?: ""
-        val defaultPayerIdsCsv = if (defaultPayerId > 0L) "$defaultPayerId" else ""
+        val defaultPayers = vm.resolveDefaultPayerMembers()
+        val resolvedDefault = DefaultPayerHelper.buildEqualPayerFields(defaultPayers, tx.amount, fallbackLabel = "")
 
         val prefilled = Expense(
             id = 0L,
@@ -96,9 +95,10 @@ internal class OikoNomosTransactionDelegate(
             memberIdsCsv = "",
             memberNamesDisplay = "Κοινό Οικογένειας",
             note = "Αυτόματος εντοπισμός (${tx.bankName})",
-            payerMemberId = defaultPayerId,
-            payerMemberName = defaultPayerName,
-            payerMemberIdsCsv = defaultPayerIdsCsv
+            payerMemberId = resolvedDefault.primaryId,
+            payerMemberName = resolvedDefault.displayName,
+            payerMemberIdsCsv = resolvedDefault.idsCsv,
+            payerAmountsCsv = resolvedDefault.amountsCsv
         )
         vm.openManualExpenseDialog(prefilled)
     }
@@ -109,18 +109,30 @@ internal class OikoNomosTransactionDelegate(
     }
 
     fun processVoiceInput(spokenText: String) {
+        val currentUsage = vm.prefs.getInt(vm.getMonthlyVoiceUsageKey(), 0)
+        vm._monthlyVoiceUsage.value = currentUsage
+        if (!vm.isCurrentUserPro() && currentUsage >= 15) {
+            vm.showPremiumPaywall("voice_limit")
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN")
+                    "Monthly voice entry limit reached (15/15). Upgrade to Pro for unlimited entries!"
+                else
+                    "Συμπληρώσατε το όριο 15 φωνητικών καταχωρήσεων για αυτόν τον μήνα. Αναβαθμίστε σε Pro για απεριόριστες!"
+            )
+            return
+        }
         if (spokenText.isBlank()) {
             vm.showSnackbar(if (vm._appLanguage.value == "EN") "No speech recognized." else "Δεν αναγνωρίστηκε ομιλία.")
             return
         }
         val categories = vm._allCategories.value
         val members = vm._allMembers.value
-        val defaultPayer = vm.resolveDefaultPayerMember()
+        val defaultPayers = vm.resolveDefaultPayerMembers()
         val parsed = GreekVoiceParser.parse(
             prompt = spokenText,
             categories = categories,
             allMembers = members,
-            preferredDefaultPayer = defaultPayer
+            preferredDefaultPayers = defaultPayers
         )
         vm._pendingParsedExpense.value = parsed
     }
@@ -193,10 +205,12 @@ internal class OikoNomosTransactionDelegate(
         val householdId = vm.getOrEnsureHouseholdId(user)
         val cloudId = UUID.randomUUID().toString()
         val finalSplitMembersCount = if (memberIds.isNotEmpty()) memberIds.size else 1
-        val resolvedDefaultPayer = vm.resolveDefaultPayerMember()
-        val finalPayerId = if (payerMemberId > 0L) payerMemberId else (resolvedDefaultPayer?.id ?: 0L)
-        val finalPayerName = payerMemberName.ifBlank { resolvedDefaultPayer?.name ?: "Οικογένεια" }
-        val finalPayerIdsCsv = payerMemberIdsCsv.ifBlank { if (finalPayerId > 0L) "$finalPayerId" else "" }
+        val resolvedDefaults = DefaultPayerHelper.buildEqualPayerFields(vm.resolveDefaultPayerMembers(), amount)
+        val useDefaults = payerMemberId <= 0L && payerMemberIdsCsv.isBlank() && payerMemberName.isBlank()
+        val finalPayerId = if (useDefaults) resolvedDefaults.primaryId else payerMemberId
+        val finalPayerName = if (useDefaults) resolvedDefaults.displayName else payerMemberName.ifBlank { resolvedDefaults.displayName }
+        val finalPayerIdsCsv = if (useDefaults) resolvedDefaults.idsCsv else payerMemberIdsCsv.ifBlank { if (finalPayerId > 0L) "$finalPayerId" else "" }
+        val finalPayerAmountsCsv = if (useDefaults) resolvedDefaults.amountsCsv else payerAmountsCsv
 
         val newExpense = Expense(
             cloudId = cloudId,
@@ -213,7 +227,7 @@ internal class OikoNomosTransactionDelegate(
             payerMemberId = finalPayerId,
             payerMemberName = finalPayerName,
             payerMemberIdsCsv = finalPayerIdsCsv,
-            payerAmountsCsv = payerAmountsCsv
+            payerAmountsCsv = finalPayerAmountsCsv
         )
 
         val newCount = vm.prefs.getInt(vm.getMonthlyVoiceUsageKey(), 0) + 1
@@ -290,10 +304,12 @@ internal class OikoNomosTransactionDelegate(
         val householdId = vm.getOrEnsureHouseholdId(user)
         val cloudId = existing?.cloudId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
         val finalSplitCount = if (memberIds.isNotEmpty()) memberIds.size else 1
-        val resolvedDefaultPayer = vm.resolveDefaultPayerMember()
-        val finalPayerId = if (payerMemberId > 0L) payerMemberId else (resolvedDefaultPayer?.id ?: 0L)
-        val finalPayerName = payerMemberName.ifBlank { resolvedDefaultPayer?.name ?: "Οικογένεια" }
-        val finalPayerIdsCsv = payerMemberIdsCsv.ifBlank { if (finalPayerId > 0L) "$finalPayerId" else "" }
+        val resolvedDefaults = DefaultPayerHelper.buildEqualPayerFields(vm.resolveDefaultPayerMembers(), amount)
+        val useDefaults = payerMemberId <= 0L && payerMemberIdsCsv.isBlank() && payerMemberName.isBlank()
+        val finalPayerId = if (useDefaults) resolvedDefaults.primaryId else payerMemberId
+        val finalPayerName = if (useDefaults) resolvedDefaults.displayName else payerMemberName.ifBlank { resolvedDefaults.displayName }
+        val finalPayerIdsCsv = if (useDefaults) resolvedDefaults.idsCsv else payerMemberIdsCsv.ifBlank { if (finalPayerId > 0L) "$finalPayerId" else "" }
+        val finalPayerAmountsCsv = if (useDefaults) resolvedDefaults.amountsCsv else payerAmountsCsv
 
         val targetExpense = Expense(
             id = id,
@@ -312,7 +328,7 @@ internal class OikoNomosTransactionDelegate(
             payerMemberId = finalPayerId,
             payerMemberName = finalPayerName,
             payerMemberIdsCsv = finalPayerIdsCsv,
-            payerAmountsCsv = payerAmountsCsv
+            payerAmountsCsv = finalPayerAmountsCsv
         )
 
         vm.prefs.edit().putBoolean("has_entered_any_expense", true).apply()
