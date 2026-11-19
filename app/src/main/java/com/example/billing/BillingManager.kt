@@ -183,7 +183,7 @@ class BillingManager(
                 result.responseCode == BillingClient.BillingResponseCode.OK
             } else {
                 val details = if (productId == SUB_MONTHLY) _monthlyProductDetails.value else _yearlyProductDetails.value
-                val offerToken = details?.subscriptionOfferDetails?.firstOrNull()?.offerToken
+                val offerToken = details?.let { selectBestOfferToken(it) }
                 if (details == null || offerToken == null) {
                     Log.w(TAG, "No product details or offer token available for $productId.")
                     return false
@@ -202,6 +202,28 @@ class BillingManager(
             Log.w(TAG, "launchPurchaseFlow safe fallback: ${t.message}")
             false
         }
+    }
+
+    /**
+     * Deterministically selects the best eligible subscription offer returned by Google Play:
+     * 1. Prefer an eligible promotional/trial offer (offerId != null) with the lowest initial phase price
+     *    (e.g., 0 micros free trial first, then lowest intro price).
+     * 2. Fall back to the base plan (offerId == null).
+     * 3. Final fallback to firstOrNull().
+     */
+    private fun selectBestOfferToken(details: ProductDetails): String? {
+        val offers = details.subscriptionOfferDetails.orEmpty()
+        if (offers.isEmpty()) return null
+
+        val bestPromoOffer = offers
+            .filter { !it.offerId.isNullOrBlank() }
+            .minByOrNull { offer ->
+                offer.pricingPhases.pricingPhaseList.firstOrNull()?.priceAmountMicros ?: Long.MAX_VALUE
+            }
+        if (bestPromoOffer != null) return bestPromoOffer.offerToken
+
+        val basePlanOffer = offers.firstOrNull { it.offerId.isNullOrBlank() }
+        return (basePlanOffer ?: offers.firstOrNull())?.offerToken
     }
 
     fun queryActivePurchases() {
