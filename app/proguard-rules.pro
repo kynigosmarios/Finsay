@@ -33,6 +33,19 @@
 -keep class androidx.credentials.** { *; }
 -keep class com.google.android.libraries.identity.googleid.** { *; }
 
+# Firebase Auth & session persistence (prevents R8 Full Mode from breaking cached login decryption)
+-keep class com.google.firebase.auth.** { *; }
+-keep class com.google.android.gms.internal.firebase-auth-api.** { *; }
+-keep class * extends com.google.firebase.auth.internal.InternalTokenProvider { *; }
+-keep public class * implements com.google.firebase.auth.FirebaseUser { *; }
+-keep class com.google.firebase.components.** { *; }
+
+# Google Tink & Protobuf (used internally by Firebase Auth to encrypt/decrypt persisted sessions)
+-keep class com.google.crypto.tink.** { *; }
+-dontwarn com.google.crypto.tink.**
+-keepclasseswithmembers class * extends com.google.protobuf.GeneratedMessageLite { *; }
+-dontwarn com.google.errorprone.annotations.**
+
 # ML Kit OCR & Barcode Scanning
 -keep class com.google.mlkit.** { *; }
 -keep class com.google.android.gms.vision.** { *; }

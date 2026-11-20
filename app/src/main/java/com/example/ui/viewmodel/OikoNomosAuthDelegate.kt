@@ -373,36 +373,65 @@ internal class OikoNomosAuthDelegate(
                     if (isNewAuthUser) null else UserProfile(uid = user.uid, email = user.email.orEmpty())
                 }
 
-                if (!isSignUpMode) {
-                    if (isNewAuthUser || existingProfile == null) {
-                        if (isNewAuthUser) {
-                            try { user.delete().await() } catch (delErr: Exception) {
-                                Log.w("OikoNomosVM", "Delete unregistered Google Auth user warning: ${delErr.message}")
-                            }
-                        }
-                        withContext(NonCancellable) {
-                            try {
-                                CredentialManager.create(vm.getApplication()).clearCredentialState(ClearCredentialStateRequest())
-                            } catch (_: Exception) {}
-                            vm.auth.signOut()
-                        }
-                        vm._currentUser.value = null
-                        vm._isUserVerifiedState.value = false
-                        vm._userProfile.value = null
-                        vm._isAuthLoading.value = false
-                        onError(
-                            if (isEn) "No registered account found for this Google email. Please select Sign Up first."
-                            else "Δεν βρέθηκε εγγεγραμμένος λογαριασμός με αυτό το Google email. Παρακαλούμε επιλέξτε πρώτα «Εγγραφή»."
-                        )
-                        return@launch
+                val googleVerified = user.isEmailVerified
+                if (isNewAuthUser || existingProfile == null) {
+                    val displayName = user.displayName.orEmpty().trim()
+                    val parts = displayName.split(" ").filter { it.isNotBlank() }
+                    val newProfile = UserProfile(
+                        uid = user.uid,
+                        email = user.email.orEmpty().trim(),
+                        displayName = displayName.ifBlank { "Χρήστης Finsay" },
+                        firstName = parts.firstOrNull().orEmpty(),
+                        lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
+                        photoUrl = user.photoUrl?.toString().orEmpty(),
+                        authProvider = "google",
+                        requiresEmailVerification = !googleVerified,
+                        emailVerifiedConfirmed = googleVerified,
+                        appLanguage = vm._appLanguage.value,
+                        createdAt = Timestamp.now()
+                    )
+                    try {
+                        vm.firestoreSyncRepo.savePendingUserProfile(newProfile)
+                        saveUserProfileToPrefs(newProfile)
+                    } catch (e: Exception) {
+                        Log.w("OikoNomosVM", "savePendingUserProfile Google warning: ${e.message}")
                     }
-
-                    val googleVerified = user.isEmailVerified
                     vm.prefs.edit()
                         .putString("cached_active_uid", user.uid)
                         .remove("pending_google_verification_${user.uid}")
                         .apply()
-
+                    if (!googleVerified) {
+                        try {
+                            vm.auth.setLanguageCode(if (isEn) "en" else "el")
+                            user.sendEmailVerification().await()
+                        } catch (e: Exception) {
+                            Log.w("OikoNomosVM", "Google sendEmailVerification warning: ${e.message}")
+                        }
+                    }
+                    vm._userProfile.value = newProfile
+                    vm._currentUser.value = user
+                    vm._isUserVerifiedState.value = googleVerified
+                    vm._isAuthLoading.value = false
+                    if (googleVerified) {
+                        val welcomeMsg = if (isSignUpMode) {
+                            if (isEn) "Signed up with Google!" else "Η εγγραφή μέσω Google ολοκληρώθηκε!"
+                        } else {
+                            if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!"
+                        }
+                        vm.showSnackbar(welcomeMsg)
+                        vm.loadUserProfileAndHousehold(user)
+                    } else {
+                        vm.showSnackbar(
+                            if (isEn) "Verification link sent to ${user.email}!"
+                            else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
+                        )
+                    }
+                    onSuccess()
+                } else {
+                    vm.prefs.edit()
+                        .putString("cached_active_uid", user.uid)
+                        .remove("pending_google_verification_${user.uid}")
+                        .apply()
                     if (!googleVerified) {
                         vm._userProfile.value = existingProfile
                         vm._currentUser.value = user
@@ -410,7 +439,7 @@ internal class OikoNomosAuthDelegate(
                         vm._isAuthLoading.value = false
                         vm.showSnackbar(
                             if (isEn) "Please verify your email via the link sent to ${user.email}."
-                            else "Απαιτείται επιβεβαίωση email. Πατήστε στον σύνδεσμο που στάλθηκε στο ${user.email}."
+                            else "Παρακαλούμε επιβεβαιώστε το email σας από τον σύνδεσμο στο ${user.email}."
                         )
                         onSuccess()
                     } else {
@@ -424,84 +453,6 @@ internal class OikoNomosAuthDelegate(
                         vm.showSnackbar(if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!")
                         vm.loadUserProfileAndHousehold(user)
                         onSuccess()
-                    }
-                } else {
-                    val googleVerified = user.isEmailVerified
-                    if (isNewAuthUser || existingProfile == null) {
-                        val displayName = user.displayName.orEmpty().trim()
-                        val parts = displayName.split(" ").filter { it.isNotBlank() }
-                        val newProfile = UserProfile(
-                            uid = user.uid,
-                            email = user.email.orEmpty().trim(),
-                            displayName = displayName.ifBlank { "Χρήστης Finsay" },
-                            firstName = parts.firstOrNull().orEmpty(),
-                            lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
-                            photoUrl = user.photoUrl?.toString().orEmpty(),
-                            authProvider = "google",
-                            requiresEmailVerification = !googleVerified,
-                            emailVerifiedConfirmed = googleVerified,
-                            appLanguage = vm._appLanguage.value,
-                            createdAt = Timestamp.now()
-                        )
-                        try {
-                            vm.firestoreSyncRepo.savePendingUserProfile(newProfile)
-                            saveUserProfileToPrefs(newProfile)
-                        } catch (e: Exception) {
-                            Log.w("OikoNomosVM", "savePendingUserProfile Google warning: ${e.message}")
-                        }
-                        vm.prefs.edit()
-                            .putString("cached_active_uid", user.uid)
-                            .remove("pending_google_verification_${user.uid}")
-                            .apply()
-                        if (!googleVerified) {
-                            try {
-                                vm.auth.setLanguageCode(if (isEn) "en" else "el")
-                                user.sendEmailVerification().await()
-                            } catch (e: Exception) {
-                                Log.w("OikoNomosVM", "Google sendEmailVerification warning: ${e.message}")
-                            }
-                        }
-                        vm._userProfile.value = newProfile
-                        vm._currentUser.value = user
-                        vm._isUserVerifiedState.value = googleVerified
-                        vm._isAuthLoading.value = false
-                        if (googleVerified) {
-                            vm.showSnackbar(if (isEn) "Signed up with Google!" else "Η εγγραφή μέσω Google ολοκληρώθηκε!")
-                            vm.loadUserProfileAndHousehold(user)
-                        } else {
-                            vm.showSnackbar(
-                                if (isEn) "Verification link sent to ${user.email}!"
-                                else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
-                            )
-                        }
-                        onSuccess()
-                    } else {
-                        vm.prefs.edit()
-                            .putString("cached_active_uid", user.uid)
-                            .remove("pending_google_verification_${user.uid}")
-                            .apply()
-                        if (!googleVerified) {
-                            vm._userProfile.value = existingProfile
-                            vm._currentUser.value = user
-                            vm._isUserVerifiedState.value = false
-                            vm._isAuthLoading.value = false
-                            vm.showSnackbar(
-                                if (isEn) "Please verify your email via the link sent to ${user.email}."
-                                else "Παρακαλούμε επιβεβαιώστε το email σας από τον σύνδεσμο στο ${user.email}."
-                            )
-                            onSuccess()
-                        } else {
-                            if (existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed) {
-                                try { vm.firestoreSyncRepo.markEmailVerifiedConfirmed(user.uid) } catch (_: Exception) {}
-                            }
-                            vm._userProfile.value = existingProfile.copy(requiresEmailVerification = false, emailVerifiedConfirmed = true)
-                            vm._currentUser.value = user
-                            vm._isUserVerifiedState.value = true
-                            vm._isAuthLoading.value = false
-                            vm.showSnackbar(if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!")
-                            vm.loadUserProfileAndHousehold(user)
-                            onSuccess()
-                        }
                     }
                 }
             } catch (exc: Exception) {

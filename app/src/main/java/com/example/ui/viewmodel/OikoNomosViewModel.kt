@@ -98,7 +98,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     private val structureDelegate = OikoNomosStructureDelegate(this)
 
     // Auth & Profile States
-    internal val _isAuthInitialized = MutableStateFlow(true)
+    internal val _isAuthInitialized = MutableStateFlow(auth.currentUser != null)
     val isAuthInitialized = _isAuthInitialized.asStateFlow()
 
     internal var suppressAuthStateListener = false
@@ -755,6 +755,17 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             } catch (t: Throwable) {
                 Log.e("OikoNomosVM", "AuthStateListener error: ${t.message}", t)
+                _isAuthInitialized.value = true
+            }
+        }
+        if (!_isAuthInitialized.value) {
+            viewModelScope.launch(coroutineExceptionHandler) {
+                kotlinx.coroutines.delay(2_000L)
+                if (!_isAuthInitialized.value) {
+                    _currentUser.value = auth.currentUser
+                    _isUserVerifiedState.value = isUserVerified(auth.currentUser)
+                    _isAuthInitialized.value = true
+                }
             }
         }
         reminderClockJob = viewModelScope.launch(coroutineExceptionHandler) {
