@@ -32,11 +32,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -392,81 +395,89 @@ fun MainScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                if (activeSubPage == InAppSubPage.HOUSEHOLDS) {
-                                    viewModel.clearVerifiedUserLookupState()
+            val topBarBg = if (isDarkTheme) Color(0xFF0F172A) else Color.White
+            val topBarBorder = if (isDarkTheme) Color(0xFF334155).copy(alpha = 0.5f) else Color(0xFFE2E8F0).copy(alpha = 0.6f)
+            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+            val extraHeaderTop = (48.dp - statusBarTop).coerceIn(0.dp, 20.dp)
+            Surface(
+                color = topBarBg,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(width = 1.dp, color = topBarBorder)
+            ) {
+                TopAppBar(
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    if (activeSubPage == InAppSubPage.HOUSEHOLDS) {
+                                        viewModel.clearVerifiedUserLookupState()
+                                    }
+                                    viewModel.dismissAllSubPages()
+                                    currentTab = 0
+                                    viewModel.setSearchQuery("")
+                                    viewModel.clearSpecialDrillDownFilter()
+                                    viewModel.requestHomeScrollToTop()
                                 }
-                                viewModel.dismissAllSubPages()
-                                currentTab = 0
-                                viewModel.setSearchQuery("")
-                                viewModel.clearSpecialDrillDownFilter()
-                                viewModel.requestHomeScrollToTop()
-                            }
-                            .padding(vertical = 4.dp, horizontal = 2.dp)
-                            .testTag("app_brand_home_button")
-                    ) {
-                        OikoNomosLogo(
-                            isDarkTheme = false,
-                            size = 36.dp
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Finsay",
-                            fontFamily = ModernFontFamily,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 25.sp,
-                            letterSpacing = (-0.5).sp,
-                            color = LogoGreen
-                        )
-                    }
-                },
-                actions = {
-                    Surface(
-                        shape = CircleShape,
-                        color = Emerald700.copy(alpha = 0.12f),
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clickable { viewModel.openUserProfileDialog() }
-                            .testTag("topbar_user_avatar")
-                    ) {
-                        UserAvatar(
-                            photoUrl = userProfile?.photoUrl?.ifBlank { null } ?: currentUser?.photoUrl?.toString(),
-                            displayName = userProfile?.displayName?.ifBlank { null } ?: currentUser?.displayName,
-                            modifier = Modifier.fillMaxSize(),
-                            fontSize = 14.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(
-                        onClick = { viewModel.openBurgerMenu() },
-                        modifier = Modifier
-                            .padding(end = 4.dp)
-                            .testTag("burger_menu_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = com.example.util.Localization.menuTitle(lang),
-                            tint = if (isDarkTheme) Color.White else Emerald950,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (isDarkTheme) Color(0xFF0F172A) else Color.White,
-                    titleContentColor = if (isDarkTheme) Color.White else Emerald950,
-                    actionIconContentColor = if (isDarkTheme) Color.White else Emerald950
-                ),
-                modifier = Modifier.border(
-                    width = 1.dp,
-                    color = if (isDarkTheme) Color(0xFF334155).copy(alpha = 0.5f) else Color(0xFFE2E8F0).copy(alpha = 0.6f)
+                                .padding(vertical = 4.dp, horizontal = 2.dp)
+                                .testTag("app_brand_home_button")
+                        ) {
+                            OikoNomosLogo(
+                                isDarkTheme = false,
+                                size = 36.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Finsay",
+                                fontFamily = ModernFontFamily,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 25.sp,
+                                letterSpacing = (-0.5).sp,
+                                color = LogoGreen
+                            )
+                        }
+                    },
+                    actions = {
+                        Surface(
+                            shape = CircleShape,
+                            color = Emerald700.copy(alpha = 0.12f),
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clickable { viewModel.openUserProfileDialog() }
+                                .testTag("topbar_user_avatar")
+                        ) {
+                            UserAvatar(
+                                photoUrl = userProfile?.photoUrl?.ifBlank { null } ?: currentUser?.photoUrl?.toString(),
+                                displayName = userProfile?.displayName?.ifBlank { null } ?: currentUser?.displayName,
+                                modifier = Modifier.fillMaxSize(),
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                        IconButton(
+                            onClick = { viewModel.openBurgerMenu() },
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .testTag("burger_menu_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = com.example.util.Localization.menuTitle(lang),
+                                tint = if (isDarkTheme) Color.White else Emerald950,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = topBarBg,
+                        titleContentColor = if (isDarkTheme) Color.White else Emerald950,
+                        actionIconContentColor = if (isDarkTheme) Color.White else Emerald950
+                    ),
+                    modifier = Modifier.padding(top = extraHeaderTop)
                 )
-            )
+            }
         },
         bottomBar = {
             Column(

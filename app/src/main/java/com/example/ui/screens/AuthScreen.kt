@@ -349,9 +349,9 @@ fun AuthScreen(
                                         email = email,
                                         onSuccess = {
                                             resetSuccessMessage = if (lang == Localization.Language.ENGLISH)
-                                                "A password reset link has been dispatched to $email.\n\n⚠️ IMPORTANT:\n• Check both your Inbox and Spam / Junk folders.\n• Check the Promotions tab if using Gmail."
+                                                "A password reset link has been sent to $email."
                                             else
-                                                "Στάλθηκε σύνδεσμος επαναφοράς στο $email.\n\n⚠️ ΣΗΜΑΝΤΙΚΟ:\n• Ελέγξτε οπωσδήποτε τον φάκελο Ανεπιθύμητα (Spam / Junk).\n• Ελέγξτε την καρτέλα «Προσφορές» (Promotions) στο Gmail."
+                                                "Στάλθηκε σύνδεσμος επαναφοράς στο $email."
                                         },
                                         onError = { errorMessage = it }
                                     )
@@ -384,22 +384,24 @@ fun AuthScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        if (resetSuccessMessage == null) {
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                        TextButton(
-                            onClick = {
-                                isForgotPassword = false
-                                errorMessage = null
-                                resetSuccessMessage = null
-                            },
-                            modifier = Modifier.testTag("back_to_login_button")
-                        ) {
-                            Text(
-                                text = if (lang == Localization.Language.ENGLISH) "← Back to Sign In" else "← Επιστροφή στη Σύνδεση",
-                                color = Emerald700,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            TextButton(
+                                onClick = {
+                                    isForgotPassword = false
+                                    errorMessage = null
+                                    resetSuccessMessage = null
+                                },
+                                modifier = Modifier.testTag("back_to_login_button")
+                            ) {
+                                Text(
+                                    text = if (lang == Localization.Language.ENGLISH) "← Back to Sign In" else "← Επιστροφή στη Σύνδεση",
+                                    color = Emerald700,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     } else {
                         // ============================================

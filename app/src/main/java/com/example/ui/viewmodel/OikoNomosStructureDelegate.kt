@@ -68,7 +68,7 @@ internal class OikoNomosStructureDelegate(
                         FamilyMember(
                             id = o.getLong("id"),
                             name = o.getString("name"),
-                            role = o.optString("role", "Γονέας"),
+                            role = o.optString("role", "Μονοπρόσωπο"),
                             avatarColorHex = o.optLong("avatarColorHex", 0xFF059669),
                             voiceKeywords = o.optString("voiceKeywords", ""),
                             isDefault = o.optBoolean("isDefault", false),
@@ -270,7 +270,7 @@ internal class OikoNomosStructureDelegate(
                 val defaultMember = FamilyMember(
                     id = 1L,
                     name = profileName,
-                    role = "Γονέας",
+                    role = "Μονοπρόσωπο",
                     avatarColorHex = 0xFF059669,
                     voiceKeywords = profileName.lowercase(),
                     isDefault = true,
@@ -392,17 +392,42 @@ internal class OikoNomosStructureDelegate(
     }
 
     fun seedStandardCategories() {
+        if (!vm.hasOwnerPermissions()) return
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             vm.repository.seedStandardCategories()
             val list = vm.repository.getAllCategoriesList()
-            vm._allCategories.value = list
             val hid = vm._currentHousehold.value?.id.orEmpty()
             val uid = vm._currentUser.value?.uid.orEmpty()
-            if (hid.isNotBlank() && uid.isNotBlank() && vm.hasOwnerPermissions()) {
+            if (hid.isNotBlank()) {
+                val seededIds = list.map { it.id }.toSet()
+                val seededNormNames = list.map { normalizeDeletedKey(it.name) }.toSet()
+                val remainingTrash = vm._deletedCategories.value.filterNot { trashed ->
+                    seededIds.contains(trashed.id) || seededNormNames.contains(normalizeDeletedKey(trashed.name))
+                }
+                if (remainingTrash.size != vm._deletedCategories.value.size) {
+                    vm._deletedCategories.value = remainingTrash
+                    persistDeletedCategories(hid, remainingTrash)
+                }
+            }
+            vm._allCategories.value = list
+            if (hid.isNotBlank() && uid.isNotBlank()) {
                 list.forEach { cat ->
-                    vm.firestoreSyncRepo.syncCategory(
-                        hid,
-                        FirebaseCategory(cat.id.toString(), hid, uid, cat.name, cat.iconKey, cat.monthlyBudget, cat.colorHex, cat.voiceKeywords, cat.sortOrder, cat.fontColorHex)
+                    vm.firestoreSyncRepo.syncAndCleanCategory(
+                        listOf(hid),
+                        uid,
+                        FirebaseCategory(
+                            id = cat.id.toString(),
+                            householdId = hid,
+                            userId = uid,
+                            name = cat.name,
+                            iconKey = cat.iconKey,
+                            monthlyBudget = cat.monthlyBudget,
+                            colorHex = cat.colorHex,
+                            voiceKeywords = cat.voiceKeywords,
+                            sortOrder = cat.sortOrder,
+                            fontColorHex = cat.fontColorHex,
+                            isDeleted = false
+                        )
                     )
                 }
             }
@@ -441,6 +466,7 @@ internal class OikoNomosStructureDelegate(
             )
             return
         }
+        vm.dismissMemberDialog()
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             val cleanLinkedUid = linkedUserUid.trim()
             val currentList = vm._allMembers.value
@@ -643,6 +669,7 @@ internal class OikoNomosStructureDelegate(
         fontColorHex: Long = 0L
     ) {
         if (!vm.hasOwnerPermissions()) return
+        vm.dismissCategoryDialog()
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             val currentList = vm._allCategories.value
             val existingById = if (id != 0L) currentList.find { it.id == id } else null
@@ -663,13 +690,23 @@ internal class OikoNomosStructureDelegate(
                 id
             }
             val finalSaved = cat.copy(id = savedId)
+            val user = vm._currentUser.value
+            val householdId = vm.getOrEnsureHouseholdId(user)
+            if (householdId.isNotBlank()) {
+                val savedNorm = normalizeDeletedKey(finalSaved.name)
+                val remainingTrash = vm._deletedCategories.value.filterNot {
+                    it.id == savedId || normalizeDeletedKey(it.name) == savedNorm
+                }
+                if (remainingTrash.size != vm._deletedCategories.value.size) {
+                    vm._deletedCategories.value = remainingTrash
+                    persistDeletedCategories(householdId, remainingTrash)
+                }
+            }
             vm._allCategories.value = (currentList.filter { it.id != savedId } + finalSaved)
                 .sortedWith(compareBy<ExpenseCategory> { it.sortOrder }.thenBy { it.id })
 
-            val user = vm._currentUser.value
-            val householdId = vm.getOrEnsureHouseholdId(user)
             val userHouseholds = vm._userHouseholds.value.map { it.id }.ifEmpty { listOf(householdId).filter { it.isNotBlank() } }
-            val fbCat = FirebaseCategory(finalSaved.id.toString(), householdId, user?.uid ?: "", finalSaved.name, finalSaved.iconKey, finalSaved.monthlyBudget, finalSaved.colorHex, finalSaved.voiceKeywords, finalSaved.sortOrder, finalSaved.fontColorHex)
+            val fbCat = FirebaseCategory(finalSaved.id.toString(), householdId, user?.uid ?: "", finalSaved.name, finalSaved.iconKey, finalSaved.monthlyBudget, finalSaved.colorHex, finalSaved.voiceKeywords, finalSaved.sortOrder, finalSaved.fontColorHex, isDeleted = false)
             vm.firestoreSyncRepo.syncAndCleanCategory(userHouseholds, user?.uid ?: "", fbCat, existingById?.name ?: "")
 
             vm.logHouseholdActivity(
@@ -709,7 +746,10 @@ internal class OikoNomosStructureDelegate(
     fun restoreCategory(category: ExpenseCategory) {
         if (!vm.hasOwnerPermissions()) return
         val householdId = vm._currentHousehold.value?.id.orEmpty()
-        val remainingTrash = vm._deletedCategories.value.filter { it.id != category.id }
+        val targetNorm = normalizeDeletedKey(category.name)
+        val remainingTrash = vm._deletedCategories.value.filterNot {
+            it.id == category.id || normalizeDeletedKey(it.name) == targetNorm
+        }
         vm._deletedCategories.value = remainingTrash
         persistDeletedCategories(householdId, remainingTrash)
 
@@ -718,9 +758,23 @@ internal class OikoNomosStructureDelegate(
             val restored = category.copy(id = insertedId)
             vm._allCategories.value = (vm._allCategories.value + restored).distinctBy { it.id }.sortedWith(compareBy<ExpenseCategory> { it.sortOrder }.thenBy { it.id })
             if (householdId.isNotBlank()) {
-                vm.firestoreSyncRepo.syncCategory(
-                    householdId,
-                    FirebaseCategory(restored.id.toString(), householdId, vm._currentUser.value?.uid ?: "", restored.name, restored.iconKey, restored.monthlyBudget, restored.colorHex, restored.voiceKeywords, restored.sortOrder, restored.fontColorHex)
+                val uid = vm._currentUser.value?.uid ?: ""
+                vm.firestoreSyncRepo.syncAndCleanCategory(
+                    listOf(householdId),
+                    uid,
+                    FirebaseCategory(
+                        id = restored.id.toString(),
+                        householdId = householdId,
+                        userId = uid,
+                        name = restored.name,
+                        iconKey = restored.iconKey,
+                        monthlyBudget = restored.monthlyBudget,
+                        colorHex = restored.colorHex,
+                        voiceKeywords = restored.voiceKeywords,
+                        sortOrder = restored.sortOrder,
+                        fontColorHex = restored.fontColorHex,
+                        isDeleted = false
+                    )
                 )
             }
             vm.showSnackbar("Η κατηγορία «${category.name}» επανήλθε!")
@@ -876,9 +930,26 @@ internal class OikoNomosStructureDelegate(
                     } catch (_: Exception) {}
                 }
 
+                val categoriesToArchive = vm._allCategories.value.ifEmpty {
+                    try { vm.repository.getAllCategoriesList() } catch (_: Exception) { emptyList() }
+                }
+
                 // Soft-archive ALL household documents in Firebase Firestore (isDeleted = true + archiveBatchId)
                 // so that zero records are lost and the owner can restore them from Firebase if needed.
                 val archiveBatchId = vm.firestoreSyncRepo.archiveAllHouseholdData(household.id, uid)
+
+                // Move cleared categories into Deleted Categories so the user can restore them
+                if (categoriesToArchive.isNotEmpty()) {
+                    val mergedDeletedCats = vm._deletedCategories.value.toMutableList()
+                    for (cat in categoriesToArchive) {
+                        val catNorm = normalizeDeletedKey(cat.name)
+                        if (mergedDeletedCats.none { it.id == cat.id || normalizeDeletedKey(it.name) == catNorm }) {
+                            mergedDeletedCats.add(cat)
+                        }
+                    }
+                    vm._deletedCategories.value = mergedDeletedCats
+                    persistDeletedCategories(household.id, mergedDeletedCats)
+                }
 
                 // Clear local Room cache & in-memory state for this household (without signing out)
                 vm.pendingLocalExpenseIds.clear()

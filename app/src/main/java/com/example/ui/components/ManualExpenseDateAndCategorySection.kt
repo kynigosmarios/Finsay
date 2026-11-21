@@ -154,7 +154,8 @@ internal fun ManualExpenseCategorySection(
     categories: List<ExpenseCategory>,
     selectedCategoryId: Long,
     autoSuggestedCategoryId: Long?,
-    onSelectCategory: (Long) -> Unit
+    onSelectCategory: (Long) -> Unit,
+    categoryError: String? = null
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -164,7 +165,7 @@ internal fun ManualExpenseCategorySection(
             text = Localization.categoryLabel(lang),
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = if (categoryError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
         )
         if (autoSuggestedCategoryId != null && autoSuggestedCategoryId == selectedCategoryId) {
             Surface(
@@ -222,5 +223,14 @@ internal fun ManualExpenseCategorySection(
                 )
             )
         }
+    }
+
+    if (categoryError != null) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = categoryError,
+            color = MaterialTheme.colorScheme.error,
+            fontSize = 12.sp
+        )
     }
 }

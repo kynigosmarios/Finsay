@@ -387,6 +387,11 @@ fun ManualExpenseDialog(
 
     var note by remember(expenseToEdit) { mutableStateOf(expenseToEdit?.note ?: "") }
     var errorText by remember(expenseToEdit) { mutableStateOf<String?>(null) }
+    var titleError by remember(expenseToEdit) { mutableStateOf<String?>(null) }
+    var amountError by remember(expenseToEdit) { mutableStateOf<String?>(null) }
+    var categoryError by remember(expenseToEdit) { mutableStateOf<String?>(null) }
+    var payerError by remember(expenseToEdit) { mutableStateOf<String?>(null) }
+    var beneficiaryError by remember(expenseToEdit) { mutableStateOf<String?>(null) }
 
     val currentAmount = amountText.toDoubleOrNull() ?: 0.0
     val activeMemberCount = if (isAllFamily) members.size else selectedMemberIds.size.coerceAtLeast(1)
@@ -548,10 +553,15 @@ fun ManualExpenseDialog(
                         value = title,
                         onValueChange = {
                             title = it
+                            titleError = null
                             errorText = null
                         },
                         label = { Text(Localization.expenseDescLabel(lang)) },
                         placeholder = { Text(Localization.expenseDescPlaceholder(lang)) },
+                        isError = titleError != null,
+                        supportingText = titleError?.let { msg ->
+                            { Text(text = msg, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("expense_title_input"),
@@ -566,11 +576,16 @@ fun ManualExpenseDialog(
                         value = amountText,
                         onValueChange = {
                             amountText = it.replace(',', '.')
+                            amountError = null
                             errorText = null
                         },
                         label = { Text(Localization.expenseAmountLabel(lang)) },
                         leadingIcon = {
                             Icon(Icons.Default.Euro, contentDescription = null, tint = Emerald700)
+                        },
+                        isError = amountError != null,
+                        supportingText = amountError?.let { msg ->
+                            { Text(text = msg, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -602,7 +617,10 @@ fun ManualExpenseDialog(
                             userManuallyChangedCategory = true
                             autoSuggestedCategoryId = null
                             selectedCategoryId = nextId
-                        }
+                            categoryError = null
+                            errorText = null
+                        },
+                        categoryError = categoryError
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -618,7 +636,17 @@ fun ManualExpenseDialog(
                         isAllFamily = isAllFamily,
                         onIsAllFamilyChange = { isAllFamily = it },
                         selectedMemberIds = selectedMemberIds,
-                        splitPerPerson = splitPerPerson
+                        splitPerPerson = splitPerPerson,
+                        payerError = payerError,
+                        beneficiaryError = beneficiaryError,
+                        onPayerSelectionChanged = {
+                            payerError = null
+                            errorText = null
+                        },
+                        onBeneficiarySelectionChanged = {
+                            beneficiaryError = null
+                            errorText = null
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -668,18 +696,41 @@ fun ManualExpenseDialog(
                     Button(
                         onClick = {
                             val parsedAmount = amountText.toDoubleOrNull()
-                            if (title.isBlank()) {
-                                errorText = Localization.fillDescriptionError(lang)
-                                return@Button
-                            }
-                            if (parsedAmount == null || parsedAmount <= 0) {
-                                errorText = Localization.fillAmountError(lang)
-                                return@Button
+                            val chosenCat = categories.find { it.id == selectedCategoryId }
+                            val hasValidPayer = selectedPayerIds.any { pid -> members.any { it.id == pid } }
+                            val hasValidBeneficiary = if (isAllFamily) {
+                                members.isNotEmpty()
+                            } else {
+                                selectedMemberIds.any { mid -> members.any { it.id == mid } }
                             }
 
-                            val chosenCat = categories.find { it.id == selectedCategoryId }
-                            val catId = chosenCat?.id ?: 0L
-                            val catName = chosenCat?.name ?: ""
+                            val nextTitleError = if (title.isBlank()) Localization.fillDescriptionError(lang) else null
+                            val nextAmountError = if (parsedAmount == null || parsedAmount <= 0) Localization.fillAmountError(lang) else null
+                            val nextCategoryError = if (chosenCat == null) {
+                                if (lang == Localization.Language.ENGLISH) "Please select a category" else "Επιλέξτε κατηγορία εξόδου"
+                            } else null
+                            val nextPayerError = if (!hasValidPayer) {
+                                if (lang == Localization.Language.ENGLISH) "Please select who paid" else "Επιλέξτε ποιος πλήρωσε το έξοδο"
+                            } else null
+                            val nextBeneficiaryError = if (!hasValidBeneficiary) {
+                                if (lang == Localization.Language.ENGLISH) "Please select who this expense is for" else "Επιλέξτε σε ποιον αφορά το έξοδο"
+                            } else null
+
+                            titleError = nextTitleError
+                            amountError = nextAmountError
+                            categoryError = nextCategoryError
+                            payerError = nextPayerError
+                            beneficiaryError = nextBeneficiaryError
+
+                            val firstError = nextTitleError ?: nextAmountError ?: nextCategoryError ?: nextPayerError ?: nextBeneficiaryError
+                            if (firstError != null || parsedAmount == null || chosenCat == null) {
+                                errorText = firstError
+                                return@Button
+                            }
+                            errorText = null
+
+                            val catId = chosenCat.id
+                            val catName = chosenCat.name
                             if (catId > 0L && catName.isNotBlank()) {
                                 onLearnCategory?.invoke(title.trim(), catId, catName, scannedMerchantAfm)
                             }

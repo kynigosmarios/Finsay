@@ -125,7 +125,7 @@ object Localization {
     fun editCategoryTitle(lang: Language): String = if (lang == Language.ENGLISH) "Edit Category" else "Επεξεργασία Κατηγορίας"
     fun categoryNameLabel(lang: Language): String = if (lang == Language.ENGLISH) "Category Name *" else "Όνομα Κατηγορίας *"
     fun categoryNamePlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. Gym, Pets, Entertainment" else "π.χ. Γυμναστήριο, Κατοικίδια, Χόμπι"
-    fun monthlyBudgetLimitLabel(lang: Language): String = if (lang == Language.ENGLISH) "Monthly Budget Limit (€) - optional" else "Μηνιαίο Όριο Budget (€) - προαιρετικό"
+    fun monthlyBudgetLimitLabel(lang: Language): String = if (lang == Language.ENGLISH) "Monthly Budget Limit (€)" else "Μηνιαίο Όριο Budget (€)"
     fun categoryIconLabel(lang: Language): String = if (lang == Language.ENGLISH) "Choose Icon" else "Επιλογή Εικονιδίου"
     fun categoryKeywordsLabel(lang: Language): String = if (lang == Language.ENGLISH) "Voice keywords: comma-separated" else "Φωνητικές λέξεις: χωρισμένες με κόμμα"
     fun categoryKeywordsPlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. supermarket, groceries, food" else "π.χ. σουπερ μαρκετ, σκλαβενιτης, φαγητο"
@@ -332,9 +332,13 @@ object Localization {
     fun translateRole(role: String, lang: Language): String {
         if (lang != Language.ENGLISH) return role
         return when (role.trim().lowercase()) {
+            "μονοπρόσωπο", "μονοπροσωπο", "individual", "solo" -> "Individual"
             "γονέας", "γονεις", "parent" -> "Parent"
             "παιδί", "παιδια", "child" -> "Child"
+            "σύντροφος", "συντροφος", "partner" -> "Partner"
             "συγκάτοικος", "roommate" -> "Roommate"
+            "συνεργάτης", "συνεργατης", "colleague" -> "Colleague"
+            "φίλος", "φιλος", "friend" -> "Friend"
             "άλλο", "other" -> "Other"
             else -> role
         }

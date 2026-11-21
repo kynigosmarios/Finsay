@@ -719,7 +719,7 @@ internal class OikoNomosHouseholdDelegate(
                     householdId = newHousehold.id,
                     userId = user.uid,
                     name = profileName,
-                    role = "Γονέας",
+                    role = "Μονοπρόσωπο",
                     avatarColorHex = 0xFF059669,
                     voiceKeywords = profileName.lowercase(),
                     isDefault = true,

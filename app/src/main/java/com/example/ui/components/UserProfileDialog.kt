@@ -956,7 +956,6 @@ fun UserProfileDialog(
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Button(
                                     onClick = {
-                                        onDismiss()
                                         onShowPremiumPaywall()
                                     },
                                     shape = RoundedCornerShape(12.dp),

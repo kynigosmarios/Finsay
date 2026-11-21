@@ -222,6 +222,32 @@ fun CategoriesScreen(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        OutlinedButton(
+                            onClick = { showDeletedCategoriesDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("empty_deleted_categories_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isGreek) "Διαγραμμένες Κατηγορίες (${deletedCategories.size})" else "Deleted Categories (${deletedCategories.size})",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }

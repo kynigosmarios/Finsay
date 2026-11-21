@@ -68,7 +68,11 @@ internal fun ManualExpensePayerAndSplitSection(
     isAllFamily: Boolean,
     onIsAllFamilyChange: (Boolean) -> Unit,
     selectedMemberIds: SnapshotStateList<Long>,
-    splitPerPerson: Double
+    splitPerPerson: Double,
+    payerError: String? = null,
+    beneficiaryError: String? = null,
+    onPayerSelectionChanged: () -> Unit = {},
+    onBeneficiarySelectionChanged: () -> Unit = {}
 ) {
     // 1. Payer Section (Who paid)
     Row(
@@ -78,7 +82,7 @@ internal fun ManualExpensePayerAndSplitSection(
         Icon(
             imageVector = Icons.Default.CreditCard,
             contentDescription = null,
-            tint = Emerald700,
+            tint = if (payerError != null) MaterialTheme.colorScheme.error else Emerald700,
             modifier = Modifier.size(17.dp)
         )
         Spacer(modifier = Modifier.width(7.dp))
@@ -86,7 +90,7 @@ internal fun ManualExpensePayerAndSplitSection(
             text = Localization.payersSectionTitle(lang),
             fontSize = 13.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = if (payerError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
         )
     }
     Spacer(modifier = Modifier.height(6.dp))
@@ -104,10 +108,8 @@ internal fun ManualExpensePayerAndSplitSection(
                 selected = isPayer,
                 onClick = {
                     if (isPayer) {
-                        if (selectedPayerIds.size > 1) {
-                            selectedPayerIds.remove(member.id)
-                            customPayerAmounts.remove(member.id)
-                        }
+                        selectedPayerIds.remove(member.id)
+                        customPayerAmounts.remove(member.id)
                     } else {
                         selectedPayerIds.add(member.id)
                         if (isCustomPayerSplit) {
@@ -116,6 +118,7 @@ internal fun ManualExpensePayerAndSplitSection(
                             customPayerAmounts[member.id] = if (remaining > 0) String.format(Locale.US, "%.2f", remaining) else "0.00"
                         }
                     }
+                    onPayerSelectionChanged()
                 },
                 label = { Text(member.name, fontSize = 12.sp) },
                 leadingIcon = {
@@ -132,6 +135,15 @@ internal fun ManualExpensePayerAndSplitSection(
                 )
             )
         }
+    }
+
+    if (payerError != null) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = payerError,
+            color = MaterialTheme.colorScheme.error,
+            fontSize = 12.sp
+        )
     }
 
     // Multi-payer allocation details card
@@ -448,7 +460,7 @@ internal fun ManualExpensePayerAndSplitSection(
             text = if (lang == Localization.Language.ENGLISH) "Who is this expense for?" else "Σε ποιον αφορά το έξοδο;",
             fontSize = 13.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = if (beneficiaryError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
         )
     }
     Spacer(modifier = Modifier.height(6.dp))
@@ -458,7 +470,10 @@ internal fun ManualExpensePayerAndSplitSection(
         color = if (isAllFamily) Emerald700.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onIsAllFamilyChange(!isAllFamily) }
+            .clickable {
+                onIsAllFamilyChange(!isAllFamily)
+                onBeneficiarySelectionChanged()
+            }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -466,7 +481,10 @@ internal fun ManualExpensePayerAndSplitSection(
         ) {
             Checkbox(
                 checked = isAllFamily,
-                onCheckedChange = onIsAllFamilyChange
+                onCheckedChange = {
+                    onIsAllFamilyChange(it)
+                    onBeneficiarySelectionChanged()
+                }
             )
             Icon(
                 imageVector = Icons.Default.Group,
@@ -508,6 +526,7 @@ internal fun ManualExpensePayerAndSplitSection(
                             } else {
                                 selectedMemberIds.add(member.id)
                             }
+                            onBeneficiarySelectionChanged()
                         },
                         label = { Text(member.name, fontSize = 12.sp) },
                         leadingIcon = {
@@ -525,6 +544,15 @@ internal fun ManualExpensePayerAndSplitSection(
                 }
             }
         }
+    }
+
+    if (beneficiaryError != null) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = beneficiaryError,
+            color = MaterialTheme.colorScheme.error,
+            fontSize = 12.sp
+        )
     }
 
     if (currentAmount > 0) {
