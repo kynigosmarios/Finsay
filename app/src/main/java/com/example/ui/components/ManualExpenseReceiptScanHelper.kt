@@ -46,31 +46,11 @@ internal object ManualExpenseReceiptScanHelper {
         onSuggestCategory: ((merchantOrText: String, merchantAfm: String) -> ExpenseCategory?)?
     ): ReceiptScanUiOutcome {
         val inputImage = InputImage.fromBitmap(bitmap, 0)
-        val barcodeScanner = BarcodeScanning.getClient()
-        val barcodes = withContext(Dispatchers.IO) {
-            try {
-                barcodeScanner.process(inputImage).await()
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-        var aadeQr = barcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-
-        if (aadeQr.isNullOrBlank() && bitmap.height > 600) {
-            try {
-                val cropY = (bitmap.height * 0.55).toInt()
-                val bottomCrop = Bitmap.createBitmap(bitmap, 0, cropY, bitmap.width, bitmap.height - cropY)
-                val bottomImage = InputImage.fromBitmap(bottomCrop, 0)
-                val bottomBarcodes = withContext(Dispatchers.IO) {
-                    try {
-                        barcodeScanner.process(bottomImage).await()
-                    } catch (_: Exception) {
-                        emptyList()
-                    }
-                }
-                aadeQr = bottomBarcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-            } catch (_: Exception) {
-            }
+        val aadeQr = com.example.util.ReceiptAmountAndQrParser.extractBestQrCode(bitmap)
+        val resolvedQrData = if (!aadeQr.isNullOrBlank()) {
+            com.example.util.ReceiptAmountAndQrParser.resolveAadeQrData(aadeQr)
+        } else {
+            null
         }
 
         val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -83,7 +63,8 @@ internal object ManualExpenseReceiptScanHelper {
             availableCategories = categories,
             learnedCategorySuggester = { merchantTitle, merchantAfm ->
                 onSuggestCategory?.invoke(merchantTitle, merchantAfm)?.name
-            }
+            },
+            preResolvedQrData = resolvedQrData
         )
 
         val matchedCategory = categories.find { it.name.equals(result.suggestedCategoryName, ignoreCase = true) }

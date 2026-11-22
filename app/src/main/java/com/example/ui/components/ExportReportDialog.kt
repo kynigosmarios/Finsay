@@ -438,10 +438,21 @@ fun ExportReportDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
+                val exportStartMs = when (selectedFilterIndex) {
+                    1 -> selectedSingleDayTimestamp
+                    2 -> rangeStartTimestamp
+                    else -> null
+                }
+                val exportEndMs = when (selectedFilterIndex) {
+                    1 -> selectedSingleDayTimestamp
+                    2 -> rangeEndTimestamp
+                    else -> null
+                }
+
                 // Action Button 1: Real Excel Export
                 Button(
                     onClick = {
-                        ExpenseReportExporter.exportExcel(context, targetExpenses, periodTitle)
+                        ExpenseReportExporter.exportExcel(context, targetExpenses, periodTitle, exportStartMs, exportEndMs)
                         onDismiss()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Emerald700, contentColor = Color.White),
@@ -466,7 +477,7 @@ fun ExportReportDialog(
                 // Action Button 2: Real PDF Export
                 Button(
                     onClick = {
-                        ExpenseReportExporter.exportPdf(context, targetExpenses, periodTitle)
+                        ExpenseReportExporter.exportPdf(context, targetExpenses, periodTitle, exportStartMs, exportEndMs)
                         onDismiss()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White),

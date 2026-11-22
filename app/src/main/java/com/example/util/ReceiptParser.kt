@@ -256,35 +256,59 @@ object ReceiptParser {
      * Primary parsing method supporting ML Kit Text (with spatial bounding boxes)
      * and raw string fallback, plus optional AADE QR data.
      */
-    fun parseReceipt(
+    internal fun parseReceipt(
         visionText: Text?,
         rawText: String,
         aadeQr: String? = null,
         availableCategories: List<ExpenseCategory> = emptyList(),
-        learnedCategorySuggester: ((merchantTitle: String, merchantAfm: String) -> String?)? = null
+        learnedCategorySuggester: ((merchantTitle: String, merchantAfm: String) -> String?)? = null,
+        preResolvedQrData: InternalQrData? = null
     ): ParsedReceiptData {
         val lines = rawText.lines().map { it.trim() }.filter { it.isNotBlank() }
 
-        // 1. Extract Store Name from the beginning of the receipt
-        val (storeName, suggestedCategory) = extractStoreName(lines, rawText, availableCategories)
+        // 1. Extract Store Name from the beginning of the receipt (existing OCR behavior unchanged)
+        val (ocrStoreName, ocrSuggestedCategory) = extractStoreName(lines, rawText, availableCategories)
+        var storeName = ocrStoreName
+        var suggestedCategory = ocrSuggestedCategory
 
-        // 2. Extract Total Amount (STRICT: only from the right of "ΣΥΝΟΛΟ" / "Σύνολο")
+        // 2. Extract Total Amount (existing OCR behavior unchanged)
         var amount = ReceiptAmountAndQrParser.extractTotalAmount(lines, visionText)
 
-        // 3. Fallback amount from AADE QR if and only if OCR amount was missing (0.0)
+        // 3. Extract AFM & Date + merge verified AADE QR metadata when present
         var merchantAfm = ReceiptAmountAndQrParser.extractAfm(rawText)
         var timestamp = ReceiptAmountAndQrParser.extractDate(rawText) ?: System.currentTimeMillis()
 
-        if (!aadeQr.isNullOrBlank()) {
-            val qrData = ReceiptAmountAndQrParser.parseAadeQrInternal(aadeQr)
-            if (amount <= 0.0 && qrData.amount > 0.0) {
+        val qrData = preResolvedQrData ?: aadeQr?.takeIf { it.isNotBlank() }?.let {
+            ReceiptAmountAndQrParser.parseAadeQrInternal(it)
+        }
+
+        if (qrData != null) {
+            if (qrData.amount > 0.0) {
                 amount = qrData.amount
             }
-            if (merchantAfm.isBlank() && qrData.merchantAfm.isNotBlank()) {
+            if (qrData.merchantAfm.isNotBlank()) {
                 merchantAfm = qrData.merchantAfm
             }
-            if (qrData.timestamp > 0) {
+            if (qrData.timestamp > 0L) {
                 timestamp = qrData.timestamp
+            }
+            if (qrData.merchantName.isNotBlank()) {
+                val normQrMerchant = qrData.merchantName.uppercase(Locale.ROOT)
+                val knownFromQr = GREEK_KNOWN_MERCHANTS.entries.firstOrNull { (k, _) ->
+                    normQrMerchant.contains(k)
+                }?.value
+                if (knownFromQr != null) {
+                    storeName = knownFromQr.displayName
+                    suggestedCategory = knownFromQr.defaultCategory
+                } else {
+                    storeName = qrData.merchantName.trim()
+                    val catFromQrName = matchCategoryByName(storeName, availableCategories).ifBlank {
+                        detectCategoryFromContent(storeName, rawText, availableCategories)
+                    }
+                    if (catFromQrName.isNotBlank()) {
+                        suggestedCategory = catFromQrName
+                    }
+                }
             }
         }
 
@@ -326,9 +350,14 @@ object ReceiptParser {
         val ocrParsed = parseOcrText(qrText, availableCategories)
         val finalAmount = if (qrData.amount > 0.0) qrData.amount else ocrParsed.amount
         val finalAfm = if (qrData.merchantAfm.isNotBlank()) qrData.merchantAfm else ocrParsed.merchantAfm
+        val finalTitle = when {
+            qrData.merchantName.isNotBlank() -> qrData.merchantName
+            ocrParsed.title.isNotBlank() && ocrParsed.title != "Αγορά απόδειξης" -> ocrParsed.title
+            else -> "Απόδειξη"
+        }
 
         return ParsedReceiptData(
-            title = if (ocrParsed.title.isNotBlank() && ocrParsed.title != "Αγορά απόδειξης") ocrParsed.title else "Απόδειξη",
+            title = finalTitle,
             amount = finalAmount,
             timestamp = if (qrData.timestamp > 0) qrData.timestamp else System.currentTimeMillis(),
             suggestedCategoryName = ocrParsed.suggestedCategoryName.ifBlank { defaultCategory(availableCategories) },

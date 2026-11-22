@@ -29,6 +29,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -95,6 +96,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -115,6 +117,7 @@ import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.outlined.Savings
 import com.example.ui.components.AppSettingsDialog
+import com.example.ui.components.AppUpdateBanner
 import com.example.ui.components.BankNotificationBanner
 import com.example.ui.components.BurgerMenuDrawer
 import com.example.ui.components.CategoryDialog
@@ -158,6 +161,7 @@ import com.example.ui.theme.Emerald950
 import com.example.ui.theme.LogoGreen
 import com.example.ui.theme.ModernFontFamily
 import com.example.ui.viewmodel.OikoNomosViewModel
+import com.example.util.AppUpdateChecker
 import com.example.util.SpeechRecognitionHelper
 import kotlinx.coroutines.launch
 
@@ -256,6 +260,7 @@ fun MainScreen(
     val showBurgerMenu by viewModel.showBurgerMenu.collectAsStateWithLifecycle()
     val showUserProfileDialog by viewModel.showUserProfileDialog.collectAsStateWithLifecycle()
     val showExodologioDetailsDialog by viewModel.showExodologioDetailsDialog.collectAsStateWithLifecycle()
+    val isAppUpdateBannerVisible by AppUpdateChecker.isUpdateBannerVisible.collectAsStateWithLifecycle()
     val premiumPaywallReason by viewModel.premiumPaywallReason.collectAsStateWithLifecycle()
 
     val showQuickActionChooser by viewModel.showQuickActionChooser.collectAsStateWithLifecycle()
@@ -390,22 +395,40 @@ fun MainScreen(
         else -> isSystemInDarkTheme()
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            val topBarBg = if (isDarkTheme) Color(0xFF0F172A) else Color.White
-            val topBarBorder = if (isDarkTheme) Color(0xFF334155).copy(alpha = 0.5f) else Color(0xFFE2E8F0).copy(alpha = 0.6f)
-            val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-            val extraHeaderTop = (48.dp - statusBarTop).coerceIn(0.dp, 20.dp)
-            Surface(
-                color = topBarBg,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(width = 1.dp, color = topBarBorder)
-            ) {
-                TopAppBar(
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val screenHeightDp = maxHeight
+        val fontScale = LocalDensity.current.fontScale
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                val topBarBg = if (isDarkTheme) Color(0xFF0F172A) else Color.White
+                val topBarBorder = if (isDarkTheme) Color(0xFF334155).copy(alpha = 0.5f) else Color(0xFFE2E8F0).copy(alpha = 0.6f)
+                val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+                val needsTallScreenHeaderCompensation =
+                    fontScale < 0.96f || statusBarTop < 46.dp || (screenHeightDp >= 860.dp && statusBarTop < 48.dp)
+                val targetTotalHeaderHeight = (screenHeightDp * 0.138f).coerceIn(112.dp, 134.dp)
+                val defaultHeaderHeight = statusBarTop + 64.dp
+                val missingHeaderHeight = if (needsTallScreenHeaderCompensation) {
+                    val deficit = (targetTotalHeaderHeight - defaultHeaderHeight).coerceAtLeast(0.dp)
+                    val smallFontBonus = if (fontScale < 0.96f) {
+                        ((1.0f - fontScale) * 40f).dp.coerceIn(0.dp, 12.dp)
+                    } else 0.dp
+                    (deficit + smallFontBonus).coerceIn(0.dp, 36.dp)
+                } else {
+                    0.dp
+                }
+                val extraHeaderTop = (missingHeaderHeight * 0.72f).coerceIn(0.dp, 26.dp)
+                val extraHeaderBottom = (missingHeaderHeight - extraHeaderTop).coerceIn(0.dp, 10.dp)
+                Surface(
+                    color = topBarBg,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(width = 1.dp, color = topBarBorder)
+                ) {
+                    TopAppBar(
                     title = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -475,7 +498,7 @@ fun MainScreen(
                         titleContentColor = if (isDarkTheme) Color.White else Emerald950,
                         actionIconContentColor = if (isDarkTheme) Color.White else Emerald950
                     ),
-                    modifier = Modifier.padding(top = extraHeaderTop)
+                    modifier = Modifier.padding(top = extraHeaderTop, bottom = extraHeaderBottom)
                 )
             }
         },
@@ -610,6 +633,19 @@ fun MainScreen(
                 onCreateNewHouseholdClick = { viewModel.openExodologioManager() },
                 onSwitchClick = { viewModel.openExodologioManager() }
             )
+
+            // Google Play Store App Update Banner
+            AnimatedVisibility(
+                visible = isAppUpdateBannerVisible,
+                enter = FinsayMotion.BannerEnter,
+                exit = FinsayMotion.BannerExit
+            ) {
+                AppUpdateBanner(
+                    appLanguage = appLanguage,
+                    onUpdateClick = { AppUpdateChecker.openPlayStoreForUpdate(context) },
+                    onDismissClick = { AppUpdateChecker.dismissUpdateBanner(context) }
+                )
+            }
 
             // Bank Notification Auto-Catcher Banner (Pro-only)
             AnimatedVisibility(
@@ -1027,6 +1063,7 @@ fun MainScreen(
                     .zIndex(10f)
             )
         }
+        }
     }
 
     // Voice Confirmation Dialog with editable Amount, Category, Members, Date (Requirement 2)
@@ -1254,10 +1291,10 @@ fun MainScreen(
                     timestamp = timestamp,
                     splitType = "ALL_FAMILY",
                     memberIds = emptyList(),
-                    memberNamesDisplay = "Κοινό Οικογένειας",
+                    memberNamesDisplay = if (lang == com.example.util.Localization.Language.ENGLISH) "All" else "Όλοι",
                     note = note,
                     payerMemberId = member?.id ?: 0L,
-                    payerMemberName = member?.name ?: "Οικογένεια",
+                    payerMemberName = member?.name ?: if (lang == com.example.util.Localization.Language.ENGLISH) "All" else "Όλοι",
                     payerMemberIdsCsv = if (member != null) "${member.id}" else "",
                     payerAmountsCsv = ""
                 )

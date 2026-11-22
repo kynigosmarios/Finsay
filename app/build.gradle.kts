@@ -16,8 +16,8 @@ android {
         applicationId = "com.kynigos.oikonomos"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -121,6 +121,8 @@ dependencies {
     implementation(libs.moshi.kotlin)
     implementation(libs.okhttp)
     implementation(libs.play.billing)
+    implementation(libs.play.app.update)
+    implementation(libs.play.app.update.ktx)
     implementation(libs.play.services.mlkit.text.recognition)
     implementation(libs.play.services.mlkit.barcode.scanning)
     implementation(libs.retrofit)

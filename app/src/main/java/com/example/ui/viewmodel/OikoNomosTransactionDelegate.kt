@@ -452,7 +452,7 @@ internal class OikoNomosTransactionDelegate(
         val cloudId = existing?.cloudId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
         val resolvedDefaultPayer = vm.resolveDefaultPayerMember()
         val finalMemberId = if (memberId > 0L) memberId else (resolvedDefaultPayer?.id ?: 0L)
-        val finalMemberName = memberName.ifBlank { resolvedDefaultPayer?.name ?: "Οικογένεια" }
+        val finalMemberName = memberName.ifBlank { resolvedDefaultPayer?.name ?: "Όλοι" }
 
         val targetIncome = Income(
             id = id,

@@ -745,11 +745,13 @@ internal fun AnalyticsDataExportCard(
                         } else {
                             val targetList = if (filteredExportExpenses.isNotEmpty()) filteredExportExpenses else expenses
                             val targetTitle = if (filteredExportExpenses.isNotEmpty()) exportPeriodTitle else (if (isGreek) "Όλα τα Έξοδα" else "All Expenses")
+                            val startMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeStart else null
+                            val endMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeEnd else null
                             if (targetList.isEmpty()) {
                                 Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένα έξοδα προς εξαγωγή" else "No expenses to export", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση PDF..." else "Generating and sharing PDF...", Toast.LENGTH_SHORT).show()
-                                ExpenseReportExporter.exportPdf(context, targetList, targetTitle)
+                                ExpenseReportExporter.exportPdf(context, targetList, targetTitle, startMs, endMs)
                             }
                         }
                     },
@@ -779,11 +781,13 @@ internal fun AnalyticsDataExportCard(
                         } else {
                             val targetList = if (filteredExportExpenses.isNotEmpty()) filteredExportExpenses else expenses
                             val targetTitle = if (filteredExportExpenses.isNotEmpty()) exportPeriodTitle else (if (isGreek) "Όλα τα Έξοδα" else "All Expenses")
+                            val startMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeStart else null
+                            val endMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeEnd else null
                             if (targetList.isEmpty()) {
                                 Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένα έξοδα προς εξαγωγή" else "No expenses to export", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση CSV..." else "Generating and sharing CSV...", Toast.LENGTH_SHORT).show()
-                                ExpenseReportExporter.exportCsv(context, targetList, targetTitle)
+                                ExpenseReportExporter.exportCsv(context, targetList, targetTitle, startMs, endMs)
                             }
                         }
                     },

@@ -494,7 +494,7 @@ internal fun ManualExpensePayerAndSplitSection(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (lang == Localization.Language.ENGLISH) "Common to entire household" else "Κοινό για όλο το σπίτι",
+                text = if (lang == Localization.Language.ENGLISH) "All members" else "Όλα τα μέλη",
                 fontSize = 13.sp,
                 fontWeight = if (isAllFamily) FontWeight.Bold else FontWeight.Normal
             )

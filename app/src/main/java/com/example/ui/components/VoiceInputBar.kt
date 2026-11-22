@@ -84,7 +84,7 @@ fun VoiceMicButton(
         // Ambient soft mint halo ring around the mic (matches screenshot)
         Box(
             modifier = Modifier
-                .size(70.dp)
+                .size(60.dp)
                 .graphicsLayer {
                     val s = if (isListening) pulseScale else restingGlowScale
                     scaleX = s
@@ -100,7 +100,7 @@ fun VoiceMicButton(
         // Inner FAB button with crisp emerald tone
         Box(
             modifier = Modifier
-                .size(56.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(
                     Brush.linearGradient(
@@ -119,7 +119,7 @@ fun VoiceMicButton(
                 imageVector = if (isListening) Icons.Default.GraphicEq else Icons.Default.Mic,
                 contentDescription = if (isListening) "Διακοπή ακρόασης" else "Φωνητική καταχώρηση",
                 tint = Color.White,
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.size(24.dp)
             )
         }
     }

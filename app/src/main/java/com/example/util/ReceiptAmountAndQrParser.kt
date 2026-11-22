@@ -1,15 +1,29 @@
 package com.example.util
 
+import android.graphics.Bitmap
+import android.net.Uri
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.Text
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 internal data class InternalQrData(
     val amount: Double = 0.0,
     val merchantAfm: String = "",
-    val timestamp: Long = 0L
+    val timestamp: Long = 0L,
+    val merchantName: String = ""
 )
 
 /**
@@ -295,36 +309,403 @@ internal object ReceiptAmountAndQrParser {
         return null
     }
 
+    private val aadeHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(3500, TimeUnit.MILLISECONDS)
+            .readTimeout(3500, TimeUnit.MILLISECONDS)
+            .callTimeout(4500, TimeUnit.MILLISECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
+
+    private val ALLOWED_QR_HOSTS = listOf(
+        "aade.gr",
+        "epsilonnet.gr",
+        "softone.gr",
+        "entersoft.gr",
+        "impact.gr",
+        "elorus.com",
+        "oxygen.gr",
+        "simply.gr",
+        "timologiera.gr",
+        "myinvoice.gr",
+        "einvoicing.gr",
+        "yodiwo.com"
+    )
+
+    private fun isAllowedAadeOrInvoiceHost(host: String?): Boolean {
+        val h = host?.trim()?.lowercase(Locale.ROOT) ?: return false
+        return ALLOWED_QR_HOSTS.any { allowed -> h == allowed || h.endsWith(".$allowed") }
+    }
+
+    private fun isLikelyAadeQrValue(raw: String): Boolean {
+        val lower = raw.lowercase(Locale.ROOT)
+        return lower.contains("aade.gr") ||
+            lower.contains("tameiakes") ||
+            lower.contains("mydata") ||
+            lower.contains("timologio") ||
+            lower.contains("einvoic") ||
+            lower.contains("esend") ||
+            lower.startsWith("http://") ||
+            lower.startsWith("https://")
+    }
+
+    /**
+     * Extracts the best QR code from a receipt bitmap using QR-focused ML Kit scanning:
+     * 1) full image, 2) bottom 50% crop, 3) 2x upscaled bottom 50% crop for small thermal QRs.
+     */
+    suspend fun extractBestQrCode(bitmap: Bitmap): String? = withContext(Dispatchers.IO) {
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+        val scanner = BarcodeScanning.getClient(options)
+
+        suspend fun scanBmp(bmp: Bitmap): String? {
+            return try {
+                val barcodes = scanner.process(InputImage.fromBitmap(bmp, 0)).await()
+                val candidates = barcodes.mapNotNull { it.rawValue?.trim() }.filter { it.isNotBlank() }
+                candidates.firstOrNull { isLikelyAadeQrValue(it) } ?: candidates.firstOrNull()
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        val fullMatch = scanBmp(bitmap)
+        if (!fullMatch.isNullOrBlank()) return@withContext fullMatch
+
+        if (bitmap.height > 400) {
+            try {
+                val cropY = (bitmap.height * 0.50).toInt().coerceIn(0, bitmap.height - 1)
+                val cropH = (bitmap.height - cropY).coerceAtLeast(1)
+                val bottomCrop = Bitmap.createBitmap(bitmap, 0, cropY, bitmap.width, cropH)
+                val bottomMatch = scanBmp(bottomCrop)
+                if (!bottomMatch.isNullOrBlank()) return@withContext bottomMatch
+
+                // Upscale small/low-res bottom crops so ML Kit can lock onto dense AADE QR modules
+                if (bottomCrop.width < 1200 && bottomCrop.height < 1200) {
+                    val scaled = Bitmap.createScaledBitmap(
+                        bottomCrop,
+                        (bottomCrop.width * 2).coerceAtMost(2000),
+                        (bottomCrop.height * 2).coerceAtMost(2000),
+                        true
+                    )
+                    val scaledMatch = scanBmp(scaled)
+                    if (!scaledMatch.isNullOrBlank()) return@withContext scaledMatch
+                }
+            } catch (_: Exception) {
+            }
+        }
+        null
+    }
+
+    private fun safeUrlDecode(value: String): String {
+        return try {
+            URLDecoder.decode(value, "UTF-8").trim()
+        } catch (_: Exception) {
+            value.trim()
+        }
+    }
+
+    private fun parseQrDateString(rawDate: String): Long {
+        val cleaned = rawDate.trim()
+        val digitsOnly = cleaned.replace(Regex("[^0-9]"), "")
+        if (digitsOnly.length >= 8) {
+            val ymd = digitsOnly.take(8)
+            val year = ymd.substring(0, 4).toIntOrNull()
+            val month = ymd.substring(4, 6).toIntOrNull()
+            val day = ymd.substring(6, 8).toIntOrNull()
+            if (year != null && year in 2020..2035 && month != null && month in 1..12 && day != null && day in 1..31) {
+                try {
+                    val sdf = SimpleDateFormat("yyyyMMdd", Locale.ROOT)
+                    return sdf.parse(ymd)?.time ?: 0L
+                } catch (_: Exception) {}
+            }
+        }
+        return extractDate(cleaned) ?: 0L
+    }
+
     fun parseAadeQrInternal(qrText: String): InternalQrData {
         var amount = 0.0
         var merchantAfm = ""
         var timestamp = 0L
+        var merchantName = ""
 
-        val amountRegex = Regex("(?:amount|poso|total|sum|val|tot|price)=([0-9]+(?:[.,][0-9]{1,2})?)", RegexOption.IGNORE_CASE)
-        val amountMatch = amountRegex.find(qrText)
-        if (amountMatch != null) {
-            val raw = amountMatch.groupValues[1].replace(',', '.')
-            amount = raw.toDoubleOrNull() ?: 0.0
+        val trimmed = qrText.trim()
+        if (trimmed.isBlank()) return InternalQrData()
+
+        // 1. Named query/key-value parameters
+        val amountRegex = Regex(
+            "(?:^|[?&;|,\\s])(?:amount|poso|total|totalValue|totalAmount|gross|grossValue|sum|val|tot|price|payable|t|a)=([0-9]+(?:[.,][0-9]{1,2})?)",
+            RegexOption.IGNORE_CASE
+        )
+        amountRegex.find(trimmed)?.let { m ->
+            val parsed = m.groupValues[1].replace(',', '.').toDoubleOrNull() ?: 0.0
+            if (parsed in 0.01..99999.0) amount = parsed
         }
 
-        val afmRegex = Regex("(?:tin|afm|vat)=([0-9]{9})", RegexOption.IGNORE_CASE)
-        val afmMatch = afmRegex.find(qrText)
-        if (afmMatch != null) {
-            merchantAfm = afmMatch.groupValues[1]
+        val afmRegex = Regex(
+            "(?:^|[?&;|,\\s])(?:tin|afm|vat|issuerVat|issuerTin|sellerVat|vatNumber)=([0-9]{9})(?:[^0-9]|$)",
+            RegexOption.IGNORE_CASE
+        )
+        afmRegex.find(trimmed)?.let { m ->
+            merchantAfm = m.groupValues[1]
         }
 
-        val dateRegex = Regex("(?:date|d)=([0-9]{4}[-]?[0-9]{2}[-]?[0-9]{2})", RegexOption.IGNORE_CASE)
-        val dateMatch = dateRegex.find(qrText)
-        if (dateMatch != null) {
-            val dStr = dateMatch.groupValues[1].replace("-", "")
-            if (dStr.length == 8) {
-                try {
-                    val sdf = SimpleDateFormat("yyyyMMdd", Locale.ROOT)
-                    timestamp = sdf.parse(dStr)?.time ?: 0L
-                } catch (_: Exception) {}
+        val nameRegex = Regex(
+            "(?:^|[?&;|])(?:issuerName|issuer_name|sellerName|seller|merchantName|merchant|companyName|company|storeName|store|brand|eponymia|vendor|name)=([^&;|]+)",
+            RegexOption.IGNORE_CASE
+        )
+        nameRegex.find(trimmed)?.let { m ->
+            val decoded = safeUrlDecode(m.groupValues[1])
+            if (decoded.length >= 2 && decoded.any { it.isLetter() }) {
+                merchantName = decoded.take(60)
             }
         }
 
-        return InternalQrData(amount, merchantAfm, timestamp)
+        val dateRegex = Regex(
+            "(?:^|[?&;|,\\s])(?:issueDate|date|dt)=([0-9]{4}[-/]?[0-9]{2}[-/]?[0-9]{2}|[0-9]{2}[-/][0-9]{2}[-/][0-9]{4})",
+            RegexOption.IGNORE_CASE
+        )
+        dateRegex.find(trimmed)?.let { m ->
+            timestamp = parseQrDateString(m.groupValues[1])
+        }
+
+        // 2. Delimited AADE ΦΗΜ / e-send payloads (e.g. ?d=SERIAL|AFM|YYYYMMDD|TOTAL or comma/semicolon-separated)
+        val payloadToSplit = try {
+            val uri = Uri.parse(trimmed)
+            uri.getQueryParameter("d")
+                ?: uri.getQueryParameter("qr")
+                ?: uri.getQueryParameter("data")
+                ?: trimmed
+        } catch (_: Exception) {
+            trimmed
+        }
+
+        val decodedPayload = safeUrlDecode(payloadToSplit)
+        val delimiterParts = decodedPayload.split('|', ',', ';', '^').map { it.trim() }.filter { it.isNotBlank() }
+        if (delimiterParts.size >= 3) {
+            val decimalCandidates = mutableListOf<Double>()
+            for (part in delimiterParts) {
+                if (merchantAfm.isBlank() && part.matches(Regex("^[0-9]{9}$"))) {
+                    val asYearPrefix = part.take(4).toIntOrNull()
+                    if (asYearPrefix == null || asYearPrefix !in 2020..2035) {
+                        merchantAfm = part
+                    }
+                }
+                if (timestamp == 0L && (part.matches(Regex("^20[2-3][0-9][01][0-9][0-3][0-9].*$")) ||
+                        part.matches(Regex("^[0-3]?[0-9][./-][01]?[0-9][./-]20[2-3][0-9].*$")) ||
+                        part.matches(Regex("^20[2-3][0-9]-[01][0-9]-[0-3][0-9].*$")))
+                ) {
+                    val ts = parseQrDateString(part)
+                    if (ts > 0L) timestamp = ts
+                }
+                if (part.matches(Regex("^[0-9]{1,5}[.,][0-9]{2}$"))) {
+                    val v = part.replace(',', '.').toDoubleOrNull()
+                    if (v != null && v in 0.01..99999.0) {
+                        decimalCandidates.add(v)
+                    }
+                }
+            }
+            if (amount <= 0.0 && decimalCandidates.isNotEmpty()) {
+                // On AADE delimited payloads, the gross total is the largest monetary value (vs net / VAT)
+                amount = decimalCandidates.max()
+            }
+        }
+
+        // Fallback plain date parameter `d=YYYYMMDD`
+        if (timestamp == 0L) {
+            val shortDateRegex = Regex("(?:^|[?&])d=([0-9]{4}[-]?[0-9]{2}[-]?[0-9]{2})(?:&|$)", RegexOption.IGNORE_CASE)
+            shortDateRegex.find(trimmed)?.let { m ->
+                timestamp = parseQrDateString(m.groupValues[1])
+            }
+        }
+
+        return InternalQrData(
+            amount = amount,
+            merchantAfm = merchantAfm,
+            timestamp = timestamp,
+            merchantName = merchantName
+        )
+    }
+
+    /**
+     * Resolves full AADE QR metadata: first parses the QR payload locally, and if the QR is an
+     * HTTPS verification URL from AADE or a certified Greek e-invoicing provider that doesn't
+     * embed seller name or total directly in query params, fetches and parses the verification page
+     * with a strict short timeout and silent fallback.
+     */
+    suspend fun resolveAadeQrData(qrText: String?): InternalQrData {
+        if (qrText.isNullOrBlank()) return InternalQrData()
+        val localData = parseAadeQrInternal(qrText)
+        if (localData.merchantName.isNotBlank() && localData.amount > 0.0) {
+            return localData
+        }
+
+        val trimmed = qrText.trim()
+        val parsedUri = try {
+            Uri.parse(trimmed)
+        } catch (_: Exception) {
+            null
+        }
+        val scheme = parsedUri?.scheme?.lowercase(Locale.ROOT)
+        val host = parsedUri?.host?.lowercase(Locale.ROOT)
+        if (scheme != "https" || !isAllowedAadeOrInvoiceHost(host)) {
+            return localData
+        }
+
+        val remoteData = withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url(trimmed)
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) FinsayReceiptReader/1.0")
+                    .header("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
+                    .header("Accept-Language", "el-GR,el;q=0.9,en;q=0.8")
+                    .get()
+                    .build()
+
+                aadeHttpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@withContext null
+                    val body = response.body?.string()?.take(262_144) ?: return@withContext null
+                    parseAadeVerificationHtmlOrJson(body)
+                }
+            } catch (_: Exception) {
+                null
+            }
+        } ?: return localData
+
+        return InternalQrData(
+            amount = if (localData.amount > 0.0) localData.amount else remoteData.amount,
+            merchantAfm = localData.merchantAfm.ifBlank { remoteData.merchantAfm },
+            timestamp = if (localData.timestamp > 0L) localData.timestamp else remoteData.timestamp,
+            merchantName = localData.merchantName.ifBlank { remoteData.merchantName }
+        )
+    }
+
+    private fun decodeHtmlEntities(input: String): String {
+        return input
+            .replace("&nbsp;", " ", ignoreCase = true)
+            .replace("&amp;", "&", ignoreCase = true)
+            .replace("&quot;", "\"", ignoreCase = true)
+            .replace("&#39;", "'", ignoreCase = true)
+            .replace("&apos;", "'", ignoreCase = true)
+            .replace("&euro;", "€", ignoreCase = true)
+            .replace("&lt;", "<", ignoreCase = true)
+            .replace("&gt;", ">", ignoreCase = true)
+    }
+
+    private fun parseAadeVerificationHtmlOrJson(rawBody: String): InternalQrData {
+        var amount = 0.0
+        var merchantAfm = ""
+        var timestamp = 0L
+        var merchantName = ""
+
+        // Strip scripts/styles and convert block/cell tags into newlines for clean label:value parsing
+        val cleanedText = decodeHtmlEntities(
+            rawBody
+                .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "\n")
+                .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), "\n")
+                .replace(Regex("</?(?:tr|td|th|div|p|li|br|h[1-6]|dt|dd|span|label)[^>]*>", RegexOption.IGNORE_CASE), "\n")
+                .replace(Regex("<[^>]+>"), " ")
+        )
+        val lines = cleanedText.lines().map { it.replace(Regex("\\s+"), " ").trim() }.filter { it.isNotBlank() }
+
+        fun findValueAfterLabel(labelRegex: Regex, validator: (String) -> Boolean): String? {
+            for (i in lines.indices) {
+                val line = lines[i]
+                val m = labelRegex.find(line) ?: continue
+                val remainder = line.substring(m.range.last + 1).trim().trimStart(':', '-', '–', '•').trim()
+                if (remainder.isNotBlank() && validator(remainder)) {
+                    return remainder
+                }
+                if (i + 1 < lines.size) {
+                    val nextLine = lines[i + 1].trim()
+                    if (nextLine.isNotBlank() && validator(nextLine)) {
+                        return nextLine
+                    }
+                }
+            }
+            return null
+        }
+
+        // 1. Seller / Issuer Name
+        val sellerLabelRegex = Regex(
+            "(?:Επωνυμ[ίι]α(?:\\s+Εκδ[όο]τη|\\s+Επιχε[ίι]ρησης)?|Διακριτικ[όο]ς\\s+Τ[ίι]τλος|Εκδ[όο]της|Πωλητ[ήη]ς|Επιχε[ίι]ρηση|Issuer\\s*Name|Seller\\s*Name|Company\\s*Name)",
+            RegexOption.IGNORE_CASE
+        )
+        val badSellerValues = setOf("ΑΦΜ", "Α.Φ.Μ.", "ΗΜΕΡΟΜΗΝΙΑ", "ΣΥΝΟΛΟ", "ΠΟΣΟ", "ΑΞΙΑ", "ΝΑΙ", "ΟΧΙ", "ΕΓΚΥΡΗ", "VALID")
+        findValueAfterLabel(sellerLabelRegex) { candidate ->
+            val upper = removeGreekAccents(candidate).uppercase(Locale.ROOT)
+            candidate.length in 2..80 &&
+                candidate.any { it.isLetter() } &&
+                !badSellerValues.contains(upper) &&
+                !upper.startsWith("ΑΦΜ") &&
+                !upper.startsWith("Α.Φ.Μ") &&
+                !candidate.matches(Regex("^[0-9.,€\\s]+$"))
+        }?.let { seller ->
+            merchantName = seller.take(60)
+        }
+
+        // Also support JSON-like payloads returned by e-invoicing endpoints
+        if (merchantName.isBlank()) {
+            val jsonSeller = Regex(
+                "\"(?:issuerName|sellerName|companyName|tradeName|eponymia)\"\\s*:\\s*\"([^\"]{2,80})\"",
+                RegexOption.IGNORE_CASE
+            ).find(rawBody)?.groupValues?.get(1)?.trim()
+            if (!jsonSeller.isNullOrBlank() && jsonSeller.any { it.isLetter() }) {
+                merchantName = jsonSeller.take(60)
+            }
+        }
+
+        // 2. AFM
+        merchantAfm = extractAfm(cleanedText)
+        if (merchantAfm.isBlank()) {
+            val jsonAfm = Regex("\"(?:issuerVat|vatNumber|afm|tin)\"\\s*:\\s*\"([0-9]{9})\"", RegexOption.IGNORE_CASE)
+                .find(rawBody)?.groupValues?.get(1)
+            if (!jsonAfm.isNullOrBlank()) merchantAfm = jsonAfm
+        }
+
+        // 3. Total Amount
+        val totalLabelRegex = Regex(
+            "(?:Συνολικ[ήη]\\s+Αξ[ίι]α|Τελικ[όο]\\s+Ποσ[όο]|Πληρωτ[έε]ο(?:\\s+Ποσ[όο])?|Γενικ[όο]\\s+Σ[ύυ]νολο|Σ[ύυ]νολο\\s*(?:Αξ[ίι]ας|Πληρωμ[ήη]ς|Απόδειξης)?|Total\\s*(?:Amount|Value|Gross)?|Gross\\s*Value)",
+            RegexOption.IGNORE_CASE
+        )
+        findValueAfterLabel(totalLabelRegex) { candidate ->
+            PRICE_REGEX.containsMatchIn(candidate)
+        }?.let { amountLine ->
+            val m = PRICE_REGEX.find(amountLine)
+            if (m != null) {
+                val parsed = parseGreekPrice(m.groupValues[1]) ?: 0.0
+                if (parsed in 0.01..99999.0) amount = parsed
+            }
+        }
+
+        if (amount <= 0.0) {
+            val jsonAmt = Regex(
+                "\"(?:totalGrossValue|totalAmount|grossValue|payableAmount|total)\"\\s*:\\s*\"?([0-9]+(?:[.,][0-9]{1,2})?)\"?",
+                RegexOption.IGNORE_CASE
+            ).find(rawBody)?.groupValues?.get(1)?.replace(',', '.')?.toDoubleOrNull()
+            if (jsonAmt != null && jsonAmt in 0.01..99999.0) {
+                amount = jsonAmt
+            }
+        }
+
+        // 4. Date
+        val dateLabelRegex = Regex("(?:Ημερομην[ίι]α(?:\\s+Έκδοσης)?|Ημ/ν[ίι]α|Issue\\s*Date|Date)", RegexOption.IGNORE_CASE)
+        findValueAfterLabel(dateLabelRegex) { candidate ->
+            parseQrDateString(candidate) > 0L
+        }?.let { dateStr ->
+            timestamp = parseQrDateString(dateStr)
+        }
+        if (timestamp == 0L) {
+            timestamp = extractDate(cleanedText) ?: 0L
+        }
+
+        return InternalQrData(
+            amount = amount,
+            merchantAfm = merchantAfm,
+            timestamp = timestamp,
+            merchantName = merchantName
+        )
     }
 }

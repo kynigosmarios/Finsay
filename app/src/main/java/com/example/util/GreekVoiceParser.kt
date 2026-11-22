@@ -971,10 +971,10 @@ object GreekVoiceParser {
             ?: allMembers.firstOrNull()
         val defaultPayersList = if (validPreferred.isNotEmpty()) validPreferred else listOfNotNull(fallbackSingle)
         val defaultPayerId = defaultPayersList.firstOrNull()?.id ?: 0L
-        val defaultPayerName = if (defaultPayersList.size >= 2) {
-            defaultPayersList.joinToString(" & ") { it.name }
+        val defaultPayerName = if (defaultPayersList.isNotEmpty()) {
+            Localization.resolveMemberGroupDisplay(defaultPayersList, allMembers, Localization.Language.GREEK)
         } else {
-            defaultPayersList.firstOrNull()?.name ?: ""
+            ""
         }
 
         val consumedWords = mutableSetOf<String>()
@@ -983,10 +983,10 @@ object GreekVoiceParser {
             val list = if (payers.isNotEmpty()) payers else defaultPayersList
             val primary = list.firstOrNull()
             val primaryId = primary?.id ?: defaultPayerId
-            val displayName = if (list.size >= 2) {
-                list.joinToString(" & ") { it.name }
+            val displayName = if (list.isNotEmpty()) {
+                Localization.resolveMemberGroupDisplay(list, allMembers, Localization.Language.GREEK)
             } else {
-                primary?.name ?: defaultPayerName
+                defaultPayerName
             }
             val idsCsv = list.joinToString(",") { it.id.toString() }
             val splitAmt = if (list.isNotEmpty()) amount / list.size else amount
@@ -1093,15 +1093,7 @@ object GreekVoiceParser {
             val beneficiaryResult = if (matchedMembers.isEmpty() || matchedMembers.size == allMembers.size) {
                 Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
             } else {
-                val display = if (matchedMembers.size >= 2) {
-                    val firstRolePlural = Localization.pluralRoleName(matchedMembers.first().role, Localization.Language.GREEK)
-                    val allSame = matchedMembers.all {
-                        Localization.pluralRoleName(it.role, Localization.Language.GREEK).equals(firstRolePlural, ignoreCase = true)
-                    }
-                    if (allSame) firstRolePlural else matchedMembers.joinToString(" & ") { it.name }
-                } else {
-                    matchedMembers.first().name
-                }
+                val display = Localization.resolveMemberGroupDisplay(matchedMembers, allMembers, Localization.Language.GREEK)
                 Triple("SPECIFIC_MEMBERS", matchedMembers, display)
             }
 
@@ -1127,11 +1119,7 @@ object GreekVoiceParser {
             return Triple("SPECIFIC_MEMBERS", parents.ifEmpty { allMembers }, display)
         }
         if (match.members.isNotEmpty()) {
-            val display = if (match.members.size >= 2) {
-                match.members.joinToString(" & ") { it.name }
-            } else {
-                match.members.first().name
-            }
+            val display = Localization.resolveMemberGroupDisplay(match.members, allMembers, Localization.Language.GREEK)
             return Triple("SPECIFIC_MEMBERS", match.members, display)
         }
         return Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
@@ -1366,22 +1354,46 @@ object GreekVoiceParser {
             null
         }
 
-        // Fallback: If no leftover tokens were found, check if a specific keyword was matched (and not the category name)
-        val matchedKeywordFallback = if (customDescription.isNullOrBlank() && !matchedCategoryWord.isNullOrBlank()) {
-            val normKw = normalizeGreek(matchedCategoryWord).replace('ς', 'σ')
-            if (normKw != catNameNorm.replace('ς', 'σ') && !catNameNorm.contains(normKw)) {
-                matchedCategoryWord.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
-            } else null
-        } else null
-
-        val rawTitle = customDescription ?: detectedTitle ?: matchedKeywordFallback ?: ""
-        val finalTitle = if (rawTitle.isNotBlank()) {
-            if (rawTitle.equals(category.name, ignoreCase = true) || normalizeGreek(rawTitle).replace('ς', 'σ') == catNameNorm.replace('ς', 'σ')) {
-                ""
-            } else {
-                rawTitle
+        // Fallback: If no extra descriptive leftover tokens exist, preserve the most relevant spoken word/keyword
+        val spokenMatchedFallback = if (customDescription.isNullOrBlank()) {
+            val candidateKeywords = buildList {
+                if (!matchedCategoryWord.isNullOrBlank()) add(matchedCategoryWord)
+                if (bestCategory != null) add(bestCategory.name)
             }
-        } else ""
+            var preservedSpoken: String? = null
+            for (kw in candidateKeywords) {
+                val kwTokens = normalizeGreek(kw)
+                    .split(Regex("[^\\p{L}\\p{Nd}]+"))
+                    .filter { it.isNotBlank() }
+                    .map { it.replace('ς', 'σ') }
+                if (kwTokens.isEmpty()) continue
+                val matchedOriginalTokens = rawTokens.mapNotNull { tok ->
+                    val clean = tok.trim().replace(Regex("[^\\p{L}\\p{Nd}]"), "")
+                    if (clean.isBlank()) null
+                    else {
+                        val normTok = normalizeGreek(clean).replace('ς', 'σ')
+                        if (kwTokens.any { it == normTok }) clean else null
+                    }
+                }
+                if (matchedOriginalTokens.isNotEmpty()) {
+                    preservedSpoken = matchedOriginalTokens.joinToString(" ")
+                        .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                    break
+                }
+            }
+            preservedSpoken
+                ?: matchedCategoryWord?.takeIf { it.isNotBlank() }?.replaceFirstChar {
+                    if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+                }
+                ?: bestCategory?.name?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+
+        val finalTitle = customDescription
+            ?: detectedTitle?.takeIf { it.isNotBlank() }
+            ?: spokenMatchedFallback
+            ?: ""
 
         return Pair(category, finalTitle)
     }

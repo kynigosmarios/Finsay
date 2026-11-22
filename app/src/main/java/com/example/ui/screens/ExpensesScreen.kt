@@ -310,17 +310,17 @@ fun ExpensesScreen(
             val rawPayer = exp.getPayerCategoryOrNamesDisplay(members, lang)
             val cleanPayer = stripParen(rawPayer)
             val isPayerGroup = cleanPayer.contains("&") || cleanPayer.contains(",") ||
-                cleanPayer.contains("Γονείς") || cleanPayer.contains("Παιδιά") ||
-                cleanPayer.contains("Συγκάτοικοι") || cleanPayer.contains("Οικογένεια") ||
-                cleanPayer.contains("Parents") || cleanPayer.contains("Children") ||
-                cleanPayer.contains("Roommates") || cleanPayer.contains("Family")
+                Localization.isPluralRoleDisplay(cleanPayer) ||
+                cleanPayer.contains("Οικογένεια") ||
+                cleanPayer.equals("Όλοι", ignoreCase = true) || cleanPayer.equals("All", ignoreCase = true) ||
+                cleanPayer.contains("Family")
 
             val rawBeneficiary = exp.getBeneficiaryCategoryOrNamesDisplay(members, lang)
             val cleanBeneficiary = stripParen(rawBeneficiary)
-            val isBeneficiaryGroup = cleanBeneficiary.contains("Γονείς") || cleanBeneficiary.contains("Παιδιά") ||
-                cleanBeneficiary.contains("Συγκάτοικοι") || cleanBeneficiary.contains("Οικογένεια") ||
-                cleanBeneficiary.contains("Parents") || cleanBeneficiary.contains("Children") ||
-                cleanBeneficiary.contains("Roommates") || cleanBeneficiary.contains("Family") ||
+            val isBeneficiaryGroup = Localization.isPluralRoleDisplay(cleanBeneficiary) ||
+                cleanBeneficiary.contains("Οικογένεια") ||
+                cleanBeneficiary.equals("Όλοι", ignoreCase = true) || cleanBeneficiary.equals("All", ignoreCase = true) ||
+                cleanBeneficiary.contains("Family") ||
                 cleanBeneficiary.contains("&") || cleanBeneficiary.contains(",")
 
             val baseKey = if (exp.id > 0) "exp_${exp.id}" else "exp_c_${if (exp.cloudId.isNotBlank()) exp.cloudId else safeTs.toString()}_${exp.title.hashCode()}"
@@ -349,6 +349,16 @@ fun ExpensesScreen(
             val dateStr = if (hasTime) timeOnlyFormat.format(Date(safeTs)) else ""
             val baseKey = if (inc.id > 0) "inc_${inc.id}" else "inc_c_${if (inc.cloudId.isNotBlank()) inc.cloudId else safeTs.toString()}_${inc.title.hashCode()}"
             val key = uniqueKey(baseKey)
+            val rawIncomeMember = inc.memberName.trim()
+            val displayIncomeMember = when {
+                rawIncomeMember.equals("Οικογένεια", ignoreCase = true) ||
+                    rawIncomeMember.equals("Family", ignoreCase = true) ||
+                    rawIncomeMember.equals("Όλοι", ignoreCase = true) ||
+                    rawIncomeMember.equals("All", ignoreCase = true) ||
+                    (rawIncomeMember.isBlank() && inc.memberId == 0L) ->
+                    if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
+                else -> rawIncomeMember
+            }
 
             return ActivityItem.IncomeItem(
                 income = inc,
@@ -356,7 +366,7 @@ fun ExpensesScreen(
                 categoryDisplay = inc.category.ifBlank { Localization.income(lang) },
                 formattedAmount = String.format(Locale.US, "+%.2f €", inc.amount),
                 formattedDate = dateStr,
-                memberName = inc.memberName,
+                memberName = displayIncomeMember,
                 itemKey = key
             )
         }

@@ -324,9 +324,9 @@ fun BurgerMenuDrawer(
                         }
                     )
 
-                    // 2. Διαχείριση εξοδολογίων
+                    // 2. Εξοδολόγια
                     BurgerNavigationItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Manage Households" else "Διαχείριση εξοδολογίων",
+                        title = if (lang == Localization.Language.ENGLISH) "Households" else "Εξοδολόγια",
                         icon = Icons.Default.MenuBook,
                         iconTint = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7),
                         iconBg = (if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)).copy(alpha = if (isDark) 0.20f else 0.12f),

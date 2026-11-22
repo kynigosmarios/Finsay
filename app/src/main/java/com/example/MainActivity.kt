@@ -78,6 +78,12 @@ class MainActivity : ComponentActivity() {
         }
 
         try {
+            com.example.util.AppUpdateChecker.checkForUpdate(this)
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "AppUpdateChecker init: ${t.message}")
+        }
+
+        try {
             handleIntent(intent)
         } catch (t: Throwable) {
             Log.w("MainActivity", "handleIntent safe fallback: ${t.message}")
@@ -146,6 +152,7 @@ class MainActivity : ComponentActivity() {
             com.example.util.BankNotificationHolder.reloadFromPrefs(this)
             com.example.service.BankNotificationListenerService.requestRebindIfPossible(this)
             com.example.service.BankNotificationListenerService.scanActiveNotifications(this)
+            com.example.util.AppUpdateChecker.checkForUpdate(this)
         } catch (t: Throwable) {
             Log.w("MainActivity", "onResume safe fallback: ${t.message}")
         }

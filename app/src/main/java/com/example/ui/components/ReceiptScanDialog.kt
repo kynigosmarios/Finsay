@@ -147,42 +147,21 @@ fun ReceiptScanDialog(
             try {
                 val inputImage = InputImage.fromBitmap(bitmap, 0)
 
-                // 1. Scan QR / Barcode for AADE verification & AFM metadata
-                val barcodeScanner = BarcodeScanning.getClient()
-                val barcodes = withContext(Dispatchers.IO) {
-                    try {
-                        barcodeScanner.process(inputImage).await()
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
-                }
-                var aadeQr = barcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-
-                // If no QR found in full-resolution image, crop bottom 45% (where Greek AADE QR codes are located)
-                if (aadeQr.isNullOrBlank() && bitmap.height > 600) {
-                    try {
-                        val cropY = (bitmap.height * 0.55).toInt()
-                        val cropH = bitmap.height - cropY
-                        val bottomCrop = Bitmap.createBitmap(bitmap, 0, cropY, bitmap.width, cropH)
-                        val bottomImage = InputImage.fromBitmap(bottomCrop, 0)
-                        val bottomBarcodes = withContext(Dispatchers.IO) {
-                            try {
-                                barcodeScanner.process(bottomImage).await()
-                            } catch (e: Exception) {
-                                emptyList()
-                            }
-                        }
-                        aadeQr = bottomBarcodes.firstOrNull { it.rawValue?.isNotBlank() == true }?.rawValue
-                    } catch (_: Exception) {}
+                // 1. Scan QR code for AADE verification & seller/amount metadata
+                val aadeQr = com.example.util.ReceiptAmountAndQrParser.extractBestQrCode(bitmap)
+                val resolvedQrData = if (!aadeQr.isNullOrBlank()) {
+                    com.example.util.ReceiptAmountAndQrParser.resolveAadeQrData(aadeQr)
+                } else {
+                    null
                 }
 
-                // 2. OCR Text Recognition (always runs to extract store name & total)
+                // 2. OCR Text Recognition (always runs to extract store name & total as fallback/complement)
                 val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
                 val visionText = withContext(Dispatchers.IO) {
                     textRecognizer.process(inputImage).await()
                 }
 
-                // 3. Parse receipt with full text + spatial bounding boxes + QR metadata + learned category
+                // 3. Parse receipt with full text + spatial bounding boxes + AADE QR metadata + learned category
                 val result = ReceiptParser.parseReceipt(
                     visionText = visionText,
                     rawText = visionText.text,
@@ -190,7 +169,8 @@ fun ReceiptScanDialog(
                     availableCategories = categories,
                     learnedCategorySuggester = { merchantTitle, merchantAfm ->
                         onSuggestCategory?.invoke(merchantTitle, merchantAfm)?.name
-                    }
+                    },
+                    preResolvedQrData = resolvedQrData
                 )
 
                 parsedData = result

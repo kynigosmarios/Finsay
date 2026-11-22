@@ -128,7 +128,7 @@ fun Expense.getPayerShares(members: List<FamilyMember> = emptyList()): List<Paye
     return if (singlePayer != null) {
         listOf(PayerShare(memberId = singlePayer.id, memberName = singlePayer.name, amount = amount))
     } else {
-        listOf(PayerShare(memberId = payerMemberId, memberName = cleanPayerString.ifBlank { "Οικογένεια" }, amount = amount))
+        listOf(PayerShare(memberId = payerMemberId, memberName = cleanPayerString.ifBlank { "Όλοι" }, amount = amount))
     }
 }
 
@@ -142,7 +142,7 @@ fun Expense.hasMultiplePayers(members: List<FamilyMember> = emptyList()): Boolea
 fun Expense.getPayerDisplay(members: List<FamilyMember> = emptyList()): String {
     val shares = getPayerShares(members)
     if (shares.isEmpty()) {
-        return payerMemberName.ifBlank { "Οικογένεια" }
+        return payerMemberName.ifBlank { "Όλοι" }
     }
     if (shares.size == 1) {
         return shares[0].memberName
@@ -162,8 +162,10 @@ fun Expense.getPayerDisplay(members: List<FamilyMember> = emptyList()): String {
 fun getMemberInitials(name: String): String {
     val clean = name.trim()
     if (clean.isBlank()) return ""
-    if (clean.equals("Οικογένεια", ignoreCase = true) || clean.equals("Family", ignoreCase = true)) {
-        return "Οικ."
+    if (clean.equals("Οικογένεια", ignoreCase = true) || clean.equals("Family", ignoreCase = true) ||
+        clean.equals("Όλοι", ignoreCase = true) || clean.equals("All", ignoreCase = true)
+    ) {
+        return if (clean.equals("Family", ignoreCase = true) || clean.equals("All", ignoreCase = true)) "All" else "Όλοι"
     }
     val parts = clean.split(Regex("[\\s&+,/]+")).filter { it.isNotBlank() }
     return when {
@@ -176,7 +178,7 @@ fun getMemberInitials(name: String): String {
 fun Expense.getPayerInitialsDisplay(members: List<FamilyMember> = emptyList()): String {
     val shares = getPayerShares(members)
     if (shares.isEmpty()) {
-        val raw = payerMemberName.ifBlank { "Οικ." }
+        val raw = payerMemberName.ifBlank { "Όλοι" }
         return getMemberInitials(raw)
     }
     if (shares.size == 1) {
@@ -187,7 +189,7 @@ fun Expense.getPayerInitialsDisplay(members: List<FamilyMember> = emptyList()): 
 
 fun Expense.getBeneficiaryInitialsDisplay(members: List<FamilyMember> = emptyList()): String? {
     if (splitType == "ALL_FAMILY") {
-        return "Οικογένεια"
+        return "Όλοι"
     }
     val raw = memberNamesDisplay.trim()
     if (raw.isBlank()) return null
@@ -203,27 +205,20 @@ fun Expense.getPayerCategoryOrNamesDisplay(
     // Strip any existing parenthesis like "(από 1,50€)", "(από 2.00 €)", or "(...)"
     val cleanRawPayer = payerMemberName.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
 
-    // 1. Explicit collective labels
-    if (cleanRawPayer.equals("Γονείς", ignoreCase = true) || cleanRawPayer.equals("Parents", ignoreCase = true)) {
-        return if (lang == Localization.Language.ENGLISH) "Parents" else "Γονείς"
-    }
-    if (cleanRawPayer.equals("Παιδιά", ignoreCase = true) || cleanRawPayer.equals("Children", ignoreCase = true)) {
-        return if (lang == Localization.Language.ENGLISH) "Children" else "Παιδιά"
-    }
-    if (cleanRawPayer.equals("Συγκάτοικοι", ignoreCase = true) || cleanRawPayer.equals("Roommates", ignoreCase = true)) {
-        return if (lang == Localization.Language.ENGLISH) "Roommates" else "Συγκάτοικοι"
-    }
-    if (cleanRawPayer.equals("Οικογένεια", ignoreCase = true) || cleanRawPayer.equals("Family", ignoreCase = true)) {
-        return if (lang == Localization.Language.ENGLISH) "Family" else "Οικογένεια"
+    // 1. Explicit "All" collective labels
+    if (cleanRawPayer.equals("Οικογένεια", ignoreCase = true) || cleanRawPayer.equals("Family", ignoreCase = true) ||
+        cleanRawPayer.equals("Όλοι", ignoreCase = true) || cleanRawPayer.equals("All", ignoreCase = true)
+    ) {
+        return if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
     }
 
-    // 2. Resolve payer member objects
+    // 2. Resolve payer member objects by IDs first, then names in payerMemberName, then primary payerMemberId
     val ids = if (payerMemberIdsCsv.isNotBlank()) {
         payerMemberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
     } else emptyList()
 
     val matchedById = if (ids.isNotEmpty() && members.isNotEmpty()) {
-        ids.mapNotNull { id -> members.find { it.id == id } }
+        ids.mapNotNull { id -> members.find { it.id == id } }.distinctBy { it.id }
     } else emptyList()
 
     val matchedPayers: List<FamilyMember> = if (matchedById.isNotEmpty()) {
@@ -242,31 +237,16 @@ fun Expense.getPayerCategoryOrNamesDisplay(
         members.find { it.id == payerMemberId }?.let { listOf(it) } ?: emptyList()
     } else emptyList()
 
-    // 3. Single payer -> display individual name without parenthesis
-    if (matchedPayers.size == 1) {
-        return matchedPayers[0].name
+    // 3. Resolved members -> apply exact role-group / all / individual-names rules
+    if (matchedPayers.isNotEmpty()) {
+        return Localization.resolveMemberGroupDisplay(matchedPayers, members, lang)
     }
 
-    // 4. Two or more payers: Check if ALL share the same role (e.g. all parents, all children, all roommates)
-    if (matchedPayers.size >= 2) {
-        val firstRolePlural = Localization.pluralRoleName(matchedPayers.first().role, lang)
-        val allSameRole = matchedPayers.all {
-            Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-        }
-        if (allSameRole) {
-            return firstRolePlural
-        }
-
-        // Check if all members of the household
-        if (members.isNotEmpty() && matchedPayers.size >= members.size) {
-            return if (lang == Localization.Language.ENGLISH) "Family" else "Οικογένεια"
-        }
-
-        return matchedPayers.joinToString(" & ") { it.name }
-    }
+    // 4. Fallback for legacy expenses storing only a plural role label without member IDs
+    Localization.translateCollectiveRoleLabel(cleanRawPayer, lang)?.let { return it }
 
     return cleanRawPayer.ifBlank {
-        if (lang == Localization.Language.ENGLISH) "Family" else "Οικογένεια"
+        if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
     }
 }
 
@@ -276,26 +256,18 @@ fun Expense.getBeneficiaryCategoryOrNamesDisplay(
 ): String {
     val raw = memberNamesDisplay.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
 
-    // 1. Explicit family / shared keywords
+    // 1. Explicit all-members keywords
     if (splitType == "ALL_FAMILY" || splitType == "ALL" ||
         raw.equals("Κοινό Οικογένειας", ignoreCase = true) ||
         raw.equals("Family Shared", ignoreCase = true) ||
         raw.equals("Οικογένεια", ignoreCase = true) ||
-        raw.equals("Family", ignoreCase = true)
+        raw.equals("Family", ignoreCase = true) ||
+        raw.equals("Όλοι", ignoreCase = true) ||
+        raw.equals("All", ignoreCase = true) ||
+        raw.equals("Όλα τα μέλη", ignoreCase = true) ||
+        raw.equals("All members", ignoreCase = true)
     ) {
-        return if (lang == Localization.Language.ENGLISH) "Family" else "Οικογένεια"
-    }
-
-    if (raw.equals("Παιδιά", ignoreCase = true) || raw.equals("Children", ignoreCase = true)) {
-        return if (lang == Localization.Language.ENGLISH) "Children" else "Παιδιά"
-    }
-
-    if (raw.equals("Γονείς", ignoreCase = true) || raw.equals("Parents", ignoreCase = true)) {
-        return if (lang == Localization.Language.ENGLISH) "Parents" else "Γονείς"
-    }
-
-    if (raw.equals("Συγκάτοικοι", ignoreCase = true) || raw.equals("Roommates", ignoreCase = true)) {
-        return if (lang == Localization.Language.ENGLISH) "Roommates" else "Συγκάτοικοι"
+        return if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
     }
 
     // 2. Resolve members by memberIdsCsv first, then fallback to names in memberNamesDisplay
@@ -304,7 +276,7 @@ fun Expense.getBeneficiaryCategoryOrNamesDisplay(
     } else emptyList()
 
     val matchedById = if (ids.isNotEmpty() && members.isNotEmpty()) {
-        ids.mapNotNull { id -> members.find { it.id == id } }
+        ids.mapNotNull { id -> members.find { it.id == id } }.distinctBy { it.id }
     } else emptyList()
 
     val matchedMembers: List<FamilyMember> = if (matchedById.isNotEmpty()) {
@@ -320,32 +292,13 @@ fun Expense.getBeneficiaryCategoryOrNamesDisplay(
         }.distinctBy { it.id }
     } else emptyList()
 
-    // 3. Single beneficiary -> display individual name
-    if (matchedMembers.size == 1) {
-        return matchedMembers[0].name
+    // 3. Resolved members -> apply exact role-group / all / individual-names rules
+    if (matchedMembers.isNotEmpty()) {
+        return Localization.resolveMemberGroupDisplay(matchedMembers, members, lang)
     }
 
-    // 4. Two or more beneficiaries: Check if ALL share the same role (e.g. all parents, all children, all roommates)
-    if (matchedMembers.size >= 2) {
-        val firstRolePlural = Localization.pluralRoleName(matchedMembers.first().role, lang)
-        val allSameRole = matchedMembers.all {
-            Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-        }
-        if (allSameRole) {
-            return firstRolePlural
-        }
-
-        // Check if they constitute all members of the household
-        if (members.isNotEmpty() && matchedMembers.size >= members.size) {
-            val allIds = members.map { it.id }.toSet()
-            if (matchedMembers.map { it.id }.toSet().containsAll(allIds)) {
-                return if (lang == Localization.Language.ENGLISH) "Family" else "Οικογένεια"
-            }
-        }
-
-        // Mixed roles -> display joined names
-        return matchedMembers.joinToString(" & ") { it.name }
-    }
+    // 4. Fallback for legacy expenses storing only a plural role label without member IDs
+    Localization.translateCollectiveRoleLabel(raw, lang)?.let { return it }
 
     // Fallback if matchedMembers was empty
     if (raw.isNotBlank()) {

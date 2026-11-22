@@ -66,17 +66,10 @@ object AnalyticsExpenseFilterHelper {
             !exp.memberNamesDisplay.equals("Family Shared", ignoreCase = true)
         ) {
             val raw = exp.memberNamesDisplay.trim()
-            if (raw.equals("Γονείς", ignoreCase = true) || raw.equals("Parents", ignoreCase = true)) {
-                val parents = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
-                if (parents.isNotEmpty()) return parents
-            } else if (raw.equals("Παιδιά", ignoreCase = true) || raw.equals("Children", ignoreCase = true)) {
-                val kids = members.filter { it.role.equals("Παιδί", ignoreCase = true) }
-                if (kids.isNotEmpty()) return kids
-            } else if (raw.equals("Συγκάτοικοι", ignoreCase = true) || raw.equals("Roommates", ignoreCase = true)) {
-                val roommates = members.filter {
-                    it.role.equals("Συγκάτοικος", ignoreCase = true) || it.role.equals("Συγκάτοικοι", ignoreCase = true)
-                }
-                if (roommates.isNotEmpty()) return roommates
+            if (Localization.isPluralRoleDisplay(raw)) {
+                val roleKey = Localization.canonicalRoleKey(raw)
+                val byRole = members.filter { Localization.canonicalRoleKey(it.role) == roleKey }
+                if (byRole.isNotEmpty()) return byRole
             }
             val byName = members.filter { m ->
                 GreekVoiceParser.containsWord(
@@ -122,6 +115,11 @@ object AnalyticsExpenseFilterHelper {
             !raw.equals("Κοινό Οικογένειας", ignoreCase = true) &&
             !raw.equals("Family", ignoreCase = true)
         ) {
+            if (Localization.isPluralRoleDisplay(raw)) {
+                val roleKey = Localization.canonicalRoleKey(raw)
+                val byRole = activeMembers.filter { Localization.canonicalRoleKey(it.role) == roleKey }
+                if (byRole.isNotEmpty()) return byRole
+            }
             val parts = raw.split(Regex("[,&+]+|\\s+και\\s+|\\s+and\\s+"))
                 .map { it.trim() }
                 .filter { it.isNotBlank() }

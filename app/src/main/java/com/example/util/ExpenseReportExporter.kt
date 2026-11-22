@@ -40,11 +40,41 @@ object ExpenseReportExporter {
         return sb.toString()
     }
 
-    fun exportCsv(context: Context, expenses: List<Expense>, periodTitle: String = "Όλα τα Έξοδα") {
+    private fun buildDateRangeFileSuffix(
+        expenses: List<Expense>,
+        startDateMillis: Long? = null,
+        endDateMillis: Long? = null
+    ): String {
+        val fileDateSdf = SimpleDateFormat("dd.MM.yyyy", Locale.US)
+        val startMs: Long
+        val endMs: Long
+        if (startDateMillis != null && endDateMillis != null) {
+            startMs = minOf(startDateMillis, endDateMillis)
+            endMs = maxOf(startDateMillis, endDateMillis)
+        } else if (expenses.isNotEmpty()) {
+            startMs = expenses.minOf { it.timestamp }
+            endMs = expenses.maxOf { it.timestamp }
+        } else {
+            val now = System.currentTimeMillis()
+            startMs = now
+            endMs = now
+        }
+        val startStr = fileDateSdf.format(Date(startMs))
+        val endStr = fileDateSdf.format(Date(endMs))
+        return if (startStr == endStr) startStr else "$startStr-$endStr"
+    }
+
+    fun exportCsv(
+        context: Context,
+        expenses: List<Expense>,
+        periodTitle: String = "Όλα τα Έξοδα",
+        startDateMillis: Long? = null,
+        endDateMillis: Long? = null
+    ) {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val file = File(exportDir, "Finsay_Exoda_${timeStamp}.csv")
+            val dateRange = buildDateRangeFileSuffix(expenses, startDateMillis, endDateMillis)
+            val file = File(exportDir, "Finsay_Exoda_${dateRange}.csv")
             val csvContent = generateCsv(expenses, periodTitle)
             file.writeBytes(csvContent.toByteArray(Charsets.UTF_8))
             shareFile(context, file, "text/csv", "Αναφορά Εξόδων Finsay (CSV) - $periodTitle")
@@ -56,11 +86,17 @@ object ExpenseReportExporter {
         }
     }
 
-    fun exportExcel(context: Context, expenses: List<Expense>, periodTitle: String = "Όλα τα Έξοδα") {
+    fun exportExcel(
+        context: Context,
+        expenses: List<Expense>,
+        periodTitle: String = "Όλα τα Έξοδα",
+        startDateMillis: Long? = null,
+        endDateMillis: Long? = null
+    ) {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val file = File(exportDir, "Finsay_Exoda_\${timeStamp}.xls")
+            val dateRange = buildDateRangeFileSuffix(expenses, startDateMillis, endDateMillis)
+            val file = File(exportDir, "Finsay_Exoda_${dateRange}.xls")
             val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
             val totalAmount = expenses.sumOf { it.amount }
 
@@ -82,7 +118,7 @@ object ExpenseReportExporter {
                 val date = dateSdf.format(Date(expense.timestamp))
                 val amount = String.format(Locale.US, "%.2f €", expense.amount)
                 val payer = expense.payerMemberName.ifBlank { "-" }
-                sb.append("<tr><td>$date</td><td>\${expense.title}</td><td>\${expense.categoryName}</td><td>$payer</td><td>\${expense.memberNamesDisplay}</td><td class=\"amount\">$amount</td><td>\${expense.note}</td></tr>\n")
+                sb.append("<tr><td>$date</td><td>${expense.title}</td><td>${expense.categoryName}</td><td>$payer</td><td>${expense.memberNamesDisplay}</td><td class=\"amount\">$amount</td><td>${expense.note}</td></tr>\n")
             }
             val totalStr = String.format(Locale.US, "%.2f €", totalAmount)
             sb.append("<tr style=\"font-weight: bold; background-color: #E2E8F0;\"><td colspan=\"5\">ΣΥΝΟΛΟ</td><td class=\"amount\">$totalStr</td><td></td></tr>\n")
@@ -91,15 +127,21 @@ object ExpenseReportExporter {
             file.writeBytes(sb.toString().toByteArray(Charsets.UTF_8))
             shareFile(context, file, "application/vnd.ms-excel", "Αναφορά Εξόδων Finsay (Excel) - $periodTitle")
         } catch (e: Exception) {
-            Log.e(TAG, "Error exporting Excel: \${e.message}", e)
+            Log.e(TAG, "Error exporting Excel: ${e.message}", e)
         }
     }
 
-    fun exportPdf(context: Context, expenses: List<Expense>, periodTitle: String = "Όλα τα Έξοδα") {
+    fun exportPdf(
+        context: Context,
+        expenses: List<Expense>,
+        periodTitle: String = "Όλα τα Έξοδα",
+        startDateMillis: Long? = null,
+        endDateMillis: Long? = null
+    ) {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val file = File(exportDir, "Finsay_Exoda_\${timeStamp}.pdf")
+            val dateRange = buildDateRangeFileSuffix(expenses, startDateMillis, endDateMillis)
+            val file = File(exportDir, "Finsay_Exoda_${dateRange}.pdf")
 
             val pdfDocument = PdfDocument()
             val pageWidth = 595

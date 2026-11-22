@@ -863,7 +863,7 @@ fun VoiceConfirmationDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Shared across household" else "Κοινό για όλο το σπίτι",
+                                text = if (lang == Localization.Language.ENGLISH) "All members" else "Όλα τα μέλη",
                                 fontSize = 13.sp,
                                 fontWeight = if (isAllFamily) FontWeight.Bold else FontWeight.Normal
                             )
@@ -996,22 +996,10 @@ fun VoiceConfirmationDialog(
                             }
 
                             val memberDisplay = if (isAllFamily) {
-                                if (lang == Localization.Language.ENGLISH) "Family Shared" else "Κοινό Οικογένειας"
+                                if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
                             } else {
                                 val active = members.filter { finalMemberIds.contains(it.id) }
-                                if (active.size >= 2) {
-                                    val firstRolePlural = Localization.pluralRoleName(active.first().role, lang)
-                                    val allSameRole = active.all {
-                                        Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-                                    }
-                                    if (allSameRole) {
-                                        firstRolePlural
-                                    } else {
-                                        active.joinToString(" & ") { it.name }
-                                    }
-                                } else {
-                                    active.joinToString(" & ") { it.name }
-                                }
+                                Localization.resolveMemberGroupDisplay(active, members, lang)
                             }
 
                             val finalPayerIds = selectedPayerIds.toList().ifEmpty {
@@ -1051,16 +1039,7 @@ fun VoiceConfirmationDialog(
                                         String.format(Locale.US, "%d:%.2f", id, perPerson)
                                     }
                                     val payerMembers = finalPayerIds.mapNotNull { id -> members.find { it.id == id } }
-                                    val payerLabel = if (payerMembers.size >= 2) {
-                                        val firstRolePlural = Localization.pluralRoleName(payerMembers.first().role, lang)
-                                        val allSameRole = payerMembers.all {
-                                            Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-                                        }
-                                        if (allSameRole) firstRolePlural else payerMembers.joinToString(" & ") { it.name }
-                                    } else {
-                                        payerMembers.joinToString(" & ") { it.name }
-                                    }
-                                    finalPayerName = payerLabel
+                                    finalPayerName = Localization.resolveMemberGroupDisplay(payerMembers, members, lang)
                                 }
                             }
 

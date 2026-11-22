@@ -494,7 +494,7 @@ internal class OikoNomosRecurringGoalsDelegate(
         val savingsCat = ensureSavingsCategory(activeHouseholdId, user)
         val resolvedPayer = payerMember ?: vm.resolveDefaultPayerMember() ?: vm._allMembers.value.firstOrNull()
         val resolvedPayerId = resolvedPayer?.id ?: 0L
-        val resolvedPayerName = resolvedPayer?.name?.ifBlank { null } ?: if (isEn) "Family" else "Οικογένεια"
+        val resolvedPayerName = resolvedPayer?.name?.ifBlank { null } ?: if (isEn) "All" else "Όλοι"
         val resolvedPayerIdsCsv = if (resolvedPayerId > 0L) "$resolvedPayerId" else ""
         val expenseCloudId = SavingsGoalExpenseLinkHelper.buildGoalDepositCloudId(goalCloudId)
         val nowMs = System.currentTimeMillis()

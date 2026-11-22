@@ -345,25 +345,107 @@ object Localization {
     }
     fun translateRole(lang: Language, role: String): String = translateRole(role, lang)
 
-    fun pluralRoleName(role: String, lang: Language): String {
+    fun canonicalRoleKey(role: String): String {
         val r = role.trim().lowercase()
+        return when {
+            r.contains("γον") || r.contains("parent") -> "PARENT"
+            r.contains("παιδ") || r.contains("child") || r.contains("kid") -> "CHILD"
+            r.contains("συγκ") || r.contains("συνκ") || r.contains("room") -> "ROOMMATE"
+            r.contains("συντρ") || r.contains("σύντρ") || r.contains("partner") -> "PARTNER"
+            r.contains("συνεργ") || r.contains("συναδ") || r.contains("συνάδ") || r.contains("colleague") -> "COLLEAGUE"
+            r.contains("φιλ") || r.contains("φίλ") || r.contains("friend") -> "FRIEND"
+            r.contains("μονοπρ") || r.contains("individual") || r.contains("solo") -> "INDIVIDUAL"
+            r.contains("αλλ") || r.contains("άλλ") || r.contains("other") -> "OTHER"
+            else -> r
+        }
+    }
+
+    fun pluralRoleName(role: String, lang: Language): String {
+        val key = canonicalRoleKey(role)
         return if (lang == Language.ENGLISH) {
-            when {
-                r.contains("γον") || r.contains("parent") -> "Parents"
-                r.contains("παιδ") || r.contains("child") || r.contains("kid") -> "Children"
-                r.contains("συγκ") || r.contains("room") -> "Roommates"
-                else -> role
+            when (key) {
+                "PARENT" -> "Parents"
+                "CHILD" -> "Children"
+                "ROOMMATE" -> "Roommates"
+                "PARTNER" -> "Partners"
+                "COLLEAGUE" -> "Colleagues"
+                "FRIEND" -> "Friends"
+                "INDIVIDUAL" -> "Individuals"
+                "OTHER" -> "Others"
+                else -> role.trim()
             }
         } else {
-            when {
-                r.contains("γον") || r.contains("parent") -> "Γονείς"
-                r.contains("παιδ") || r.contains("child") || r.contains("kid") -> "Παιδιά"
-                r.contains("συγκ") || r.contains("room") -> "Συγκάτοικοι"
-                else -> role
+            when (key) {
+                "PARENT" -> "Γονείς"
+                "CHILD" -> "Παιδιά"
+                "ROOMMATE" -> "Συγκάτοικοι"
+                "PARTNER" -> "Σύντροφοι"
+                "COLLEAGUE" -> "Συνεργάτες"
+                "FRIEND" -> "Φίλοι"
+                "INDIVIDUAL" -> "Μονοπρόσωπα"
+                "OTHER" -> "Άλλοι"
+                else -> role.trim()
             }
         }
     }
     fun pluralRoleName(lang: Language, role: String): String = pluralRoleName(role, lang)
+
+    fun translateCollectiveRoleLabel(label: String, lang: Language): String? {
+        val clean = label.trim()
+        if (clean.isBlank()) return null
+        val isExplicitPluralRole =
+            clean.equals("Γονείς", ignoreCase = true) || clean.equals("Parents", ignoreCase = true) ||
+            clean.equals("Παιδιά", ignoreCase = true) || clean.equals("Children", ignoreCase = true) ||
+            clean.equals("Συγκάτοικοι", ignoreCase = true) || clean.equals("Roommates", ignoreCase = true) ||
+            clean.equals("Σύντροφοι", ignoreCase = true) || clean.equals("Partners", ignoreCase = true) ||
+            clean.equals("Συνεργάτες", ignoreCase = true) || clean.equals("Συνάδελφοι", ignoreCase = true) || clean.equals("Colleagues", ignoreCase = true) ||
+            clean.equals("Φίλοι", ignoreCase = true) || clean.equals("Friends", ignoreCase = true) ||
+            clean.equals("Μονοπρόσωπα", ignoreCase = true) || clean.equals("Individuals", ignoreCase = true) ||
+            clean.equals("Άλλοι", ignoreCase = true) || clean.equals("Others", ignoreCase = true)
+        return if (isExplicitPluralRole) pluralRoleName(clean, lang) else null
+    }
+
+    fun isPluralRoleDisplay(text: String): Boolean {
+        return translateCollectiveRoleLabel(text, Language.GREEK) != null
+    }
+
+    /**
+     * Resolves display text for a selected group of household members:
+     * - Single member -> member's name
+     * - All members in the household -> "Όλοι" / "All"
+     * - Strictly ALL members who hold a specific role (>= 2 members, and ONLY them) -> plural role name
+     * - Subset of a role or mixed roles / extra people -> names joined by " & "
+     */
+    fun resolveMemberGroupDisplay(
+        selected: List<com.example.data.entity.FamilyMember>,
+        allMembers: List<com.example.data.entity.FamilyMember>,
+        lang: Language
+    ): String {
+        val distinctSelected = selected.distinctBy { it.id }
+        if (distinctSelected.isEmpty()) return ""
+        if (distinctSelected.size == 1) return distinctSelected[0].name
+
+        if (allMembers.isNotEmpty()) {
+            val selectedIds = distinctSelected.map { it.id }.toSet()
+            val allIds = allMembers.map { it.id }.toSet()
+            if (selectedIds.containsAll(allIds)) {
+                return if (lang == Language.ENGLISH) "All" else "Όλοι"
+            }
+
+            val firstRoleKey = canonicalRoleKey(distinctSelected.first().role)
+            if (firstRoleKey.isNotBlank() && distinctSelected.all { canonicalRoleKey(it.role) == firstRoleKey }) {
+                val allWithSameRoleIds = allMembers
+                    .filter { canonicalRoleKey(it.role) == firstRoleKey }
+                    .map { it.id }
+                    .toSet()
+                if (allWithSameRoleIds.size >= 2 && selectedIds == allWithSameRoleIds) {
+                    return pluralRoleName(distinctSelected.first().role, lang)
+                }
+            }
+        }
+
+        return distinctSelected.joinToString(" & ") { it.name }
+    }
 
     fun translateHouseholdName(name: String, lang: Language): String {
         if (lang != Language.ENGLISH) return name

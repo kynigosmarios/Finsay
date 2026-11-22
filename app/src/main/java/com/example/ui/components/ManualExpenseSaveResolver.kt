@@ -30,18 +30,10 @@ internal object ManualExpenseSaveResolver {
         val splitType = if (isAllFamily) "ALL_FAMILY" else "SPECIFIC_MEMBERS"
         val finalMemberIds = if (isAllFamily) members.map { it.id } else selectedMemberIds
         val memberDisplay = if (isAllFamily) {
-            if (lang == Localization.Language.ENGLISH) "Family Shared" else "Κοινό Οικογένειας"
+            if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
         } else {
             val active = members.filter { finalMemberIds.contains(it.id) }
-            if (active.size >= 2) {
-                val firstRolePlural = Localization.pluralRoleName(active.first().role, lang)
-                val allSameRole = active.all {
-                    Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-                }
-                if (allSameRole) firstRolePlural else active.joinToString(" & ") { it.name }
-            } else {
-                active.joinToString(" & ") { it.name }
-            }
+            Localization.resolveMemberGroupDisplay(active, members, lang)
         }
 
         val finalPayerIds = selectedPayerIds.ifEmpty {
@@ -76,15 +68,7 @@ internal object ManualExpenseSaveResolver {
                 String.format(Locale.US, "%d:%.2f", id, perPerson)
             }
             val payerMembers = finalPayerIds.mapNotNull { id -> members.find { it.id == id } }
-            finalPayerName = if (payerMembers.size >= 2) {
-                val firstRolePlural = Localization.pluralRoleName(payerMembers.first().role, lang)
-                val allSameRole = payerMembers.all {
-                    Localization.pluralRoleName(it.role, lang).equals(firstRolePlural, ignoreCase = true)
-                }
-                if (allSameRole) firstRolePlural else payerMembers.joinToString(" & ") { it.name }
-            } else {
-                payerMembers.joinToString(" & ") { it.name }
-            }
+            finalPayerName = Localization.resolveMemberGroupDisplay(payerMembers, members, lang)
         }
 
         return ResolvedManualExpenseSplit(

@@ -346,12 +346,20 @@ fun ManualExpenseDialog(
     }
 
     var isAllFamily by remember(expenseToEdit) {
-        val hasSpecific = expenseToEdit != null && (
+        val isCollectiveDisplay = expenseToEdit != null && (
+            expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) ||
+                expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true) ||
+                expenseToEdit.memberNamesDisplay.equals("Όλοι", ignoreCase = true) ||
+                expenseToEdit.memberNamesDisplay.equals("All", ignoreCase = true) ||
+                expenseToEdit.memberNamesDisplay.equals("Όλα τα μέλη", ignoreCase = true) ||
+                expenseToEdit.memberNamesDisplay.equals("All members", ignoreCase = true) ||
+                expenseToEdit.memberNamesDisplay.equals("Οικογένεια", ignoreCase = true) ||
+                expenseToEdit.memberNamesDisplay.equals("Family", ignoreCase = true)
+            )
+        val hasSpecific = expenseToEdit != null && expenseToEdit.splitType != "ALL_FAMILY" && (
             expenseToEdit.splitType == "SPECIFIC_MEMBERS" ||
                 expenseToEdit.memberIdsCsv.isNotBlank() ||
-                (expenseToEdit.memberNamesDisplay.isNotBlank() &&
-                    !expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) &&
-                    !expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true))
+                (expenseToEdit.memberNamesDisplay.isNotBlank() && !isCollectiveDisplay)
             )
         val isEmptyMember = expenseToEdit != null && expenseToEdit.memberIdsCsv.isBlank() && expenseToEdit.memberNamesDisplay.isBlank()
         mutableStateOf(if (expenseToEdit != null) (!hasSpecific && !isEmptyMember) else true)
@@ -360,21 +368,24 @@ fun ManualExpenseDialog(
     val selectedMemberIds = remember(expenseToEdit, members) {
         val list = mutableStateListOf<Long>()
         if (expenseToEdit != null) {
+            val isCollectiveDisplay =
+                expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) ||
+                    expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true) ||
+                    expenseToEdit.memberNamesDisplay.equals("Όλοι", ignoreCase = true) ||
+                    expenseToEdit.memberNamesDisplay.equals("All", ignoreCase = true) ||
+                    expenseToEdit.memberNamesDisplay.equals("Όλα τα μέλη", ignoreCase = true) ||
+                    expenseToEdit.memberNamesDisplay.equals("All members", ignoreCase = true) ||
+                    expenseToEdit.memberNamesDisplay.equals("Οικογένεια", ignoreCase = true) ||
+                    expenseToEdit.memberNamesDisplay.equals("Family", ignoreCase = true)
             val parsedIds = expenseToEdit.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
             val validIds = parsedIds.filter { id -> members.any { it.id == id } }
             if (validIds.isNotEmpty()) {
                 list.addAll(validIds)
-            } else if (expenseToEdit.memberNamesDisplay.isNotBlank() &&
-                !expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) &&
-                !expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true)
-            ) {
+            } else if (expenseToEdit.memberNamesDisplay.isNotBlank() && !isCollectiveDisplay) {
                 val raw = expenseToEdit.memberNamesDisplay.trim()
-                if (raw.equals("Γονείς", ignoreCase = true) || raw.equals("Parents", ignoreCase = true)) {
-                    list.addAll(members.filter { it.role.equals("Γονέας", ignoreCase = true) }.map { it.id })
-                } else if (raw.equals("Παιδιά", ignoreCase = true) || raw.equals("Children", ignoreCase = true)) {
-                    list.addAll(members.filter { it.role.equals("Παιδί", ignoreCase = true) }.map { it.id })
-                } else if (raw.equals("Συγκάτοικοι", ignoreCase = true) || raw.equals("Roommates", ignoreCase = true)) {
-                    list.addAll(members.filter { it.role.equals("Συγκάτοικος", ignoreCase = true) || it.role.equals("Συγκάτοικοι", ignoreCase = true) }.map { it.id })
+                if (Localization.isPluralRoleDisplay(raw)) {
+                    val roleKey = Localization.canonicalRoleKey(raw)
+                    list.addAll(members.filter { Localization.canonicalRoleKey(it.role) == roleKey }.map { it.id })
                 } else {
                     list.addAll(members.filter { m -> expenseToEdit.memberNamesDisplay.contains(m.name, ignoreCase = true) }.map { it.id })
                 }
