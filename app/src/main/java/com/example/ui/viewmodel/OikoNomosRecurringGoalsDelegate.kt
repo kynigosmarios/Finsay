@@ -360,9 +360,10 @@ internal class OikoNomosRecurringGoalsDelegate(
                         else "🎉 Συγχαρητήρια! Πετύχατε τον στόχο «${goal.title}» (καταχωρήθηκε και στα έξοδα)!"
                     )
                 } else {
+                    val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
                     vm.showSnackbar(
-                        if (isEn) "Deposited $amountFormatted€ to \"${goal.title}\" & logged in expenses"
-                        else "Κατατέθηκαν $amountFormatted€ στον στόχο «${goal.title}» (εμφανίζεται σε Έξοδα & Στατιστικά)"
+                        if (isEn) "Deposited $amountFormatted$curSymbol to \"${goal.title}\" & logged in expenses"
+                        else "Κατατέθηκαν $amountFormatted$curSymbol στον στόχο «${goal.title}» (εμφανίζεται σε Έξοδα & Στατιστικά)"
                     )
                 }
             } finally {
@@ -1059,7 +1060,8 @@ internal class OikoNomosRecurringGoalsDelegate(
                     summaryEn = "Executed standing order: ${recurring.title}",
                     amount = recurring.amount
                 )
-                vm.showSnackbar("Εκτελέστηκε η πάγια: «${recurring.title}» (${String.format(Locale.US, "%.2f€", recurring.amount)})")
+                val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
+                vm.showSnackbar("Εκτελέστηκε η πάγια: «${recurring.title}» (${String.format(Locale.US, "%.2f", recurring.amount)}$curSymbol)")
             } finally {
                 vm.trackSyncEnd()
             }

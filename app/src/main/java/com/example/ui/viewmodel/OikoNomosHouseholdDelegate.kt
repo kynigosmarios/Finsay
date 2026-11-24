@@ -12,6 +12,7 @@ import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
 import com.example.data.repository.FirestoreSyncRepository
+import com.example.util.CurrencyFormatter
 import com.example.util.DefaultPayerHelper
 import com.example.util.StartupSafety
 import com.google.firebase.auth.FirebaseUser
@@ -700,7 +701,36 @@ internal class OikoNomosHouseholdDelegate(
         renameHousehold(cur.id, newName)
     }
 
-    fun createNewExodologio(name: String) {
+    fun updateHouseholdCurrency(householdId: String, currencyCode: String) {
+        val cleanCode = CurrencyFormatter.optionForCode(currencyCode).code
+        val option = CurrencyFormatter.optionForCode(cleanCode)
+        val target = vm._userHouseholds.value.find { it.id == householdId }
+            ?: vm._currentHousehold.value?.takeIf { it.id == householdId }
+        if (target != null && !vm.isUserCreatorOfHousehold(target)) {
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN") "Only the household creator can change its currency."
+                else "Μόνο ο δημιουργός μπορεί να αλλάξει το νόμισμα του εξοδολογίου."
+            )
+            return
+        }
+        vm._userHouseholds.value = vm._userHouseholds.value.map {
+            if (it.id == householdId) it.copy(currencyCode = cleanCode) else it
+        }
+        if (vm._currentHousehold.value?.id == householdId) {
+            val updated = vm._currentHousehold.value?.copy(currencyCode = cleanCode)
+            vm._currentHousehold.value = updated
+            vm.syncCurrencyFromHousehold(updated)
+        }
+        vm.showSnackbar(
+            if (vm._appLanguage.value == "EN") "Currency updated to ${option.symbol} (${option.code})"
+            else "Το νόμισμα άλλαξε σε ${option.symbol} (${option.code})"
+        )
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            try { vm.firestoreSyncRepo.updateHouseholdCurrency(householdId, cleanCode) } catch (_: Exception) {}
+        }
+    }
+
+    fun createNewExodologio(name: String, currencyCode: String = "EUR") {
         val user = vm._currentUser.value ?: return
         val profile = vm._userProfile.value ?: return
         val ownedCount = vm._userHouseholds.value.count { it.ownerId == user.uid }
@@ -708,9 +738,10 @@ internal class OikoNomosHouseholdDelegate(
             vm.showPremiumPaywall("multi_exodologio")
             return
         }
+        val cleanCurrency = CurrencyFormatter.optionForCode(currencyCode).code
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             try {
-                val newHousehold = vm.firestoreSyncRepo.createHousehold(user.uid, name)
+                val newHousehold = vm.firestoreSyncRepo.createHousehold(user.uid, name, cleanCurrency)
                 vm._userHouseholds.value = vm._userHouseholds.value + newHousehold
                 val profileName = profile.displayName.ifBlank { "${profile.firstName} ${profile.lastName}".trim() }
                     .ifBlank { user.displayName ?: "Χρήστης" }

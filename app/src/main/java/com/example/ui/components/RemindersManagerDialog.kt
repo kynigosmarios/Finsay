@@ -562,8 +562,9 @@ private fun ReminderItemCard(
 
                 Spacer(modifier = Modifier.width(10.dp))
 
+                val currencySymbol = com.example.util.LocalCurrencySymbol.current
                 Text(
-                    text = String.format(Locale.GERMANY, "%.2f €", reminder.amount),
+                    text = "${String.format(Locale.GERMANY, "%.2f", reminder.amount)} $currencySymbol",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.5.sp,
                     color = if (reminder.isActive) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant,

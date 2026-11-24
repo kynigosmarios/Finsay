@@ -98,6 +98,8 @@ fun ExodologioManagerDialog(
     currentUserId: String = "",
     onSelectHousehold: (Household) -> Unit,
     onCreateNewHousehold: (String) -> Unit,
+    onCreateNewHouseholdWithCurrency: ((String, String) -> Unit)? = null,
+    onUpdateHouseholdCurrency: ((String, String) -> Unit)? = null,
     onDeleteHousehold: ((Household) -> Unit)? = null,
     onShowPremiumPaywall: (String) -> Unit,
     onDismiss: () -> Unit
@@ -105,6 +107,9 @@ fun ExodologioManagerDialog(
     val lang = Localization.Language.fromCode(appLanguage)
     var showCreateDialog by remember { mutableStateOf(false) }
     var newHouseholdName by remember { mutableStateOf("") }
+    var newHouseholdCurrencyCode by remember { mutableStateOf("EUR") }
+    var showCreateCurrencyPicker by remember { mutableStateOf(false) }
+    var householdForCurrencyEdit by remember { mutableStateOf<Household?>(null) }
     var householdToDelete by remember { mutableStateOf<Household?>(null) }
     var expandedShareHouseholdId by remember { mutableStateOf<String?>(null) }
 
@@ -347,6 +352,12 @@ fun ExodologioManagerDialog(
                                 ) {
                                     HouseholdRoleBadge(role = householdRole, lang = lang)
 
+                                    HouseholdCurrencyBadge(
+                                        currencyCode = household.currencyCode,
+                                        isEditable = isCreator && onUpdateHouseholdCurrency != null,
+                                        onClick = { householdForCurrencyEdit = household }
+                                    )
+
                                     Spacer(modifier = Modifier.weight(1f))
 
                                     if (isCreator) {
@@ -528,20 +539,44 @@ fun ExodologioManagerDialog(
             shape = RoundedCornerShape(20.dp),
             title = { Text(if (lang == Localization.Language.ENGLISH) "New Household" else "Νέο Εξοδολόγιο", fontWeight = FontWeight.Bold) },
             text = {
-                OutlinedTextField(
-                    value = newHouseholdName,
-                    onValueChange = { newHouseholdName = it },
-                    placeholder = { Text(if (lang == Localization.Language.ENGLISH) "e.g. Home, Work, Travel" else "π.χ. Σπίτι, Εργασία, Ταξίδι") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = newHouseholdName,
+                        onValueChange = { newHouseholdName = it },
+                        placeholder = { Text(if (lang == Localization.Language.ENGLISH) "e.g. Home, Work, Travel" else "π.χ. Σπίτι, Εργασία, Ταξίδι") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (lang == Localization.Language.ENGLISH) "Currency" else "Νόμισμα",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        HouseholdCurrencyBadge(
+                            currencyCode = newHouseholdCurrencyCode,
+                            isEditable = true,
+                            onClick = { showCreateCurrencyPicker = true }
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (newHouseholdName.isNotBlank()) {
-                            onCreateNewHousehold(newHouseholdName.trim())
+                            val trimmed = newHouseholdName.trim()
+                            if (onCreateNewHouseholdWithCurrency != null) {
+                                onCreateNewHouseholdWithCurrency(trimmed, newHouseholdCurrencyCode)
+                            } else {
+                                onCreateNewHousehold(trimmed)
+                            }
                             showCreateDialog = false
                             onDismiss()
                         }
@@ -557,6 +592,30 @@ fun ExodologioManagerDialog(
                     Text(if (lang == Localization.Language.ENGLISH) "Cancel" else "Ακύρωση")
                 }
             }
+        )
+    }
+
+    if (showCreateCurrencyPicker) {
+        HouseholdCurrencyPickerDialog(
+            selectedCurrencyCode = newHouseholdCurrencyCode,
+            lang = lang,
+            onSelectCurrency = { option ->
+                newHouseholdCurrencyCode = option.code
+                showCreateCurrencyPicker = false
+            },
+            onDismiss = { showCreateCurrencyPicker = false }
+        )
+    }
+
+    householdForCurrencyEdit?.let { targetHousehold ->
+        HouseholdCurrencyPickerDialog(
+            selectedCurrencyCode = targetHousehold.currencyCode,
+            lang = lang,
+            onSelectCurrency = { option ->
+                onUpdateHouseholdCurrency?.invoke(targetHousehold.id, option.code)
+                householdForCurrencyEdit = null
+            },
+            onDismiss = { householdForCurrencyEdit = null }
         )
     }
 

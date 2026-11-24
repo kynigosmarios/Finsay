@@ -82,8 +82,8 @@ class FirestoreSyncRepository(
     suspend fun hasExpenses(householdId: String): Boolean =
         householdDelegate.hasExpenses(householdId)
 
-    suspend fun createHousehold(ownerUid: String, exodologioName: String): Household =
-        householdDelegate.createHousehold(ownerUid, exodologioName)
+    suspend fun createHousehold(ownerUid: String, exodologioName: String, currencyCode: String = "EUR"): Household =
+        householdDelegate.createHousehold(ownerUid, exodologioName, currencyCode)
 
     suspend fun ensureHouseholdExists(householdId: String, ownerUid: String, householdName: String = "Το Εξοδολόγιό μου"): Household =
         householdDelegate.ensureHouseholdExists(householdId, ownerUid, householdName)
@@ -96,6 +96,9 @@ class FirestoreSyncRepository(
 
     suspend fun renameHousehold(householdId: String, newName: String) =
         householdDelegate.renameHousehold(householdId, newName)
+
+    suspend fun updateHouseholdCurrency(householdId: String, currencyCode: String) =
+        householdDelegate.updateHouseholdCurrency(householdId, currencyCode)
 
     suspend fun updateHouseholdInviteRole(householdId: String, role: String) =
         householdDelegate.updateHouseholdInviteRole(householdId, role)

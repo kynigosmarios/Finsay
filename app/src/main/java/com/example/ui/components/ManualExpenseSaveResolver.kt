@@ -60,7 +60,7 @@ internal object ManualExpenseSaveResolver {
             finalPayerName = finalPayerIds.mapNotNull { id -> members.find { it.id == id } }
                 .joinToString(" & ") { m ->
                     val amt = customPayerAmounts[m.id]?.toDoubleOrNull() ?: (parsedAmount / finalPayerIds.size)
-                    "${m.name} (${String.format(Locale.US, "%.2f €", amt)})"
+                    "${m.name} (${String.format(Locale.US, "%.2f", amt)} ${com.example.util.CurrencyFormatter.currentSymbol})"
                 }
         } else {
             val perPerson = parsedAmount / finalPayerIds.size

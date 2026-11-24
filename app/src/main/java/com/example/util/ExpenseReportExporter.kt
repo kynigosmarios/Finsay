@@ -3,57 +3,172 @@ package com.example.util
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
-import android.widget.Toast
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.data.entity.Expense
+import com.example.data.entity.FamilyMember
+import com.example.data.entity.Income
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 object ExpenseReportExporter {
     private const val TAG = "ExpenseReportExporter"
 
-    fun generateCsv(expenses: List<Expense>, periodTitle: String = "Όλα τα Έξοδα"): String {
-        val totalAmount = expenses.sumOf { it.amount }
-        val sb = StringBuilder()
-        sb.append("FINSAY - $periodTitle\n")
-        sb.append("Ημερομηνία,Τίτλος,Κατηγορία,Μέλη,Ποσό (€)\n")
+    private fun csvEscape(value: String): String {
+        val clean = value.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ")
+        return "\"$clean\""
+    }
+
+    private fun htmlEscape(value: String): String {
+        return value
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+    }
+
+    private fun formatAmount(amount: Double, currencySymbol: String): String {
+        return "${String.format(Locale.US, "%.2f", amount)} $currencySymbol"
+    }
+
+    fun generateCsv(
+        expenses: List<Expense>,
+        periodTitle: String = "Όλα τα Έξοδα",
+        incomes: List<Income> = emptyList(),
+        members: List<FamilyMember> = emptyList(),
+        currencySymbol: String = CurrencyFormatter.currentSymbol,
+        householdName: String = "",
+        isEnglish: Boolean = false
+    ): String {
+        val totalExpenses = expenses.sumOf { it.amount }
+        val totalIncomes = incomes.sumOf { it.amount }
+        val netBalance = totalIncomes - totalExpenses
+        val savingsRate = if (totalIncomes > 0.0) ((netBalance / totalIncomes) * 100.0) else null
+
+        val headerTitle = if (householdName.isNotBlank()) "FINSAY - $householdName ($periodTitle)" else "FINSAY - $periodTitle"
         val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+        val sb = StringBuilder()
+        // UTF-8 BOM so Excel opens Greek characters cleanly
+        sb.append('\uFEFF')
+        sb.append("${csvEscape(headerTitle)}\n\n")
+
+        // 1. Financial Summary
+        sb.append(if (isEnglish) "FINANCIAL SUMMARY\n" else "ΟΙΚΟΝΟΜΙΚΗ ΣΥΝΟΨΗ\n")
+        sb.append(if (isEnglish) "Metric,Amount ($currencySymbol)\n" else "Δείκτης,Ποσό ($currencySymbol)\n")
+        sb.append("${csvEscape(if (isEnglish) "Total Income" else "Σύνολο Εσόδων")},${String.format(Locale.US, "%.2f", totalIncomes)}\n")
+        sb.append("${csvEscape(if (isEnglish) "Total Expenses" else "Σύνολο Εξόδων")},${String.format(Locale.US, "%.2f", totalExpenses)}\n")
+        sb.append("${csvEscape(if (isEnglish) "Net Balance" else "Καθαρό Υπόλοιπο")},${String.format(Locale.US, "%.2f", netBalance)}\n")
+        if (savingsRate != null) {
+            sb.append("${csvEscape(if (isEnglish) "Savings Rate" else "Ποσοστό Αποταμίευσης")},${String.format(Locale.US, "%.1f%%", savingsRate)}\n")
+        }
+        sb.append("\n")
+
+        // 2. Expenses Section
+        sb.append(if (isEnglish) "EXPENSES (${expenses.size})\n" else "ΕΞΟΔΑ (${expenses.size})\n")
+        sb.append(
+            if (isEnglish) {
+                "Date,Title,Category,Payer,Members,Amount ($currencySymbol),Note\n"
+            } else {
+                "Ημερομηνία,Τίτλος,Κατηγορία,Πληρωτής,Μέλη,Ποσό ($currencySymbol),Σημείωση\n"
+            }
+        )
         for (expense in expenses) {
             val date = dateSdf.format(Date(expense.timestamp))
             val amount = String.format(Locale.US, "%.2f", expense.amount)
-            sb.append("\"$date\",\"${expense.title}\",\"${expense.categoryName}\",\"${expense.memberNamesDisplay}\",$amount\n")
+            val payer = expense.payerMemberName.ifBlank { "-" }
+            sb.append(
+                "${csvEscape(date)},${csvEscape(expense.title)},${csvEscape(expense.categoryName)}," +
+                    "${csvEscape(payer)},${csvEscape(expense.memberNamesDisplay)},$amount,${csvEscape(expense.note)}\n"
+            )
         }
-        val totalStr = String.format(Locale.US, "%.2f", totalAmount)
-        sb.append("ΣΥΝΟΛΟ,,,,$totalStr\n")
+        sb.append("${if (isEnglish) "TOTAL EXPENSES" else "ΣΥΝΟΛΟ ΕΞΟΔΩΝ"},,,,,${String.format(Locale.US, "%.2f", totalExpenses)},\n")
+
+        // 3. Incomes Section (when present)
+        if (incomes.isNotEmpty()) {
+            sb.append("\n")
+            sb.append(if (isEnglish) "INCOMES (${incomes.size})\n" else "ΕΣΟΔΑ (${incomes.size})\n")
+            sb.append(
+                if (isEnglish) {
+                    "Date,Title,Category,Member,Amount ($currencySymbol),Note\n"
+                } else {
+                    "Ημερομηνία,Τίτλος,Κατηγορία,Μέλος,Ποσό ($currencySymbol),Σημείωση\n"
+                }
+            )
+            for (income in incomes) {
+                val date = dateSdf.format(Date(income.timestamp))
+                val amount = String.format(Locale.US, "%.2f", income.amount)
+                val memberName = income.memberName.ifBlank { "-" }
+                sb.append(
+                    "${csvEscape(date)},${csvEscape(income.title)},${csvEscape(income.category)}," +
+                        "${csvEscape(memberName)},$amount,${csvEscape(income.note)}\n"
+                )
+            }
+            sb.append("${if (isEnglish) "TOTAL INCOMES" else "ΣΥΝΟΛΟ ΕΣΟΔΩΝ"},,,,${String.format(Locale.US, "%.2f", totalIncomes)},\n")
+        }
+
+        // 4. Member Settlement / Settle-Up Section (when multi-member & expenses exist)
+        if (members.size > 1 && expenses.isNotEmpty()) {
+            val settleResult = SettleUpCalculator.calculate(expenses, members)
+            sb.append("\n")
+            sb.append(if (isEnglish) "MEMBER SETTLEMENT (SETTLE UP)\n" else "ΕΚΚΑΘΑΡΙΣΗ ΜΕΛΩΝ\n")
+            sb.append(
+                if (isEnglish) {
+                    "Member,Paid ($currencySymbol),Fair Share ($currencySymbol),Net Balance ($currencySymbol)\n"
+                } else {
+                    "Μέλος,Πλήρωσε ($currencySymbol),Μερίδιο ($currencySymbol),Υπόλοιπο ($currencySymbol)\n"
+                }
+            )
+            for (s in settleResult.memberSummaries) {
+                sb.append(
+                    "${csvEscape(s.member.name)},${String.format(Locale.US, "%.2f", s.totalPaid)}," +
+                        "${String.format(Locale.US, "%.2f", s.totalShare)},${String.format(Locale.US, "%.2f", s.netBalance)}\n"
+                )
+            }
+            sb.append("\n")
+            sb.append(if (isEnglish) "RECOMMENDED TRANSFERS\n" else "ΠΡΟΤΕΙΝΟΜΕΝΕΣ ΜΕΤΑΦΟΡΕΣ\n")
+            if (settleResult.transfers.isEmpty()) {
+                sb.append("${csvEscape(if (isEnglish) "All balances are settled up!" else "Όλοι οι λογαριασμοί είναι ισοσκελισμένοι!")}\n")
+            } else {
+                sb.append(if (isEnglish) "From,To,Amount ($currencySymbol)\n" else "Από,Προς,Ποσό ($currencySymbol)\n")
+                for (t in settleResult.transfers) {
+                    sb.append("${csvEscape(t.fromMember.name)},${csvEscape(t.toMember.name)},${String.format(Locale.US, "%.2f", t.amount)}\n")
+                }
+            }
+        }
+
         return sb.toString()
     }
 
     private fun buildDateRangeFileSuffix(
         expenses: List<Expense>,
+        incomes: List<Income> = emptyList(),
         startDateMillis: Long? = null,
         endDateMillis: Long? = null
     ): String {
         val fileDateSdf = SimpleDateFormat("dd.MM.yyyy", Locale.US)
+        val allTimestamps = expenses.map { it.timestamp } + incomes.map { it.timestamp }
         val startMs: Long
         val endMs: Long
         if (startDateMillis != null && endDateMillis != null) {
             startMs = minOf(startDateMillis, endDateMillis)
             endMs = maxOf(startDateMillis, endDateMillis)
-        } else if (expenses.isNotEmpty()) {
-            startMs = expenses.minOf { it.timestamp }
-            endMs = expenses.maxOf { it.timestamp }
+        } else if (allTimestamps.isNotEmpty()) {
+            startMs = allTimestamps.min()
+            endMs = allTimestamps.max()
         } else {
             val now = System.currentTimeMillis()
             startMs = now
@@ -69,19 +184,38 @@ object ExpenseReportExporter {
         expenses: List<Expense>,
         periodTitle: String = "Όλα τα Έξοδα",
         startDateMillis: Long? = null,
-        endDateMillis: Long? = null
+        endDateMillis: Long? = null,
+        incomes: List<Income> = emptyList(),
+        members: List<FamilyMember> = emptyList(),
+        currencySymbol: String = CurrencyFormatter.currentSymbol,
+        householdName: String = "",
+        isEnglish: Boolean = false
     ) {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val dateRange = buildDateRangeFileSuffix(expenses, startDateMillis, endDateMillis)
-            val file = File(exportDir, "Finsay_Exoda_${dateRange}.csv")
-            val csvContent = generateCsv(expenses, periodTitle)
+            val dateRange = buildDateRangeFileSuffix(expenses, incomes, startDateMillis, endDateMillis)
+            val file = File(exportDir, "Finsay_Report_${dateRange}.csv")
+            val csvContent = generateCsv(
+                expenses = expenses,
+                periodTitle = periodTitle,
+                incomes = incomes,
+                members = members,
+                currencySymbol = currencySymbol,
+                householdName = householdName,
+                isEnglish = isEnglish
+            )
             file.writeBytes(csvContent.toByteArray(Charsets.UTF_8))
-            shareFile(context, file, "text/csv", "Αναφορά Εξόδων Finsay (CSV) - $periodTitle")
+            val shareTitle = if (isEnglish) {
+                "Finsay Financial Report (CSV) - $periodTitle"
+            } else {
+                "Οικονομική Αναφορά Finsay (CSV) - $periodTitle"
+            }
+            shareFile(context, file, "text/csv", shareTitle)
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting CSV: ${e.message}", e)
             Handler(Looper.getMainLooper()).post {
-                Toast.makeText(context, "Σφάλμα εξαγωγής CSV: ${e.localizedMessage ?: "άγνωστο"}", Toast.LENGTH_LONG).show()
+                val msg = if (isEnglish) "CSV export error: ${e.localizedMessage ?: "unknown"}" else "Σφάλμα εξαγωγής CSV: ${e.localizedMessage ?: "άγνωστο"}"
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -91,43 +225,162 @@ object ExpenseReportExporter {
         expenses: List<Expense>,
         periodTitle: String = "Όλα τα Έξοδα",
         startDateMillis: Long? = null,
-        endDateMillis: Long? = null
+        endDateMillis: Long? = null,
+        incomes: List<Income> = emptyList(),
+        members: List<FamilyMember> = emptyList(),
+        currencySymbol: String = CurrencyFormatter.currentSymbol,
+        householdName: String = "",
+        isEnglish: Boolean = false
     ) {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val dateRange = buildDateRangeFileSuffix(expenses, startDateMillis, endDateMillis)
-            val file = File(exportDir, "Finsay_Exoda_${dateRange}.xls")
+            val dateRange = buildDateRangeFileSuffix(expenses, incomes, startDateMillis, endDateMillis)
+            val file = File(exportDir, "Finsay_Report_${dateRange}.xls")
             val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-            val totalAmount = expenses.sumOf { it.amount }
+            val totalExpenses = expenses.sumOf { it.amount }
+            val totalIncomes = incomes.sumOf { it.amount }
+            val netBalance = totalIncomes - totalExpenses
+            val savingsRate = if (totalIncomes > 0.0) ((netBalance / totalIncomes) * 100.0) else null
+            val headerTitle = if (householdName.isNotBlank()) "FINSAY - ${htmlEscape(householdName)} (${htmlEscape(periodTitle)})" else "FINSAY - ${htmlEscape(periodTitle)}"
 
             val sb = StringBuilder()
             sb.append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
             sb.append("<html xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:x=\"urn:schemas-microsoft-com:office:excel\" xmlns=\"http://www.w3.org/TR/REC-html40\">\n")
             sb.append("<head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>\n")
             sb.append("<style>\n")
-            sb.append("body { font-family: Arial, sans-serif; }\n")
-            sb.append("table { border-collapse: collapse; width: 100%; }\n")
-            sb.append("th { background-color: #047857; color: white; border: 1px solid #ddd; padding: 8px; text-align: left; }\n")
-            sb.append("td { border: 1px solid #ddd; padding: 8px; }\n")
-            sb.append(".amount { text-align: right; }\n")
+            sb.append("body { font-family: Arial, sans-serif; color: #0F172A; }\n")
+            sb.append("h2 { color: #047857; margin-bottom: 6px; }\n")
+            sb.append("h3 { color: #065F46; margin-top: 22px; margin-bottom: 8px; }\n")
+            sb.append("table { border-collapse: collapse; width: 100%; margin-bottom: 14px; }\n")
+            sb.append("th { background-color: #047857; color: white; border: 1px solid #cbd5e1; padding: 8px; text-align: left; }\n")
+            sb.append("th.income { background-color: #0D9488; }\n")
+            sb.append("th.settle { background-color: #1E40AF; }\n")
+            sb.append("td { border: 1px solid #e2e8f0; padding: 7px 8px; }\n")
+            sb.append(".amount { text-align: right; white-space: nowrap; }\n")
+            sb.append(".pos { color: #059669; font-weight: bold; }\n")
+            sb.append(".neg { color: #DC2626; font-weight: bold; }\n")
+            sb.append(".total { font-weight: bold; background-color: #F1F5F9; }\n")
             sb.append("</style></head><body>\n")
-            sb.append("<h2>FINSAY - $periodTitle</h2>\n")
-            sb.append("<table>\n<thead><tr><th>Ημερομηνία</th><th>Τίτλος</th><th>Κατηγορία</th><th>Πληρωτής</th><th>Μέλη</th><th>Ποσό (€)</th><th>Σημείωση</th></tr></thead>\n<tbody>\n")
+            sb.append("<h2>$headerTitle</h2>\n")
+
+            // 1. Financial Summary Table
+            sb.append("<h3>${if (isEnglish) "Financial Summary" else "Οικονομική Σύνοψη"}</h3>\n")
+            sb.append("<table><thead><tr><th>${if (isEnglish) "Metric" else "Δείκτης"}</th><th class=\"amount\">${if (isEnglish) "Amount ($currencySymbol)" else "Ποσό ($currencySymbol)"}</th></tr></thead><tbody>\n")
+            sb.append("<tr><td>${if (isEnglish) "Total Income" else "Σύνολο Εσόδων"}</td><td class=\"amount pos\">${htmlEscape(formatAmount(totalIncomes, currencySymbol))}</td></tr>\n")
+            sb.append("<tr><td>${if (isEnglish) "Total Expenses" else "Σύνολο Εξόδων"}</td><td class=\"amount neg\">${htmlEscape(formatAmount(totalExpenses, currencySymbol))}</td></tr>\n")
+            val netClass = if (netBalance >= 0.0) "pos" else "neg"
+            val netPrefix = if (netBalance > 0.0) "+" else ""
+            sb.append("<tr class=\"total\"><td>${if (isEnglish) "Net Balance" else "Καθαρό Υπόλοιπο"}</td><td class=\"amount $netClass\">$netPrefix${htmlEscape(formatAmount(netBalance, currencySymbol))}</td></tr>\n")
+            if (savingsRate != null) {
+                sb.append("<tr><td>${if (isEnglish) "Savings Rate" else "Ποσοστό Αποταμίευσης"}</td><td class=\"amount\">${String.format(Locale.US, "%.1f%%", savingsRate)}</td></tr>\n")
+            }
+            sb.append("</tbody></table>\n")
+
+            // 2. Expenses Table
+            sb.append("<h3>${if (isEnglish) "Expenses (${expenses.size})" else "Έξοδα (${expenses.size})"}</h3>\n")
+            sb.append("<table>\n<thead><tr>")
+            if (isEnglish) {
+                sb.append("<th>Date</th><th>Title</th><th>Category</th><th>Payer</th><th>Members</th><th class=\"amount\">Amount ($currencySymbol)</th><th>Note</th>")
+            } else {
+                sb.append("<th>Ημερομηνία</th><th>Τίτλος</th><th>Κατηγορία</th><th>Πληρωτής</th><th>Μέλη</th><th class=\"amount\">Ποσό ($currencySymbol)</th><th>Σημείωση</th>")
+            }
+            sb.append("</tr></thead>\n<tbody>\n")
 
             for (expense in expenses) {
                 val date = dateSdf.format(Date(expense.timestamp))
-                val amount = String.format(Locale.US, "%.2f €", expense.amount)
+                val amount = formatAmount(expense.amount, currencySymbol)
                 val payer = expense.payerMemberName.ifBlank { "-" }
-                sb.append("<tr><td>$date</td><td>${expense.title}</td><td>${expense.categoryName}</td><td>$payer</td><td>${expense.memberNamesDisplay}</td><td class=\"amount\">$amount</td><td>${expense.note}</td></tr>\n")
+                sb.append(
+                    "<tr><td>$date</td><td>${htmlEscape(expense.title)}</td><td>${htmlEscape(expense.categoryName)}</td>" +
+                        "<td>${htmlEscape(payer)}</td><td>${htmlEscape(expense.memberNamesDisplay)}</td>" +
+                        "<td class=\"amount\">${htmlEscape(amount)}</td><td>${htmlEscape(expense.note)}</td></tr>\n"
+                )
             }
-            val totalStr = String.format(Locale.US, "%.2f €", totalAmount)
-            sb.append("<tr style=\"font-weight: bold; background-color: #E2E8F0;\"><td colspan=\"5\">ΣΥΝΟΛΟ</td><td class=\"amount\">$totalStr</td><td></td></tr>\n")
-            sb.append("</tbody></table></body></html>")
+            sb.append(
+                "<tr class=\"total\"><td colspan=\"5\">${if (isEnglish) "TOTAL EXPENSES" else "ΣΥΝΟΛΟ ΕΞΟΔΩΝ"}</td>" +
+                    "<td class=\"amount\">${htmlEscape(formatAmount(totalExpenses, currencySymbol))}</td><td></td></tr>\n"
+            )
+            sb.append("</tbody></table>\n")
+
+            // 3. Incomes Table
+            if (incomes.isNotEmpty()) {
+                sb.append("<h3>${if (isEnglish) "Incomes (${incomes.size})" else "Έσοδα (${incomes.size})"}</h3>\n")
+                sb.append("<table>\n<thead><tr>")
+                if (isEnglish) {
+                    sb.append("<th class=\"income\">Date</th><th class=\"income\">Title</th><th class=\"income\">Category</th><th class=\"income\">Member</th><th class=\"income amount\">Amount ($currencySymbol)</th><th class=\"income\">Note</th>")
+                } else {
+                    sb.append("<th class=\"income\">Ημερομηνία</th><th class=\"income\">Τίτλος</th><th class=\"income\">Κατηγορία</th><th class=\"income\">Μέλος</th><th class=\"income amount\">Ποσό ($currencySymbol)</th><th class=\"income\">Σημείωση</th>")
+                }
+                sb.append("</tr></thead>\n<tbody>\n")
+                for (income in incomes) {
+                    val date = dateSdf.format(Date(income.timestamp))
+                    val amount = formatAmount(income.amount, currencySymbol)
+                    val memberName = income.memberName.ifBlank { "-" }
+                    sb.append(
+                        "<tr><td>$date</td><td>${htmlEscape(income.title)}</td><td>${htmlEscape(income.category)}</td>" +
+                            "<td>${htmlEscape(memberName)}</td><td class=\"amount pos\">${htmlEscape(amount)}</td><td>${htmlEscape(income.note)}</td></tr>\n"
+                    )
+                }
+                sb.append(
+                    "<tr class=\"total\"><td colspan=\"4\">${if (isEnglish) "TOTAL INCOMES" else "ΣΥΝΟΛΟ ΕΣΟΔΩΝ"}</td>" +
+                        "<td class=\"amount pos\">${htmlEscape(formatAmount(totalIncomes, currencySymbol))}</td><td></td></tr>\n"
+                )
+                sb.append("</tbody></table>\n")
+            }
+
+            // 4. Member Settlement / Settle-Up Section
+            if (members.size > 1 && expenses.isNotEmpty()) {
+                val settleResult = SettleUpCalculator.calculate(expenses, members)
+                sb.append("<h3>${if (isEnglish) "Member Settlement (Settle Up)" else "Εκκαθάριση Μελών"}</h3>\n")
+                sb.append("<table><thead><tr>")
+                if (isEnglish) {
+                    sb.append("<th class=\"settle\">Member</th><th class=\"settle amount\">Paid ($currencySymbol)</th><th class=\"settle amount\">Fair Share ($currencySymbol)</th><th class=\"settle amount\">Net Balance ($currencySymbol)</th>")
+                } else {
+                    sb.append("<th class=\"settle\">Μέλος</th><th class=\"settle amount\">Πλήρωσε ($currencySymbol)</th><th class=\"settle amount\">Μερίδιο ($currencySymbol)</th><th class=\"settle amount\">Υπόλοιπο ($currencySymbol)</th>")
+                }
+                sb.append("</tr></thead><tbody>\n")
+                for (s in settleResult.memberSummaries) {
+                    val cls = when {
+                        s.netBalance > 0.01 -> "pos"
+                        s.netBalance < -0.01 -> "neg"
+                        else -> ""
+                    }
+                    val prefix = if (s.netBalance > 0.01) "+" else ""
+                    sb.append(
+                        "<tr><td>${htmlEscape(s.member.name)}</td><td class=\"amount\">${htmlEscape(formatAmount(s.totalPaid, currencySymbol))}</td>" +
+                            "<td class=\"amount\">${htmlEscape(formatAmount(s.totalShare, currencySymbol))}</td>" +
+                            "<td class=\"amount $cls\">$prefix${htmlEscape(formatAmount(s.netBalance, currencySymbol))}</td></tr>\n"
+                    )
+                }
+                sb.append("</tbody></table>\n")
+
+                sb.append("<h3>${if (isEnglish) "Recommended Transfers" else "Προτεινόμενες Μεταφορές"}</h3>\n")
+                if (settleResult.transfers.isEmpty()) {
+                    sb.append("<p class=\"pos\">${if (isEnglish) "All balances are settled up!" else "Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!"}</p>\n")
+                } else {
+                    sb.append("<table><thead><tr><th class=\"settle\">${if (isEnglish) "From" else "Από"}</th><th class=\"settle\">${if (isEnglish) "To" else "Προς"}</th><th class=\"settle amount\">${if (isEnglish) "Amount ($currencySymbol)" else "Ποσό ($currencySymbol)"}</th></tr></thead><tbody>\n")
+                    for (t in settleResult.transfers) {
+                        sb.append("<tr><td>${htmlEscape(t.fromMember.name)}</td><td>${htmlEscape(t.toMember.name)}</td><td class=\"amount\"><b>${htmlEscape(formatAmount(t.amount, currencySymbol))}</b></td></tr>\n")
+                    }
+                    sb.append("</tbody></table>\n")
+                }
+            }
+
+            sb.append("</body></html>")
 
             file.writeBytes(sb.toString().toByteArray(Charsets.UTF_8))
-            shareFile(context, file, "application/vnd.ms-excel", "Αναφορά Εξόδων Finsay (Excel) - $periodTitle")
+            val shareTitle = if (isEnglish) {
+                "Finsay Financial Report (Excel) - $periodTitle"
+            } else {
+                "Οικονομική Αναφορά Finsay (Excel) - $periodTitle"
+            }
+            shareFile(context, file, "application/vnd.ms-excel", shareTitle)
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting Excel: ${e.message}", e)
+            Handler(Looper.getMainLooper()).post {
+                val msg = if (isEnglish) "Excel export error: ${e.localizedMessage ?: "unknown"}" else "Σφάλμα εξαγωγής Excel: ${e.localizedMessage ?: "άγνωστο"}"
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -136,108 +389,347 @@ object ExpenseReportExporter {
         expenses: List<Expense>,
         periodTitle: String = "Όλα τα Έξοδα",
         startDateMillis: Long? = null,
-        endDateMillis: Long? = null
+        endDateMillis: Long? = null,
+        incomes: List<Income> = emptyList(),
+        members: List<FamilyMember> = emptyList(),
+        currencySymbol: String = CurrencyFormatter.currentSymbol,
+        householdName: String = "",
+        isEnglish: Boolean = false
     ) {
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val dateRange = buildDateRangeFileSuffix(expenses, startDateMillis, endDateMillis)
-            val file = File(exportDir, "Finsay_Exoda_${dateRange}.pdf")
+            val dateRange = buildDateRangeFileSuffix(expenses, incomes, startDateMillis, endDateMillis)
+            val file = File(exportDir, "Finsay_Report_${dateRange}.pdf")
 
             val pdfDocument = PdfDocument()
             val pageWidth = 595
             val pageHeight = 842
+            val marginX = 36f
+            val contentRight = pageWidth - marginX
+            val bottomLimit = pageHeight - 46f
+
             val paint = Paint().apply { isAntiAlias = true }
             val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            val titleHeader = if (householdName.isNotBlank()) "Finsay • $householdName" else "Finsay"
 
-            val itemsPerPage = 25
-            val totalPages = (expenses.size + itemsPerPage - 1) / itemsPerPage.coerceAtLeast(1)
-            val pagesCount = if (totalPages == 0) 1 else totalPages
+            var pageNumber = 0
+            var currentPage: PdfDocument.Page? = null
+            var canvas: Canvas? = null
+            var y = 0f
 
-            var currentItemIndex = 0
-            for (p in 1..pagesCount) {
-                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, p).create()
+            fun startNewPage() {
+                currentPage?.let { pdfDocument.finishPage(it) }
+                pageNumber += 1
+                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
                 val page = pdfDocument.startPage(pageInfo)
-                val canvas = page.canvas
+                currentPage = page
+                canvas = page.canvas
 
-                // Header
+                // Top header bar
+                paint.style = Paint.Style.FILL
                 paint.color = Color.parseColor("#047857")
-                paint.textSize = 20f
+                paint.textSize = 18f
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas.drawText("Finsay - $periodTitle", 40f, 50f, paint)
+                page.canvas.drawText(titleHeader, marginX, 44f, paint)
 
-                paint.color = Color.DKGRAY
+                paint.color = Color.parseColor("#475569")
                 paint.textSize = 10f
                 paint.typeface = Typeface.DEFAULT
-                canvas.drawText("Σελίδα $p από $pagesCount", (pageWidth - 100).toFloat(), 50f, paint)
+                page.canvas.drawText(periodTitle, marginX, 59f, paint)
+
+                val pageLabel = if (isEnglish) "Page $pageNumber" else "Σελίδα $pageNumber"
+                val pageLabelW = paint.measureText(pageLabel)
+                page.canvas.drawText(pageLabel, contentRight - pageLabelW, 44f, paint)
 
                 paint.color = Color.parseColor("#CBD5E1")
                 paint.strokeWidth = 1f
-                canvas.drawLine(40f, 65f, (pageWidth - 40).toFloat(), 65f, paint)
-
-                // Table Header
-                var y = 90f
-                paint.color = Color.parseColor("#1E293B")
-                paint.textSize = 11f
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas.drawText("Ημερομηνία", 40f, y, paint)
-                canvas.drawText("Περιγραφή", 120f, y, paint)
-                canvas.drawText("Κατηγορία", 270f, y, paint)
-                canvas.drawText("Πληρωτής", 380f, y, paint)
-                canvas.drawText("Ποσό (€)", 480f, y, paint)
-
-                y += 10f
-                canvas.drawLine(40f, y, (pageWidth - 40).toFloat(), y, paint)
-                y += 18f
-
-                paint.typeface = Typeface.DEFAULT
-                paint.textSize = 10f
-                paint.color = Color.BLACK
-
-                val pageEnd = (currentItemIndex + itemsPerPage).coerceAtMost(expenses.size)
-                while (currentItemIndex < pageEnd) {
-                    val exp = expenses[currentItemIndex]
-                    val date = dateSdf.format(Date(exp.timestamp))
-                    val title = if (exp.title.length > 22) exp.title.take(20) + "..." else exp.title
-                    val cat = if (exp.categoryName.length > 16) exp.categoryName.take(14) + "..." else exp.categoryName
-                    val payer = if (exp.payerMemberName.length > 14) exp.payerMemberName.take(12) + "..." else exp.payerMemberName
-                    val amount = String.format(Locale.US, "%.2f €", exp.amount)
-
-                    canvas.drawText(date, 40f, y, paint)
-                    canvas.drawText(title, 120f, y, paint)
-                    canvas.drawText(cat, 270f, y, paint)
-                    canvas.drawText(payer, 380f, y, paint)
-                    canvas.drawText(amount, 480f, y, paint)
-
-                    y += 20f
-                    currentItemIndex++
-                }
-
-                // If last page, draw total
-                if (p == pagesCount) {
-                    y += 10f
-                    paint.color = Color.parseColor("#047857")
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    paint.textSize = 12f
-                    val total = expenses.sumOf { it.amount }
-                    val totalStr = String.format(Locale.US, "ΣΥΝΟΛΟ: %.2f €", total)
-                    canvas.drawText(totalStr, 400f, y, paint)
-                }
-
-                pdfDocument.finishPage(page)
+                page.canvas.drawLine(marginX, 68f, contentRight, 68f, paint)
+                y = 86f
             }
 
-            val fos = FileOutputStream(file)
-            pdfDocument.writeTo(fos)
-            fos.close()
+            fun ensureSpace(neededHeight: Float, onNewPage: (() -> Unit)? = null) {
+                if (currentPage == null) {
+                    startNewPage()
+                } else if (y + neededHeight > bottomLimit) {
+                    startNewPage()
+                    onNewPage?.invoke()
+                }
+            }
+
+            fun drawSectionTitle(title: String, accentHex: String = "#047857") {
+                ensureSpace(34f)
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor(accentHex)
+                paint.textSize = 13f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas!!.drawText(title, marginX, y, paint)
+                y += 7f
+                paint.color = Color.parseColor(accentHex)
+                paint.strokeWidth = 1.2f
+                canvas!!.drawLine(marginX, y, contentRight, y, paint)
+                y += 16f
+            }
+
+            fun clipText(text: String, maxChars: Int): String {
+                return if (text.length > maxChars) text.take(maxChars - 1) + "…" else text
+            }
+
+            startNewPage()
+
+            // 1. Financial Summary Box
+            val totalExpenses = expenses.sumOf { it.amount }
+            val totalIncomes = incomes.sumOf { it.amount }
+            val netBalance = totalIncomes - totalExpenses
+            val savingsRate = if (totalIncomes > 0.0) ((netBalance / totalIncomes) * 100.0) else null
+
+            val boxRect = RectF(marginX, y, contentRight, y + 66f)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.parseColor("#F0FDF4")
+            canvas!!.drawRoundRect(boxRect, 10f, 10f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.parseColor("#A7F3D0")
+            paint.strokeWidth = 1f
+            canvas!!.drawRoundRect(boxRect, 10f, 10f, paint)
+
+            val colW = (contentRight - marginX) / 3f
+            paint.style = Paint.Style.FILL
+
+            // Col 1: Total Income
+            paint.color = Color.parseColor("#475569")
+            paint.textSize = 9.5f
+            paint.typeface = Typeface.DEFAULT
+            canvas!!.drawText(if (isEnglish) "TOTAL INCOME" else "ΣΥΝΟΛΟ ΕΣΟΔΩΝ", marginX + 12f, y + 20f, paint)
+            paint.color = Color.parseColor("#059669")
+            paint.textSize = 13.5f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas!!.drawText(formatAmount(totalIncomes, currencySymbol), marginX + 12f, y + 40f, paint)
+
+            // Col 2: Total Expenses
+            paint.color = Color.parseColor("#475569")
+            paint.textSize = 9.5f
+            paint.typeface = Typeface.DEFAULT
+            canvas!!.drawText(if (isEnglish) "TOTAL EXPENSES" else "ΣΥΝΟΛΟ ΕΞΟΔΩΝ", marginX + colW + 12f, y + 20f, paint)
+            paint.color = Color.parseColor("#DC2626")
+            paint.textSize = 13.5f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas!!.drawText(formatAmount(totalExpenses, currencySymbol), marginX + colW + 12f, y + 40f, paint)
+
+            // Col 3: Net Balance
+            paint.color = Color.parseColor("#475569")
+            paint.textSize = 9.5f
+            paint.typeface = Typeface.DEFAULT
+            canvas!!.drawText(if (isEnglish) "NET BALANCE" else "ΚΑΘΑΡΟ ΥΠΟΛΟΙΠΟ", marginX + colW * 2 + 12f, y + 20f, paint)
+            paint.color = if (netBalance >= 0.0) Color.parseColor("#047857") else Color.parseColor("#DC2626")
+            paint.textSize = 13.5f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            val netSign = if (netBalance > 0.0) "+" else ""
+            canvas!!.drawText("$netSign${formatAmount(netBalance, currencySymbol)}", marginX + colW * 2 + 12f, y + 40f, paint)
+
+            if (savingsRate != null) {
+                paint.color = Color.parseColor("#334155")
+                paint.textSize = 9f
+                paint.typeface = Typeface.DEFAULT
+                val rateText = if (isEnglish) {
+                    "Savings rate: ${String.format(Locale.US, "%.1f%%", savingsRate)}"
+                } else {
+                    "Ποσοστό αποταμίευσης: ${String.format(Locale.US, "%.1f%%", savingsRate)}"
+                }
+                canvas!!.drawText(rateText, marginX + 12f, y + 57f, paint)
+            }
+            y += 84f
+
+            // 2. Expenses Section
+            fun drawExpenseTableHeader() {
+                paint.style = Paint.Style.FILL
+                paint.color = Color.parseColor("#1E293B")
+                paint.textSize = 9.5f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas!!.drawText(if (isEnglish) "Date" else "Ημερ/νία", marginX, y, paint)
+                canvas!!.drawText(if (isEnglish) "Title" else "Περιγραφή", 104f, y, paint)
+                canvas!!.drawText(if (isEnglish) "Category" else "Κατηγορία", 252f, y, paint)
+                canvas!!.drawText(if (isEnglish) "Payer" else "Πληρωτής", 364f, y, paint)
+                canvas!!.drawText(if (isEnglish) "Amount" else "Ποσό", 476f, y, paint)
+                y += 6f
+                paint.color = Color.parseColor("#CBD5E1")
+                paint.strokeWidth = 0.8f
+                canvas!!.drawLine(marginX, y, contentRight, y, paint)
+                y += 14f
+            }
+
+            drawSectionTitle(if (isEnglish) "Expenses (${expenses.size})" else "Έξοδα (${expenses.size})")
+            if (expenses.isEmpty()) {
+                paint.color = Color.parseColor("#64748B")
+                paint.textSize = 10f
+                paint.typeface = Typeface.DEFAULT
+                canvas!!.drawText(if (isEnglish) "No expenses in this period." else "Δεν υπάρχουν έξοδα για την περίοδο.", marginX, y, paint)
+                y += 20f
+            } else {
+                drawExpenseTableHeader()
+                for (exp in expenses) {
+                    ensureSpace(19f) { drawExpenseTableHeader() }
+                    paint.style = Paint.Style.FILL
+                    paint.typeface = Typeface.DEFAULT
+                    paint.textSize = 9.5f
+                    paint.color = Color.parseColor("#0F172A")
+
+                    canvas!!.drawText(dateSdf.format(Date(exp.timestamp)), marginX, y, paint)
+                    canvas!!.drawText(clipText(exp.title, 24), 104f, y, paint)
+                    canvas!!.drawText(clipText(exp.categoryName, 17), 252f, y, paint)
+                    canvas!!.drawText(clipText(exp.payerMemberName.ifBlank { "-" }, 16), 364f, y, paint)
+                    canvas!!.drawText(formatAmount(exp.amount, currencySymbol), 476f, y, paint)
+                    y += 17f
+                }
+                ensureSpace(24f)
+                paint.color = Color.parseColor("#047857")
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 10.5f
+                val totalLabel = if (isEnglish) "Total Expenses: ${formatAmount(totalExpenses, currencySymbol)}" else "Σύνολο Εξόδων: ${formatAmount(totalExpenses, currencySymbol)}"
+                canvas!!.drawText(totalLabel, 360f, y + 4f, paint)
+                y += 26f
+            }
+
+            // 3. Incomes Section (when present)
+            if (incomes.isNotEmpty()) {
+                fun drawIncomeTableHeader() {
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.parseColor("#1E293B")
+                    paint.textSize = 9.5f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    canvas!!.drawText(if (isEnglish) "Date" else "Ημερ/νία", marginX, y, paint)
+                    canvas!!.drawText(if (isEnglish) "Title" else "Περιγραφή", 104f, y, paint)
+                    canvas!!.drawText(if (isEnglish) "Category" else "Κατηγορία", 258f, y, paint)
+                    canvas!!.drawText(if (isEnglish) "Member" else "Μέλος", 372f, y, paint)
+                    canvas!!.drawText(if (isEnglish) "Amount" else "Ποσό", 476f, y, paint)
+                    y += 6f
+                    paint.color = Color.parseColor("#CBD5E1")
+                    paint.strokeWidth = 0.8f
+                    canvas!!.drawLine(marginX, y, contentRight, y, paint)
+                    y += 14f
+                }
+
+                drawSectionTitle(if (isEnglish) "Incomes (${incomes.size})" else "Έσοδα (${incomes.size})", "#0D9488")
+                drawIncomeTableHeader()
+                for (inc in incomes) {
+                    ensureSpace(19f) { drawIncomeTableHeader() }
+                    paint.style = Paint.Style.FILL
+                    paint.typeface = Typeface.DEFAULT
+                    paint.textSize = 9.5f
+                    paint.color = Color.parseColor("#0F172A")
+
+                    canvas!!.drawText(dateSdf.format(Date(inc.timestamp)), marginX, y, paint)
+                    canvas!!.drawText(clipText(inc.title, 24), 104f, y, paint)
+                    canvas!!.drawText(clipText(inc.category, 17), 258f, y, paint)
+                    canvas!!.drawText(clipText(inc.memberName.ifBlank { "-" }, 15), 372f, y, paint)
+                    paint.color = Color.parseColor("#059669")
+                    canvas!!.drawText("+${formatAmount(inc.amount, currencySymbol)}", 476f, y, paint)
+                    y += 17f
+                }
+                ensureSpace(24f)
+                paint.color = Color.parseColor("#0D9488")
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 10.5f
+                val totalIncLabel = if (isEnglish) "Total Incomes: ${formatAmount(totalIncomes, currencySymbol)}" else "Σύνολο Εσόδων: ${formatAmount(totalIncomes, currencySymbol)}"
+                canvas!!.drawText(totalIncLabel, 360f, y + 4f, paint)
+                y += 26f
+            }
+
+            // 4. Member Settlement / Settle-Up Section
+            if (members.size > 1 && expenses.isNotEmpty()) {
+                val settleResult = SettleUpCalculator.calculate(expenses, members)
+                fun drawSettleHeader() {
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.parseColor("#1E293B")
+                    paint.textSize = 9.5f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    canvas!!.drawText(if (isEnglish) "Member" else "Μέλος", marginX, y, paint)
+                    canvas!!.drawText(if (isEnglish) "Paid" else "Πλήρωσε", 220f, y, paint)
+                    canvas!!.drawText(if (isEnglish) "Fair Share" else "Μερίδιο", 335f, y, paint)
+                    canvas!!.drawText(if (isEnglish) "Net Balance" else "Υπόλοιπο", 455f, y, paint)
+                    y += 6f
+                    paint.color = Color.parseColor("#CBD5E1")
+                    paint.strokeWidth = 0.8f
+                    canvas!!.drawLine(marginX, y, contentRight, y, paint)
+                    y += 14f
+                }
+
+                drawSectionTitle(if (isEnglish) "Member Settlement (Settle Up)" else "Εκκαθάριση Μελών", "#1E40AF")
+                drawSettleHeader()
+                for (s in settleResult.memberSummaries) {
+                    ensureSpace(19f) { drawSettleHeader() }
+                    paint.style = Paint.Style.FILL
+                    paint.typeface = Typeface.DEFAULT
+                    paint.textSize = 9.5f
+                    paint.color = Color.parseColor("#0F172A")
+                    canvas!!.drawText(clipText(s.member.name, 26), marginX, y, paint)
+                    canvas!!.drawText(formatAmount(s.totalPaid, currencySymbol), 220f, y, paint)
+                    canvas!!.drawText(formatAmount(s.totalShare, currencySymbol), 335f, y, paint)
+                    paint.color = when {
+                        s.netBalance > 0.01 -> Color.parseColor("#059669")
+                        s.netBalance < -0.01 -> Color.parseColor("#DC2626")
+                        else -> Color.parseColor("#475569")
+                    }
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    val prefix = if (s.netBalance > 0.01) "+" else ""
+                    canvas!!.drawText("$prefix${formatAmount(s.netBalance, currencySymbol)}", 455f, y, paint)
+                    y += 17f
+                }
+
+                y += 8f
+                ensureSpace(28f)
+                paint.color = Color.parseColor("#1E40AF")
+                paint.textSize = 10.5f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas!!.drawText(if (isEnglish) "Recommended Transfers" else "Προτεινόμενες Μεταφορές", marginX, y, paint)
+                y += 16f
+
+                if (settleResult.transfers.isEmpty()) {
+                    paint.color = Color.parseColor("#059669")
+                    paint.textSize = 10f
+                    paint.typeface = Typeface.DEFAULT
+                    canvas!!.drawText(
+                        if (isEnglish) "All balances are settled up!" else "Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!",
+                        marginX,
+                        y,
+                        paint
+                    )
+                    y += 18f
+                } else {
+                    for (t in settleResult.transfers) {
+                        ensureSpace(18f)
+                        paint.color = Color.parseColor("#0F172A")
+                        paint.textSize = 10f
+                        paint.typeface = Typeface.DEFAULT
+                        canvas!!.drawText(
+                            "${t.fromMember.name}  ->  ${t.toMember.name}:  ${formatAmount(t.amount, currencySymbol)}",
+                            marginX + 6f,
+                            y,
+                            paint
+                        )
+                        y += 17f
+                    }
+                }
+            }
+
+            currentPage?.let { pdfDocument.finishPage(it) }
+
+            FileOutputStream(file).use { fos ->
+                pdfDocument.writeTo(fos)
+            }
             pdfDocument.close()
 
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                shareFile(context, file, "application/pdf", "Αναφορά Εξόδων Finsay (PDF) - $periodTitle")
+            Handler(Looper.getMainLooper()).post {
+                val shareTitle = if (isEnglish) {
+                    "Finsay Financial Report (PDF) - $periodTitle"
+                } else {
+                    "Οικονομική Αναφορά Finsay (PDF) - $periodTitle"
+                }
+                shareFile(context, file, "application/pdf", shareTitle)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting PDF: ${e.message}", e)
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                android.widget.Toast.makeText(context, "Σφάλμα κατά τη δημιουργία PDF: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            Handler(Looper.getMainLooper()).post {
+                val msg = if (isEnglish) "PDF creation error: ${e.message}" else "Σφάλμα κατά τη δημιουργία PDF: ${e.message}"
+                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -253,18 +745,18 @@ object ExpenseReportExporter {
                 type = mimeType
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, title)
-                clipData = android.content.ClipData.newRawUri(title, uri)
+                clipData = ClipData.newRawUri(title, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             val chooser = Intent.createChooser(intent, title).apply {
-                clipData = android.content.ClipData.newRawUri(title, uri)
+                clipData = ClipData.newRawUri(title, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(chooser)
         } catch (e: Exception) {
             Log.e(TAG, "Error sharing file: ${e.message}", e)
-            android.widget.Toast.makeText(context, "Σφάλμα κοινοποίησης αρχείου: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Σφάλμα κοινοποίησης αρχείου: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }

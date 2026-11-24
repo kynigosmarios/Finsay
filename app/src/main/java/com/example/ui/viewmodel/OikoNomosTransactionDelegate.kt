@@ -11,8 +11,10 @@ import com.example.data.model.FirebaseIncome
 import com.example.util.BankNotificationHolder
 import com.example.util.BankNotificationParser
 import com.example.util.BankNotificationSystemManager
+import com.example.util.CurrencyFormatter
 import com.example.util.DefaultPayerHelper
 import com.example.util.GreekVoiceParser
+import com.example.util.InAppReviewManager
 import com.example.util.MerchantCategoryLearner
 import com.example.util.PendingBankTransaction
 import java.util.Locale
@@ -25,6 +27,11 @@ internal class OikoNomosTransactionDelegate(
     private val vm: OikoNomosViewModel
 ) {
     private val tag = "OikoNomosTx"
+    private var pendingBankMerchantForLearning: String? = null
+
+    fun clearPendingBankMerchantForLearning() {
+        pendingBankMerchantForLearning = null
+    }
 
     fun openVoiceInputDialog() {
         val currentUsage = vm.prefs.getInt(vm.getMonthlyVoiceUsageKey(), 0)
@@ -74,15 +81,23 @@ internal class OikoNomosTransactionDelegate(
         )
     }
 
+    fun resolveSuggestedCategoryForBankTx(tx: PendingBankTransaction): ExpenseCategory? {
+        val categories = vm._allCategories.value
+        val merchantQuery = tx.merchantName.ifBlank { tx.rawText }
+        // Learned user preference ALWAYS takes priority over generic keyword rules
+        return suggestCategoryForMerchant(merchantQuery)
+            ?: (if (tx.rawText.isNotBlank() && tx.rawText != merchantQuery) suggestCategoryForMerchant(tx.rawText) else null)
+            ?: BankNotificationParser.categorizeMerchant(tx.merchantName, tx.rawText, categories)
+    }
+
     fun confirmBankTransaction(tx: PendingBankTransaction) {
         BankNotificationHolder.removeTransaction(tx.id)
         BankNotificationSystemManager.cancelNotification(vm.getApplication(), tx.id)
 
-        val categories = vm._allCategories.value
-        val matchedCategory = BankNotificationParser.categorizeMerchant(tx.merchantName, tx.rawText, categories)
-            ?: suggestCategoryForMerchant(tx.merchantName.ifBlank { tx.rawText })
+        val matchedCategory = resolveSuggestedCategoryForBankTx(tx)
         val defaultPayers = vm.resolveDefaultPayerMembers()
         val resolvedDefault = DefaultPayerHelper.buildEqualPayerFields(defaultPayers, tx.amount, fallbackLabel = "")
+        pendingBankMerchantForLearning = tx.merchantName.trim().takeIf { it.isNotBlank() }
 
         val prefilled = Expense(
             id = 0L,
@@ -134,7 +149,16 @@ internal class OikoNomosTransactionDelegate(
             allMembers = members,
             preferredDefaultPayers = defaultPayers
         )
-        vm._pendingParsedExpense.value = parsed
+        val learnedCat = suggestCategoryForMerchant(parsed.title.ifBlank { spokenText })
+        val finalParsed = if (learnedCat != null) {
+            val spokenNorm = GreekVoiceParser.normalizeGreek(spokenText)
+            val parsedCatNorm = GreekVoiceParser.normalizeGreek(parsed.categoryName)
+            val explicitlySpokeParsedCategory = parsedCatNorm.length >= 3 && spokenNorm.contains(parsedCatNorm)
+            if (!explicitlySpokeParsedCategory) {
+                parsed.copy(categoryId = learnedCat.id, categoryName = learnedCat.name)
+            } else parsed
+        } else parsed
+        vm._pendingParsedExpense.value = finalParsed
     }
 
     fun cancelPendingExpense() {
@@ -270,10 +294,14 @@ internal class OikoNomosTransactionDelegate(
                     householdIdOverride = householdId
                 )
                 val isEn = vm._appLanguage.value == "EN"
+                val curSym = CurrencyFormatter.currentSymbol
                 vm.showSnackbar(
-                    if (isEn) "Added: $label (${String.format(Locale.US, "%.2f", amount)}€)"
-                    else "Καταχωρήθηκε: $label (${String.format(Locale.US, "%.2f", amount)}€)"
+                    if (isEn) "Added: $label (${String.format(Locale.US, "%.2f", amount)}$curSym)"
+                    else "Καταχωρήθηκε: $label (${String.format(Locale.US, "%.2f", amount)}$curSym)"
                 )
+                if (InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
+                    vm._pendingInAppReviewPrompt.value = true
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(tag, "confirmVoiceExpense sync warning: ${e.message}")
@@ -334,6 +362,12 @@ internal class OikoNomosTransactionDelegate(
         vm.prefs.edit().putBoolean("has_entered_any_expense", true).apply()
         vm._isInitialExpensesLoading.value = false
         learnCategoryForMerchant(title, categoryId, categoryName)
+        pendingBankMerchantForLearning?.let { rawMerchant ->
+            if (!rawMerchant.equals(title.trim(), ignoreCase = true)) {
+                learnCategoryForMerchant(rawMerchant, categoryId, categoryName)
+            }
+        }
+        pendingBankMerchantForLearning = null
         vm.dismissManualExpenseDialog()
 
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
@@ -380,6 +414,9 @@ internal class OikoNomosTransactionDelegate(
                         if (isEn) "Expense \"$label\" updated!" else "Το έξοδο «$label» ενημερώθηκε!"
                     }
                 )
+                if (id == 0L && InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
+                    vm._pendingInAppReviewPrompt.value = true
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(tag, "saveExpense sync warning: ${e.message}")
@@ -520,6 +557,9 @@ internal class OikoNomosTransactionDelegate(
                         if (isEn) "Income \"$label\" updated!" else "Το έσοδο «$label» ενημερώθηκε!"
                     }
                 )
+                if (id == 0L && InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
+                    vm._pendingInAppReviewPrompt.value = true
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(tag, "saveIncome error: ${e.message}")
@@ -753,16 +793,78 @@ internal class OikoNomosTransactionDelegate(
                     amount = amount,
                     householdIdOverride = householdId
                 )
+                val curSym = CurrencyFormatter.currentSymbol
                 vm.showSnackbar(
                     if (isEn) {
-                        "Settled ${String.format(Locale.US, "%.2f", amount)}€ (${fromMember.name} → ${toMember.name})"
+                        "Settled ${String.format(Locale.US, "%.2f", amount)}$curSym (${fromMember.name} → ${toMember.name})"
                     } else {
-                        "Καταχωρήθηκε εξόφληση ${String.format(Locale.US, "%.2f", amount)}€ (${fromMember.name} → ${toMember.name})"
+                        "Καταχωρήθηκε εξόφληση ${String.format(Locale.US, "%.2f", amount)}$curSym (${fromMember.name} → ${toMember.name})"
                     }
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(tag, "recordSettlementTransfer error: ${e.message}")
+            } finally {
+                vm.trackSyncEnd()
+            }
+        }
+    }
+
+    fun duplicateExpenseToday(expense: Expense) {
+        val user = vm._currentUser.value
+        val householdId = vm.getOrEnsureHouseholdId(user)
+        val cloudId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val cloned = expense.copy(
+            id = 0L,
+            cloudId = cloudId,
+            timestamp = now
+        )
+
+        vm.prefs.edit().putBoolean("has_entered_any_expense", true).apply()
+        vm._isInitialExpensesLoading.value = false
+
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            vm.trackSyncStart()
+            try {
+                val insertedId = vm.repository.insertExpense(cloned)
+                val saved = cloned.copy(id = insertedId, cloudId = cloudId)
+                vm.pendingLocalExpenseIds[cloudId] = System.currentTimeMillis()
+                vm._allExpenses.value = (listOf(saved) + vm._allExpenses.value)
+                    .distinctBy { it.id }
+                    .sortedWith(compareByDescending<Expense> { it.timestamp }.thenByDescending { it.id })
+
+                val creatorName = vm._userProfile.value?.displayName?.ifBlank { null }
+                    ?: user?.displayName?.ifBlank { null }
+                    ?: "Μέλος"
+                val fbExpense = saved.toFirebaseExpense(householdId, user?.uid ?: "", creatorName)
+                if (householdId.isNotBlank()) {
+                    vm.firestoreSyncRepo.syncExpense(fbExpense)
+                } else if (user != null) {
+                    vm.firestoreSyncRepo.syncUserExpense(user.uid, fbExpense)
+                }
+
+                val label = saved.title.ifBlank { saved.categoryName }
+                vm.logHouseholdActivity(
+                    actionType = "EXPENSE_ADDED",
+                    targetType = "EXPENSE",
+                    summaryEl = "Επανάληψη εξόδου: $label",
+                    summaryEn = "Repeated expense: $label",
+                    amount = saved.amount,
+                    householdIdOverride = householdId
+                )
+                val isEn = vm._appLanguage.value == "EN"
+                val curSym = CurrencyFormatter.currentSymbol
+                vm.showSnackbar(
+                    if (isEn) "Repeated today: $label (${String.format(Locale.US, "%.2f", saved.amount)}$curSym)"
+                    else "Επαναλήφθηκε σήμερα: $label (${String.format(Locale.US, "%.2f", saved.amount)}$curSym)"
+                )
+                if (InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
+                    vm._pendingInAppReviewPrompt.value = true
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(tag, "duplicateExpenseToday error: ${e.message}")
             } finally {
                 vm.trackSyncEnd()
             }

@@ -148,9 +148,10 @@ internal class FirestoreHouseholdDelegate(
         }
     }
 
-    suspend fun createHousehold(ownerUid: String, exodologioName: String): Household {
+    suspend fun createHousehold(ownerUid: String, exodologioName: String, currencyCode: String = "EUR"): Household {
         val householdId = UUID.randomUUID().toString().take(12)
         val inviteCode = "OIKO-" + Random.nextInt(1000, 9999).toString()
+        val cleanCurrency = currencyCode.trim().uppercase().ifBlank { "EUR" }
 
         val household = Household(
             id = householdId,
@@ -160,6 +161,7 @@ internal class FirestoreHouseholdDelegate(
             memberUids = listOf(ownerUid),
             memberRoles = mapOf(ownerUid to HouseholdRole.CREATOR.key),
             pendingInviteRole = HouseholdRole.REGISTAR.key,
+            currencyCode = cleanCurrency,
             createdAt = Timestamp.now(),
             updatedAt = Timestamp.now()
         )
@@ -273,6 +275,15 @@ internal class FirestoreHouseholdDelegate(
         if (householdId.isBlank() || newName.isBlank()) return
         db.collection("households").document(householdId).set(
             mapOf("id" to householdId, "name" to newName.trim(), "updatedAt" to Timestamp.now()),
+            SetOptions.merge()
+        ).await()
+    }
+
+    suspend fun updateHouseholdCurrency(householdId: String, currencyCode: String) {
+        if (householdId.isBlank() || currencyCode.isBlank()) return
+        val cleanCode = currencyCode.trim().uppercase()
+        db.collection("households").document(householdId).set(
+            mapOf("id" to householdId, "currencyCode" to cleanCode, "updatedAt" to Timestamp.now()),
             SetOptions.merge()
         ).await()
     }
@@ -655,7 +666,7 @@ internal class FirestoreHouseholdDelegate(
     suspend fun deleteUserEntireData(userId: String, householdIds: List<String> = emptyList()) {
         if (userId.isBlank()) return
         try {
-            val subcollections = listOf("expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses")
+            val subcollections = listOf("private", "expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses")
             for (sub in subcollections) {
                 try {
                     val docs = db.collection("users").document(userId).collection(sub).get().await()

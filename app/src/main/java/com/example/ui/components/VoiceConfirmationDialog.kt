@@ -117,6 +117,7 @@ fun VoiceConfirmationDialog(
     if (pendingExpense == null) return
 
     val lang = Localization.Language.fromCode(appLanguage)
+    val currencySymbol = com.example.util.LocalCurrencySymbol.current
     val validDefaultPayers = remember(members, defaultPayerMembers, defaultPayerMember) {
         val list = defaultPayerMembers
             .filter { dp -> members.any { it.id == dp.id } }
@@ -368,7 +369,12 @@ fun VoiceConfirmationDialog(
                         },
                         label = { Text(Localization.expenseAmountLabel(lang)) },
                         leadingIcon = {
-                            Icon(Icons.Default.Euro, contentDescription = null, tint = Emerald700)
+                            Text(
+                                text = currencySymbol,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Emerald700
+                            )
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -646,7 +652,11 @@ fun VoiceConfirmationDialog(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = String.format(Locale.US, "%.2f € / άτομο", equalShare),
+                                            text = if (lang == Localization.Language.ENGLISH) {
+                                                "${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol / person"
+                                            } else {
+                                                "${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol / άτομο"
+                                            },
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = Emerald700
@@ -679,7 +689,7 @@ fun VoiceConfirmationDialog(
                                                     )
                                                     Spacer(modifier = Modifier.width(5.dp))
                                                     Text(
-                                                        text = "${m.name}: ${String.format(Locale.US, "%.2f €", equalShare)}",
+                                                        text = "${m.name}: ${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol",
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.SemiBold,
                                                         color = MaterialTheme.colorScheme.onSurface
@@ -731,7 +741,7 @@ fun VoiceConfirmationDialog(
                                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                                     singleLine = true,
                                                     trailingIcon = {
-                                                        Text("€", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Emerald700)
+                                                        Text(currencySymbol, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Emerald700)
                                                     },
                                                     colors = OutlinedTextFieldDefaults.colors(
                                                         focusedBorderColor = Emerald700,
@@ -765,7 +775,7 @@ fun VoiceConfirmationDialog(
                                                     }
                                                 } else if (diff > 0.01) {
                                                     Text(
-                                                        text = Localization.payerRemaining(lang, String.format(Locale.US, "%.2f €", diff)),
+                                                        text = Localization.payerRemaining(lang, "${String.format(Locale.US, "%.2f", diff)} $currencySymbol"),
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = Amber700
@@ -786,7 +796,7 @@ fun VoiceConfirmationDialog(
                                                                     }
                                                             ) {
                                                                 Text(
-                                                                    text = Localization.payerQuickBalance(lang, targetMember.name, String.format(Locale.US, "%.2f €", diff)),
+                                                                    text = Localization.payerQuickBalance(lang, targetMember.name, "${String.format(Locale.US, "%.2f", diff)} $currencySymbol"),
                                                                     fontSize = 10.5.sp,
                                                                     fontWeight = FontWeight.Bold,
                                                                     color = Amber700,
@@ -797,7 +807,7 @@ fun VoiceConfirmationDialog(
                                                     }
                                                 } else {
                                                     Text(
-                                                        text = Localization.payerExceeded(lang, String.format(Locale.US, "%.2f €", -diff)),
+                                                        text = Localization.payerExceeded(lang, "${String.format(Locale.US, "%.2f", -diff)} $currencySymbol"),
                                                         fontSize = 11.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = MaterialTheme.colorScheme.error
@@ -805,7 +815,7 @@ fun VoiceConfirmationDialog(
                                                 }
 
                                                 Text(
-                                                    text = "${String.format(Locale.US, "%.2f", totalAllocated)} / ${String.format(Locale.US, "%.2f €", currentParsedAmt)}",
+                                                    text = "${String.format(Locale.US, "%.2f", totalAllocated)} / ${String.format(Locale.US, "%.2f", currentParsedAmt)} $currencySymbol",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -934,7 +944,7 @@ fun VoiceConfirmationDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = String.format(Locale.US, "%.2f €", splitPerPerson),
+                                    text = "${String.format(Locale.US, "%.2f", splitPerPerson)} $currencySymbol",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Emerald700
@@ -1031,7 +1041,7 @@ fun VoiceConfirmationDialog(
                                     finalPayerName = finalPayerIds.mapNotNull { id -> members.find { it.id == id } }
                                         .joinToString(" & ") { m ->
                                             val amt = customPayerAmounts[m.id]?.toDoubleOrNull() ?: (parsedAmount / finalPayerIds.size)
-                                            "${m.name} (${String.format(Locale.US, "%.2f €", amt)})"
+                                            "${m.name} (${String.format(Locale.US, "%.2f", amt)} $currencySymbol)"
                                         }
                                 } else {
                                     val perPerson = parsedAmount / finalPayerIds.size

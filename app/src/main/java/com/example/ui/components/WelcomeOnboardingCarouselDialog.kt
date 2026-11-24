@@ -1,14 +1,12 @@
 package com.example.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,35 +15,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PieChart
-import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,39 +40,31 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.ui.theme.Amber700
+import com.example.R
 import com.example.ui.theme.Emerald700
-import kotlinx.coroutines.launch
 
-private data class WelcomeCarouselSlide(
-    val id: String,
-    val badge: String,
-    val title: String,
-    val subtitle: String,
-    val bullets: List<String>,
-    val icon: ImageVector,
-    val gradientStart: Color,
-    val gradientEnd: Color,
-    val accentColor: Color,
-    val isProSlide: Boolean = false
-)
-
+/**
+ * Streamlined single-screen first-launch welcome & privacy consent dialog.
+ * Replaces the multi-slide carousel + separate GDPR popup so new users can
+ * start logging their first expense in seconds, while permissions (mic, camera,
+ * notifications, bank push) are requested strictly just-in-time.
+ */
 @Composable
 fun WelcomeOnboardingCarouselDialog(
     appLanguage: String = "EL",
     onDismiss: () -> Unit,
-    onOpenProPaywall: (() -> Unit)? = null
+    onOpenProPaywall: (() -> Unit)? = null,
+    onOpenLegalDocument: ((String) -> Unit)? = null
 ) {
-    val isEnglish = appLanguage.equals("EN", ignoreCase = true)
-    val slides = remember(isEnglish) { buildWelcomeCarouselSlides(isEnglish) }
-    val pagerState = rememberPagerState(pageCount = { slides.size })
-    val coroutineScope = rememberCoroutineScope()
+    val isEn = appLanguage.equals("EN", ignoreCase = true)
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -94,300 +73,173 @@ fun WelcomeOnboardingCarouselDialog(
         SmoothDialogContent {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.93f)
-                    .widthIn(max = 460.dp)
+                    .fillMaxWidth(0.92f)
+                    .widthIn(max = 440.dp)
                     .testTag("welcome_onboarding_carousel_dialog"),
                 shape = RoundedCornerShape(26.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
             ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    // Top Skip Bar
-                    Row(
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    // Compact Branded Emerald Header
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 18.dp, end = 10.dp, top = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${pagerState.currentPage + 1} / ${slides.size}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        TextButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.testTag("welcome_carousel_skip_btn")
-                        ) {
-                            Text(
-                                text = if (isEnglish) "Skip" else "Παράλειψη",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFF047857), Color(0xFF10B981))
+                                )
                             )
-                        }
-                    }
-
-                    // Swipeable Pager Slides
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxWidth()
-                    ) { page ->
-                        val slide = slides[page]
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
-                                .verticalScroll(rememberScrollState()),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            // Hero Icon Banner
+                            .padding(horizontal = 22.dp, vertical = 22.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(20.dp))
-                                    .background(
-                                        Brush.linearGradient(
-                                            colors = listOf(slide.gradientStart, slide.gradientEnd)
-                                        )
-                                    )
-                                    .padding(vertical = 20.dp, horizontal = 16.dp),
+                                    .size(58.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color.White.copy(alpha = 0.18f)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = Color.White.copy(alpha = 0.2f),
-                                        modifier = Modifier.size(56.dp)
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = slide.icon,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(30.dp)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(999.dp),
-                                        color = Color.White.copy(alpha = 0.22f)
-                                    ) {
-                                        Text(
-                                            text = slide.badge,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = slide.title,
-                                        fontSize = 18.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color.White,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
+                                Image(
+                                    painter = painterResource(id = R.drawable.finsay_logo),
+                                    contentDescription = "Finsay",
+                                    modifier = Modifier.size(38.dp)
+                                )
                             }
-
-                            Spacer(modifier = Modifier.height(14.dp))
-
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = slide.subtitle,
-                                fontSize = 13.sp,
-                                lineHeight = 18.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = if (isEn) "Welcome to Finsay" else "Καλώς ήρθατε στο Finsay",
+                                color = Color.White,
+                                fontSize = 21.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 textAlign = TextAlign.Center
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = if (isEn)
+                                    "Track expenses in seconds — solo or with family"
+                                else
+                                    "Καταγράψτε έξοδα σε δευτερόλεπτα — μόνοι ή με την οικογένεια",
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                    // 3 Concise Feature Highlights
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        WelcomeFeatureRow(
+                            icon = Icons.Default.Mic,
+                            title = if (isEn) "Voice, Receipt Scan & Quick Entry" else "Φωνή, Σάρωση Απόδειξης & Γρήγορη Καταχώρηση",
+                            subtitle = if (isEn)
+                                "Tap the green + button anytime to log an expense or income."
+                            else
+                                "Πατήστε το πράσινο + ανά πάσα στιγμή για άμεση καταχώρηση."
+                        )
+                        WelcomeFeatureRow(
+                            icon = Icons.Default.AccountBalanceWallet,
+                            title = if (isEn) "Shared Households & Fair Split" else "Κοινά Εξοδολόγια & Δίκαιος Επιμερισμός",
+                            subtitle = if (isEn)
+                                "Sync in real time with family, partners or roommates."
+                            else
+                                "Συγχρονισμός σε πραγματικό χρόνο με οικογένεια, σύντροφο ή συγκάτοικους."
+                        )
+                        WelcomeFeatureRow(
+                            icon = Icons.Default.PieChart,
+                            title = if (isEn) "Clear Analytics & Smart Budgets" else "Καθαρά Γραφήματα & Έξυπνοι Προϋπολογισμοί",
+                            subtitle = if (isEn)
+                                "Permissions (mic, camera, notifications) are only asked when you use them."
+                            else
+                                "Άδειες (μικρόφωνο, κάμερα, ειδοποιήσεις) ζητούνται μόνο όταν τις χρειαστείτε."
+                        )
 
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (slide.isProSlide) Amber700.copy(alpha = 0.35f)
-                                    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Compact Inline GDPR / Privacy Notice
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.Top
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    slide.bullets.forEach { bullet ->
-                                        Row(
-                                            verticalAlignment = Alignment.Top,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                tint = slide.accentColor,
-                                                modifier = Modifier
-                                                    .padding(top = 2.dp)
-                                                    .size(16.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Shield,
+                                    contentDescription = null,
+                                    tint = Emerald700,
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = if (isEn)
+                                            "Your data is encrypted and private (GDPR). By continuing you agree to our Privacy Policy & Terms."
+                                        else
+                                            "Τα δεδομένα σας προστατεύονται με κρυπτογράφηση (GDPR). Συνεχίζοντας αποδέχεστε την Πολιτική Απορρήτου & τους Όρους Χρήσης.",
+                                        fontSize = 11.5.sp,
+                                        lineHeight = 16.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (onOpenLegalDocument != null) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                             Text(
-                                                text = bullet,
-                                                fontSize = 12.5.sp,
-                                                lineHeight = 17.5.sp,
-                                                color = MaterialTheme.colorScheme.onSurface
+                                                text = if (isEn) "Privacy Policy" else "Πολιτική Απορρήτου",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Emerald700,
+                                                textDecoration = TextDecoration.Underline,
+                                                modifier = Modifier.clickable { onOpenLegalDocument("privacy") }
+                                            )
+                                            Text(
+                                                text = if (isEn) "Terms of Service" else "Όροι Χρήσης",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Emerald700,
+                                                textDecoration = TextDecoration.Underline,
+                                                modifier = Modifier.clickable { onOpenLegalDocument("terms") }
                                             )
                                         }
                                     }
                                 }
                             }
-
-                            if (slide.isProSlide && onOpenProPaywall != null) {
-                                Spacer(modifier = Modifier.height(10.dp))
-                                OutlinedButton(
-                                    onClick = {
-                                        onDismiss()
-                                        onOpenProPaywall()
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, Amber700.copy(alpha = 0.65f)),
-                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(42.dp)
-                                        .testTag("welcome_carousel_pro_btn")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.WorkspacePremium,
-                                        contentDescription = null,
-                                        tint = Amber700,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (isEnglish) "Explore Finsay Pro" else "Δείτε το Finsay Pro",
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Amber700
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
                         }
-                    }
 
-                    // Page Indicator Dots
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 10.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        slides.forEachIndexed { idx, slide ->
-                            val isSelected = pagerState.currentPage == idx
-                            val dotWidth by animateDpAsState(
-                                targetValue = if (isSelected) 22.dp else 7.dp,
-                                animationSpec = tween(220),
-                                label = "welcomeDotWidth_$idx"
-                            )
-                            val dotColor by animateColorAsState(
-                                targetValue = if (isSelected) slide.accentColor else MaterialTheme.colorScheme.outlineVariant,
-                                animationSpec = tween(220),
-                                label = "welcomeDotColor_$idx"
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .padding(horizontal = 3.dp)
-                                    .height(7.dp)
-                                    .width(dotWidth)
-                                    .clip(CircleShape)
-                                    .background(dotColor)
-                            )
-                        }
-                    }
-
-                    // Bottom Navigation Buttons
-                    val isFirst = pagerState.currentPage == 0
-                    val isLast = pagerState.currentPage == slides.lastIndex
-                    val activeAccent = slides[pagerState.currentPage].accentColor
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 20.dp, end = 20.dp, bottom = 18.dp, top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (!isFirst) {
-                            OutlinedButton(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        pagerState.animateScrollToPage((pagerState.currentPage - 1).coerceAtLeast(0))
-                                    }
-                                },
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .testTag("welcome_carousel_back_btn")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isEnglish) "Back" else "Πίσω",
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    softWrap = false
-                                )
-                            }
-                        }
+                        Spacer(modifier = Modifier.height(2.dp))
 
                         Button(
-                            onClick = {
-                                if (isLast) {
-                                    onDismiss()
-                                } else {
-                                    coroutineScope.launch {
-                                        pagerState.animateScrollToPage((pagerState.currentPage + 1).coerceAtMost(slides.lastIndex))
-                                    }
-                                }
-                            },
+                            onClick = onDismiss,
+                            colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = activeAccent,
-                                contentColor = Color.White
-                            ),
                             modifier = Modifier
-                                .weight(if (isFirst) 1f else 1.4f)
+                                .fillMaxWidth()
                                 .height(48.dp)
-                                .testTag("welcome_carousel_next_btn")
+                                .testTag("welcome_get_started_btn")
                         ) {
                             Text(
-                                text = when {
-                                    isLast -> if (isEnglish) "Get Started" else "Ξεκινήστε"
-                                    else -> if (isEnglish) "Next" else "Επόμενο"
-                                },
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
+                                text = if (isEn) "Get Started" else "Ξεκινήστε",
                                 color = Color.White,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                imageVector = if (isLast) Icons.Default.Check else Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(17.dp)
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
@@ -397,134 +249,45 @@ fun WelcomeOnboardingCarouselDialog(
     }
 }
 
-private fun buildWelcomeCarouselSlides(isEnglish: Boolean): List<WelcomeCarouselSlide> {
-    return if (isEnglish) {
-        listOf(
-            WelcomeCarouselSlide(
-                id = "setup",
-                badge = "QUICK SETUP",
-                title = "Welcome to Finsay",
-                subtitle = "Ready in under a minute.",
-                bullets = listOf(
-                    "Add members & voice keywords",
-                    "Set categories & monthly budgets",
-                    "Pick your default payer(s)"
-                ),
-                icon = Icons.Default.AccountBalanceWallet,
-                gradientStart = Color(0xFF065F46),
-                gradientEnd = Color(0xFF10B981),
-                accentColor = Emerald700
-            ),
-            WelcomeCarouselSlide(
-                id = "entry",
-                badge = "FAST ENTRY",
-                title = "Log in Seconds",
-                subtitle = "Manual, voice, or automatic.",
-                bullets = listOf(
-                    "Voice expense logging (15 free/month)",
-                    "Split across members & multiple payers",
-                    "Instant filters by month, category & member"
-                ),
-                icon = Icons.Default.Mic,
-                gradientStart = Color(0xFF0369A1),
-                gradientEnd = Color(0xFF0EA5E9),
-                accentColor = Color(0xFF0284C7)
-            ),
-            WelcomeCarouselSlide(
-                id = "insights",
-                badge = "CONTROL & SYNC",
-                title = "Statistics & Sharing",
-                subtitle = "Clear view in real time.",
-                bullets = listOf(
-                    "Charts, budget alerts & Settle-Up",
-                    "Bill reminders & savings goals",
-                    "Shared households with roles"
-                ),
-                icon = Icons.Default.PieChart,
-                gradientStart = Color(0xFF4338CA),
-                gradientEnd = Color(0xFF6366F1),
-                accentColor = Color(0xFF4F46E5)
-            ),
-            WelcomeCarouselSlide(
-                id = "pro",
-                badge = "FINSAY PRO",
-                title = "Full Automation",
-                subtitle = "Start free, upgrade anytime.",
-                bullets = listOf(
-                    "Unlimited voice & receipt scanning",
-                    "Automatic Bank Push reader",
-                    "Multiple households & PDF/CSV export"
-                ),
-                icon = Icons.Default.WorkspacePremium,
-                gradientStart = Color(0xFFB45309),
-                gradientEnd = Color(0xFFF59E0B),
-                accentColor = Amber700,
-                isProSlide = true
+@Composable
+private fun WelcomeFeatureRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(Emerald700.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Emerald700,
+                modifier = Modifier.size(19.dp)
             )
-        )
-    } else {
-        listOf(
-            WelcomeCarouselSlide(
-                id = "setup",
-                badge = "ΓΡΗΓΟΡΗ ΡΥΘΜΙΣΗ",
-                title = "Καλώς ήρθατε στο Finsay",
-                subtitle = "Έτοιμο σε 1 λεπτό.",
-                bullets = listOf(
-                    "Προσθήκη μελών & φωνητικών λέξεων",
-                    "Κατηγορίες & μηνιαία όρια (Budget)",
-                    "Επιλογή προεπιλεγμένου πληρωτή"
-                ),
-                icon = Icons.Default.AccountBalanceWallet,
-                gradientStart = Color(0xFF065F46),
-                gradientEnd = Color(0xFF10B981),
-                accentColor = Emerald700
-            ),
-            WelcomeCarouselSlide(
-                id = "entry",
-                badge = "ΑΜΕΣΗ ΚΑΤΑΧΩΡΗΣΗ",
-                title = "Καταγραφή σε Δευτερόλεπτα",
-                subtitle = "Με το χέρι ή τη φωνή.",
-                bullets = listOf(
-                    "Ελληνική φωνητική καταχώρηση (15 δωρεάν/μήνα)",
-                    "Επιμερισμός μελών & πολλαπλοί πληρωτές",
-                    "Γρήγορα φίλτρα μήνα, κατηγορίας & μέλους"
-                ),
-                icon = Icons.Default.Mic,
-                gradientStart = Color(0xFF0369A1),
-                gradientEnd = Color(0xFF0EA5E9),
-                accentColor = Color(0xFF0284C7)
-            ),
-            WelcomeCarouselSlide(
-                id = "insights",
-                badge = "ΕΛΕΓΧΟΣ & ΣΥΓΧΡΟΝΙΣΜΟΣ",
-                title = "Στατιστικά & Κοινή Χρήση",
-                subtitle = "Καθαρή εικόνα σε πραγματικό χρόνο.",
-                bullets = listOf(
-                    "Γραφήματα, όρια & εκκαθάριση οφειλών",
-                    "Πάγιες υπενθυμίσεις & στόχοι αποταμίευσης",
-                    "Κοινοποίηση εξοδολογίου με ρόλους"
-                ),
-                icon = Icons.Default.PieChart,
-                gradientStart = Color(0xFF4338CA),
-                gradientEnd = Color(0xFF6366F1),
-                accentColor = Color(0xFF4F46E5)
-            ),
-            WelcomeCarouselSlide(
-                id = "pro",
-                badge = "FINSAY PRO",
-                title = "Πλήρης Αυτοματισμός",
-                subtitle = "Ξεκινήστε δωρεάν, αναβαθμίστε όποτε θέλετε.",
-                bullets = listOf(
-                    "Απεριόριστη φωνή & σάρωση αποδείξεων",
-                    "Αυτόματη ανάγνωση τραπεζικών Push",
-                    "Πολλαπλά εξοδολόγια & εξαγωγή PDF/CSV"
-                ),
-                icon = Icons.Default.WorkspacePremium,
-                gradientStart = Color(0xFFB45309),
-                gradientEnd = Color(0xFFF59E0B),
-                accentColor = Amber700,
-                isProSlide = true
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
-        )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                fontSize = 12.sp,
+                lineHeight = 16.5.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }

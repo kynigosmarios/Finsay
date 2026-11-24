@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="shortcut_voice"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_voice"
+        android:shortcutShortLabel="@string/shortcut_voice_short"
+        android:shortcutLongLabel="@string/shortcut_voice_long">
+        <intent
+            android:action="com.example.ACTION_SHORTCUT_VOICE"
+            android:targetPackage="com.kynigos.oikonomos"
+            android:targetClass="com.example.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_scan"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_scan"
+        android:shortcutShortLabel="@string/shortcut_scan_short"
+        android:shortcutLongLabel="@string/shortcut_scan_long">
+        <intent
+            android:action="com.example.ACTION_SHORTCUT_SCAN"
+            android:targetPackage="com.kynigos.oikonomos"
+            android:targetClass="com.example.MainActivity" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="shortcut_expense"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_expense"
+        android:shortcutShortLabel="@string/shortcut_expense_short"
+        android:shortcutLongLabel="@string/shortcut_expense_long">
+        <intent
+            android:action="com.example.ACTION_SHORTCUT_EXPENSE"
+            android:targetPackage="com.kynigos.oikonomos"
+            android:targetClass="com.example.MainActivity" />
+    </shortcut>
+</shortcuts>

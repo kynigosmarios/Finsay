@@ -74,6 +74,7 @@ internal fun ManualExpensePayerAndSplitSection(
     onPayerSelectionChanged: () -> Unit = {},
     onBeneficiarySelectionChanged: () -> Unit = {}
 ) {
+    val currencySymbol = com.example.util.LocalCurrencySymbol.current
     // 1. Payer Section (Who paid)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -245,7 +246,7 @@ internal fun ManualExpensePayerAndSplitSection(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = String.format(Locale.US, "%.2f €", equalShare),
+                            text = "${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol",
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Emerald700
@@ -291,7 +292,7 @@ internal fun ManualExpensePayerAndSplitSection(
                                     )
                                 }
                                 Text(
-                                    text = String.format(Locale.US, "%.2f €", equalShare),
+                                    text = "${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol",
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Emerald700
@@ -347,7 +348,7 @@ internal fun ManualExpensePayerAndSplitSection(
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
                                     trailingIcon = {
-                                        Text("€", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Emerald700)
+                                        Text(currencySymbol, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Emerald700)
                                     },
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = Emerald700,
@@ -390,7 +391,7 @@ internal fun ManualExpensePayerAndSplitSection(
                                         }
                                     } else if (diff > 0.01) {
                                         Text(
-                                            text = Localization.payerRemaining(lang, String.format(Locale.US, "%.2f €", diff)),
+                                            text = Localization.payerRemaining(lang, "${String.format(Locale.US, "%.2f", diff)} $currencySymbol"),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Amber700
@@ -411,7 +412,7 @@ internal fun ManualExpensePayerAndSplitSection(
                                                         }
                                                 ) {
                                                     Text(
-                                                        text = Localization.payerQuickBalance(lang, targetMember.name, String.format(Locale.US, "%.2f €", diff)),
+                                                        text = Localization.payerQuickBalance(lang, targetMember.name, "${String.format(Locale.US, "%.2f", diff)} $currencySymbol"),
                                                         fontSize = 10.5.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = Amber700,
@@ -422,7 +423,7 @@ internal fun ManualExpensePayerAndSplitSection(
                                         }
                                     } else {
                                         Text(
-                                            text = Localization.payerExceeded(lang, String.format(Locale.US, "%.2f €", -diff)),
+                                            text = Localization.payerExceeded(lang, "${String.format(Locale.US, "%.2f", -diff)} $currencySymbol"),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.error
@@ -430,7 +431,7 @@ internal fun ManualExpensePayerAndSplitSection(
                                     }
 
                                     Text(
-                                        text = "${String.format(Locale.US, "%.2f", totalAllocated)} / ${String.format(Locale.US, "%.2f €", currentAmount)}",
+                                        text = "${String.format(Locale.US, "%.2f", totalAllocated)} / ${String.format(Locale.US, "%.2f", currentAmount)} $currencySymbol",
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -573,7 +574,7 @@ internal fun ManualExpensePayerAndSplitSection(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = String.format(Locale.US, "%.2f €", splitPerPerson),
+                    text = "${String.format(Locale.US, "%.2f", splitPerPerson)} $currencySymbol",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Emerald700

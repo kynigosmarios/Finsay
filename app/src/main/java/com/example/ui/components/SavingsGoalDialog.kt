@@ -244,13 +244,14 @@ fun SavingsGoalDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Field 2 & 3: Amounts Row
+                val currencySymbol = com.example.util.LocalCurrencySymbol.current
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = targetText,
                         onValueChange = { targetText = it },
-                        label = { Text(if (lang == Localization.Language.ENGLISH) "Goal (€)" else "Στόχος (€)") },
+                        label = { Text(if (lang == Localization.Language.ENGLISH) "Goal ($currencySymbol)" else "Στόχος ($currencySymbol)") },
                         placeholder = { Text("0") },
-                        trailingIcon = { Text("€", fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
+                        trailingIcon = { Text(currencySymbol, fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
@@ -261,9 +262,9 @@ fun SavingsGoalDialog(
                     OutlinedTextField(
                         value = currentText,
                         onValueChange = { currentText = it },
-                        label = { Text(if (lang == Localization.Language.ENGLISH) "Saved (€)" else "Μαζεμένα (€)") },
+                        label = { Text(if (lang == Localization.Language.ENGLISH) "Saved ($currencySymbol)" else "Μαζεμένα ($currencySymbol)") },
                         placeholder = { Text("0") },
-                        trailingIcon = { Text("€", fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
+                        trailingIcon = { Text(currencySymbol, fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
@@ -366,9 +367,9 @@ fun SavingsGoalDialog(
                     exit = FinsayMotion.ShrinkExit
                 ) {
                     val deltaStr = if (kotlin.math.abs(positiveAmountDelta - positiveAmountDelta.toLong()) < 0.005) {
-                        String.format(Locale.US, "%.0f€", positiveAmountDelta)
+                        "${String.format(Locale.US, "%.0f", positiveAmountDelta)}$currencySymbol"
                     } else {
-                        String.format(Locale.US, "%.2f€", positiveAmountDelta)
+                        "${String.format(Locale.US, "%.2f", positiveAmountDelta)}$currencySymbol"
                     }
                     Column(modifier = Modifier.fillMaxWidth()) {
                         Spacer(modifier = Modifier.height(10.dp))

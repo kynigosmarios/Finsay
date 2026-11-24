@@ -1,12 +1,14 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,19 +20,27 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -118,22 +128,111 @@ internal fun ExpensesEmptyStateCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ExpenseCardItem(
     item: ActivityItem.ExpenseItem,
     onEditExpense: (Expense) -> Unit,
     onDeleteExpense: (Expense) -> Unit,
+    onSwipeDeleteExpense: ((Expense) -> Unit)? = null,
+    onDuplicateExpense: ((Expense) -> Unit)? = null,
+    lang: Localization.Language = Localization.Language.GREEK,
     modifier: Modifier = Modifier
 ) {
     val expense = item.expense
+    val currentExpense by rememberUpdatedState(expense)
+    val currentOnSwipeDelete by rememberUpdatedState(onSwipeDeleteExpense ?: onDeleteExpense)
+    val currentOnDuplicate by rememberUpdatedState(onDuplicateExpense)
+    val isEn = lang == Localization.Language.ENGLISH
+
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            when (value) {
+                SwipeToDismissBoxValue.EndToStart -> {
+                    currentOnSwipeDelete(currentExpense)
+                    false
+                }
+                SwipeToDismissBoxValue.StartToEnd -> {
+                    currentOnDuplicate?.invoke(currentExpense)
+                    false
+                }
+                SwipeToDismissBoxValue.Settled -> false
+            }
+        },
+        positionalThreshold = { totalDistance -> totalDistance * 0.35f }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        enableDismissFromStartToEnd = onDuplicateExpense != null,
+        enableDismissFromEndToStart = true,
+        backgroundContent = {
+            val direction = dismissState.dismissDirection
+            val isRepeat = direction == SwipeToDismissBoxValue.StartToEnd
+            val isDelete = direction == SwipeToDismissBoxValue.EndToStart
+            val bgColor = when {
+                isRepeat -> Emerald700.copy(alpha = 0.16f)
+                isDelete -> Color(0xFFEF4444).copy(alpha = 0.16f)
+                else -> Color.Transparent
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(bgColor)
+                    .padding(horizontal = 20.dp),
+                contentAlignment = if (isRepeat) Alignment.CenterStart else Alignment.CenterEnd
+            ) {
+                if (isRepeat) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = if (isEn) "Repeat today" else "Επανάληψη σήμερα",
+                            tint = Emerald700,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = if (isEn) "Repeat today" else "Επανάληψη σήμερα",
+                            color = Emerald700,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else if (isDelete) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = if (isEn) "Delete" else "Διαγραφή",
+                            color = Color(0xFFEF4444),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = if (isEn) "Delete" else "Διαγραφή",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    ) {
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         tonalElevation = 1.dp,
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp)
             .clickable { onEditExpense(expense) }
             .testTag("expense_card_${expense.id}")
     ) {
@@ -305,6 +404,7 @@ internal fun ExpenseCardItem(
                 }
             }
         }
+    }
     }
 }
 

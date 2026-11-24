@@ -54,6 +54,7 @@ import com.example.ui.components.FinsayMotion
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.HomeDrillDownRequest
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import java.util.Locale
 
@@ -73,6 +74,7 @@ internal fun AnalyticsFamilyIncomeCard(
     onSelectChartTypeIncome: (Int) -> Unit,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -240,7 +242,7 @@ internal fun AnalyticsFamilyIncomeCard(
                                     }
 
                                     Text(
-                                        text = String.format(Locale.US, "+%.2f €", inc),
+                                        text = "+${String.format(Locale.US, "%.2f", inc)} $currencySymbol",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Black,
                                         color = if (inc > 0) Color(0xFF059669) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -323,7 +325,7 @@ internal fun AnalyticsFamilyIncomeCard(
                                 }
 
                                 Text(
-                                    text = String.format(Locale.US, "+%.2f €", unassignedMemberIncomes),
+                                    text = "+${String.format(Locale.US, "%.2f", unassignedMemberIncomes)} $currencySymbol",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Black,
                                     color = Color(0xFF059669)
@@ -399,7 +401,7 @@ internal fun AnalyticsFamilyIncomeCard(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = String.format(Locale.US, "+%.2f€ (%d%%)", amount, catPct),
+                                        text = "+${String.format(Locale.US, "%.2f", amount)}$currencySymbol ($catPct%)",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Color(0xFF059669)
@@ -419,6 +421,7 @@ internal fun AnalyticsMemberDeficitAlertCard(
     membersWithDeficit: List<Triple<FamilyMember, Double, Double>>,
     lang: Localization.Language
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -477,7 +480,7 @@ internal fun AnalyticsMemberDeficitAlertCard(
                                         color = Color(0xFF991B1B)
                                     )
                                     Text(
-                                        text = "Έσοδα: ${String.format(Locale.US, "%.1f€", income)} • Έξοδα: ${String.format(Locale.US, "%.1f€", paid)}",
+                                        text = "Έσοδα: ${String.format(Locale.US, "%.1f", income)}$currencySymbol • Έξοδα: ${String.format(Locale.US, "%.1f", paid)}$currencySymbol",
                                         fontSize = 11.sp,
                                         color = Color(0xFFB91C1C)
                                     )
@@ -489,7 +492,7 @@ internal fun AnalyticsMemberDeficitAlertCard(
                                 color = Color(0xFFDC2626)
                             ) {
                                 Text(
-                                    text = "-${String.format(Locale.US, "%.2f €", deficit)}",
+                                    text = "-${String.format(Locale.US, "%.2f", deficit)} $currencySymbol",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -516,6 +519,7 @@ internal fun AnalyticsFamilyVsKidsCard(
     onSelectChartTypeFamily: (Int) -> Unit,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -670,7 +674,7 @@ internal fun AnalyticsFamilyVsKidsCard(
                         }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = String.format(Locale.US, "%.2f €", parentsTotalSpend),
+                            text = "${String.format(Locale.US, "%.2f", parentsTotalSpend)} $currencySymbol",
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF0284C7)
@@ -701,7 +705,7 @@ internal fun AnalyticsFamilyVsKidsCard(
                         }
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = String.format(Locale.US, "%.2f €", kidsSpend),
+                            text = "${String.format(Locale.US, "%.2f", kidsSpend)} $currencySymbol",
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF10B981)
@@ -724,6 +728,7 @@ internal fun AnalyticsParentsForKidsCard(
     lang: Localization.Language,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -743,7 +748,7 @@ internal fun AnalyticsParentsForKidsCard(
                         color = Color(0xFF4F46E5).copy(alpha = 0.10f)
                     ) {
                         Text(
-                            text = String.format(Locale.US, "%.2f €", kidsSpend),
+                            text = "${String.format(Locale.US, "%.2f", kidsSpend)} $currencySymbol",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF4338CA),
@@ -835,7 +840,7 @@ internal fun AnalyticsParentsForKidsCard(
                                     }
 
                                     Text(
-                                        text = String.format(Locale.US, "%.2f €", kidSpend),
+                                        text = "${String.format(Locale.US, "%.2f", kidSpend)} $currencySymbol",
                                         fontSize = 14.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface

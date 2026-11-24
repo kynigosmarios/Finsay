@@ -260,7 +260,15 @@ fun BurgerMenuDrawer(
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(6.dp))
                             }
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = Localization.myProfile(lang),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                modifier = Modifier.size(13.dp)
+                            )
                         }
                     }
                     } else {
@@ -311,20 +319,7 @@ fun BurgerMenuDrawer(
                     }
                         }
 
-                    // 1. Το Προφίλ μου
-                    BurgerNavigationItem(
-                        title = Localization.myProfile(lang),
-                        icon = Icons.Default.Person,
-                        iconTint = if (isDark) Color(0xFF34D399) else Emerald700,
-                        iconBg = (if (isDark) Color(0xFF34D399) else Emerald700).copy(alpha = if (isDark) 0.20f else 0.12f),
-                        testTag = "burger_item_profile",
-                        onClick = {
-                            onDismiss()
-                            onOpenProfile()
-                        }
-                    )
-
-                    // 2. Εξοδολόγια
+                    // 1. Εξοδολόγια
                     BurgerNavigationItem(
                         title = if (lang == Localization.Language.ENGLISH) "Households" else "Εξοδολόγια",
                         icon = Icons.Default.MenuBook,

@@ -39,6 +39,7 @@ import com.example.data.entity.getBeneficiaryCategoryOrNamesDisplay
 import com.example.data.entity.getPayerCategoryOrNamesDisplay
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsSpecialFilter
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -117,6 +118,7 @@ fun ExpensesScreen(
     onVoiceExpense: () -> Unit,
     onEditExpense: (Expense) -> Unit,
     onDeleteExpense: (Expense) -> Unit,
+    onDuplicateExpense: (Expense) -> Unit = {},
     onEditIncome: (Income) -> Unit,
     onDeleteIncome: (Income) -> Unit,
     onExportExcel: () -> Unit,
@@ -130,6 +132,7 @@ fun ExpensesScreen(
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
     val locale = Localization.getDateLocale(lang)
+    val currencySymbol = LocalCurrencySymbol.current
 
     val monthYearFormat = remember(locale) { SimpleDateFormat("LLLL yyyy", locale) }
     val monthYearKeyFormat = remember { SimpleDateFormat("yyyy-MM", Locale.US) }
@@ -278,7 +281,7 @@ fun ExpensesScreen(
         heroMonthExpenses.filter { it.splitType != "ALL" && it.splitType != "ALL_FAMILY" }.sumOf { it.amount }
     }
 
-    val displayItems = remember(monthExpenses, monthIncomes, selectedTypeFilter, categories, members, locale, lang) {
+    val displayItems = remember(monthExpenses, monthIncomes, selectedTypeFilter, categories, members, locale, lang, currencySymbol) {
         val timeOnlyFormat = SimpleDateFormat("HH:mm", locale)
         val itemCal = Calendar.getInstance()
 
@@ -332,7 +335,7 @@ fun ExpensesScreen(
                 categoryDisplay = catDisplay,
                 categoryColor = catColor,
                 categoryIconKey = iconKey,
-                formattedAmount = String.format(Locale.US, "%.2f €", exp.amount),
+                formattedAmount = String.format(Locale.US, "%.2f %s", exp.amount, currencySymbol),
                 formattedDate = dateStr,
                 payerText = cleanPayer,
                 isPayerGroup = isPayerGroup,
@@ -364,7 +367,7 @@ fun ExpensesScreen(
                 income = inc,
                 titleText = inc.title,
                 categoryDisplay = inc.category.ifBlank { Localization.income(lang) },
-                formattedAmount = String.format(Locale.US, "+%.2f €", inc.amount),
+                formattedAmount = String.format(Locale.US, "+%.2f %s", inc.amount, currencySymbol),
                 formattedDate = dateStr,
                 memberName = displayIncomeMember,
                 itemKey = key
@@ -549,7 +552,7 @@ fun ExpensesScreen(
                             val displayDayTotal = if (selectedTypeFilter == "INCOME") group.dayIncomeTotal else group.dayExpenseTotal
                             if (displayDayTotal > 0.0) {
                                 Text(
-                                    text = String.format(Locale.US, "%.2f €", displayDayTotal),
+                                    text = String.format(Locale.US, "%.2f %s", displayDayTotal, currencySymbol),
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFF64748B)
@@ -569,6 +572,9 @@ fun ExpensesScreen(
                                     item = item,
                                     onEditExpense = onEditExpense,
                                     onDeleteExpense = { expenseToDelete = it },
+                                    onSwipeDeleteExpense = { onDeleteExpense(it) },
+                                    onDuplicateExpense = onDuplicateExpense,
+                                    lang = lang,
                                     modifier = Modifier.animateItem()
                                 )
                             }
@@ -595,9 +601,9 @@ fun ExpensesScreen(
             text = {
                 Text(
                     if (lang == Localization.Language.ENGLISH) {
-                        "Delete \"${exp.title}\" (${String.format(Locale.US, "%.2f €", exp.amount)})?"
+                        "Delete \"${exp.title}\" (${String.format(Locale.US, "%.2f %s", exp.amount, currencySymbol)})?"
                     } else {
-                        "Διαγραφή «${exp.title}» (${String.format(Locale.US, "%.2f €", exp.amount)});"
+                        "Διαγραφή «${exp.title}» (${String.format(Locale.US, "%.2f %s", exp.amount, currencySymbol)});"
                     }
                 )
             },
@@ -627,9 +633,9 @@ fun ExpensesScreen(
             text = {
                 Text(
                     if (lang == Localization.Language.ENGLISH) {
-                        "Delete \"${inc.title}\" (${String.format(Locale.US, "%.2f €", inc.amount)})?"
+                        "Delete \"${inc.title}\" (${String.format(Locale.US, "%.2f", inc.amount)} $currencySymbol)?"
                     } else {
-                        "Διαγραφή «${inc.title}» (${String.format(Locale.US, "%.2f €", inc.amount)});"
+                        "Διαγραφή «${inc.title}» (${String.format(Locale.US, "%.2f", inc.amount)} $currencySymbol);"
                     }
                 )
             },

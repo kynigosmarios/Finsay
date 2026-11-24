@@ -44,10 +44,13 @@ import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Pin
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SettingsBrightness
@@ -89,6 +92,7 @@ import com.example.data.model.UserProfile
 import com.example.service.BankNotificationListenerService
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
+import com.example.util.AppLockManager
 import com.example.util.Localization
 import com.google.firebase.auth.FirebaseUser
 
@@ -536,6 +540,186 @@ fun AppSettingsDialog(
                                     modifier = Modifier.testTag("bank_auto_catcher_switch")
                                 )
                             }
+                        }
+                    }
+
+                    // Section: Κλείδωμα Εφαρμογής (App Lock — Biometrics / PIN)
+                    run {
+                        var appLockEnabled by remember { mutableStateOf(AppLockManager.isLockEnabled(context)) }
+                        var biometricEnabled by remember { mutableStateOf(AppLockManager.isBiometricEnabled(context)) }
+                        val canUseBiometrics = remember(context) { AppLockManager.canUseBiometrics(context) }
+                        var showPinSetupDialog by remember { mutableStateOf(false) }
+                        var isChangingPin by remember { mutableStateOf(false) }
+
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = Emerald700.copy(alpha = 0.12f),
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Lock,
+                                                    contentDescription = null,
+                                                    tint = Emerald700,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(12.dp))
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (lang == Localization.Language.ENGLISH) "App Lock (Biometrics / PIN)" else "Κλείδωμα Εφαρμογής (PIN / Βιομετρικά)",
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = if (lang == Localization.Language.ENGLISH)
+                                                    "Protect Finsay with Fingerprint, Face ID or 4-digit PIN"
+                                                else
+                                                    "Προστασία με Αποτύπωμα, Face ID ή 4-ψήφιο PIN",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+
+                                        Switch(
+                                            checked = appLockEnabled,
+                                            onCheckedChange = { checked ->
+                                                if (checked) {
+                                                    isChangingPin = false
+                                                    showPinSetupDialog = true
+                                                } else {
+                                                    AppLockManager.disableLock(context)
+                                                    appLockEnabled = false
+                                                }
+                                            },
+                                            colors = SwitchDefaults.colors(
+                                                checkedThumbColor = Color.White,
+                                                checkedTrackColor = Emerald700
+                                            ),
+                                            modifier = Modifier.testTag("app_lock_switch")
+                                        )
+                                    }
+
+                                    AnimatedVisibility(visible = appLockEnabled) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            if (canUseBiometrics) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Fingerprint,
+                                                        contentDescription = null,
+                                                        tint = Emerald700,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Text(
+                                                        text = if (lang == Localization.Language.ENGLISH) "Unlock with Biometrics" else "Ξεκλείδωμα με Βιομετρικά",
+                                                        fontSize = 12.5.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Switch(
+                                                        checked = biometricEnabled,
+                                                        onCheckedChange = { enabled ->
+                                                            biometricEnabled = enabled
+                                                            AppLockManager.setBiometricEnabled(context, enabled)
+                                                        },
+                                                        colors = SwitchDefaults.colors(
+                                                            checkedThumbColor = Color.White,
+                                                            checkedTrackColor = Emerald700
+                                                        ),
+                                                        modifier = Modifier.testTag("app_lock_biometric_switch")
+                                                    )
+                                                }
+                                            }
+
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = MaterialTheme.colorScheme.surface,
+                                                border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.35f)),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .clickable {
+                                                        isChangingPin = true
+                                                        showPinSetupDialog = true
+                                                    }
+                                                    .testTag("app_lock_change_pin_btn")
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Pin,
+                                                        contentDescription = null,
+                                                        tint = Emerald700,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = if (lang == Localization.Language.ENGLISH) "Change 4-digit PIN" else "Αλλαγή 4-ψήφιου PIN",
+                                                        fontSize = 12.5.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Emerald700
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (showPinSetupDialog) {
+                            AppLockPinSetupDialog(
+                                appLanguage = appLanguage,
+                                isChangingExisting = isChangingPin,
+                                onPinConfirmed = { newPin ->
+                                    if (isChangingPin) {
+                                        AppLockManager.updatePin(context, newPin)
+                                    } else {
+                                        AppLockManager.enableWithPin(context, newPin, canUseBiometrics)
+                                        appLockEnabled = true
+                                        biometricEnabled = AppLockManager.isBiometricEnabled(context)
+                                    }
+                                    showPinSetupDialog = false
+                                },
+                                onDismiss = { showPinSetupDialog = false }
+                            )
                         }
                     }
 

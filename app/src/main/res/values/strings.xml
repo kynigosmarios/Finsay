@@ -2,4 +2,10 @@
     <string name="app_name">Finsay</string>
     <string name="widget_description">Γρήγορη καταχώρηση εξόδου στο Finsay</string>
     <string name="default_web_client_id">351790236571-093q02uts0ju5do0hp4os8el545l8oai.apps.googleusercontent.com</string>
+    <string name="shortcut_voice_short">Φωνητική</string>
+    <string name="shortcut_voice_long">Φωνητική Καταχώρηση</string>
+    <string name="shortcut_scan_short">Απόδειξη</string>
+    <string name="shortcut_scan_long">Σάρωση Απόδειξης</string>
+    <string name="shortcut_expense_short">Νέο Έξοδο</string>
+    <string name="shortcut_expense_long">Νέο Έξοδο</string>
 </resources>

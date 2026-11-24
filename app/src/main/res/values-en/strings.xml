@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Finsay</string>
+    <string name="widget_description">Quick expense entry in Finsay</string>
+    <string name="shortcut_voice_short">Voice Entry</string>
+    <string name="shortcut_voice_long">Voice Entry</string>
+    <string name="shortcut_scan_short">Scan Receipt</string>
+    <string name="shortcut_scan_long">Scan Receipt</string>
+    <string name="shortcut_expense_short">New Expense</string>
+    <string name="shortcut_expense_long">New Expense</string>
+</resources>

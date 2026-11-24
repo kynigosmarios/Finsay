@@ -132,7 +132,8 @@ object BankNotificationSystemManager {
             )
 
             val title = "Εντοπίστηκε συναλλαγή: ${tx.bankName}"
-            val text = "${tx.merchantName} • ${String.format(Locale.GERMANY, "%.2f €", tx.amount)}"
+            val curSymbol = CurrencyFormatter.currentSymbol
+            val text = "${tx.merchantName} • ${String.format(Locale.GERMANY, "%.2f", tx.amount)} $curSymbol"
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_infinity)

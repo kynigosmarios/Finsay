@@ -67,6 +67,7 @@ import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsForecastHelper
 import com.example.util.ExpenseReportExporter
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -81,6 +82,7 @@ internal fun AnalyticsMonthForecastCard(
     selectedMonthZeroIndexed: Int,
     lang: Localization.Language
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     val result = remember(
         allExpenses,
         allIncomes,
@@ -182,7 +184,7 @@ internal fun AnalyticsMonthForecastCard(
                         Spacer(modifier = Modifier.height(6.dp))
                         val sign = if (result.expenseDeltaAmount >= 0) "+" else ""
                         Text(
-                            text = String.format(Locale.US, "%s%.2f €", sign, result.expenseDeltaAmount),
+                            text = "${String.format(Locale.US, "%s%.2f", sign, result.expenseDeltaAmount)} $currencySymbol",
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = expAccent,
@@ -238,7 +240,7 @@ internal fun AnalyticsMonthForecastCard(
                         Spacer(modifier = Modifier.height(6.dp))
                         val sign = if (result.incomeDeltaAmount >= 0) "+" else ""
                         Text(
-                            text = String.format(Locale.US, "%s%.2f €", sign, result.incomeDeltaAmount),
+                            text = "${String.format(Locale.US, "%s%.2f", sign, result.incomeDeltaAmount)} $currencySymbol",
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = incAccent,
@@ -302,7 +304,7 @@ internal fun AnalyticsMonthForecastCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = String.format(Locale.US, "%.2f €", result.projectedEndOfMonthExpenses),
+                        text = "${String.format(Locale.US, "%.2f", result.projectedEndOfMonthExpenses)} $currencySymbol",
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -322,7 +324,7 @@ internal fun AnalyticsMonthForecastCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = String.format(Locale.US, "%.2f €", result.remainingScheduledRecurringTotal),
+                        text = "${String.format(Locale.US, "%.2f", result.remainingScheduledRecurringTotal)} $currencySymbol",
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -353,12 +355,12 @@ internal fun AnalyticsMonthForecastCard(
                             color = netColor
                         )
                         Text(
-                            text = String.format(
+                            text = "${String.format(
                                 Locale.US,
-                                "%s%.2f €",
+                                "%s%.2f",
                                 if (isSurplus) "+" else "",
                                 result.projectedEndOfMonthNet
-                            ),
+                            )} $currencySymbol",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Black,
                             color = netColor
@@ -373,6 +375,7 @@ internal fun AnalyticsMonthForecastCard(
 @Composable
 internal fun AnalyticsDataExportCard(
     expenses: List<Expense>,
+    incomes: List<Income> = emptyList(),
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
     isPro: Boolean,
@@ -381,6 +384,7 @@ internal fun AnalyticsDataExportCard(
     context: Context,
     onShowPremiumPaywall: (String) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     var exportPeriodIndex by remember { mutableIntStateOf(0) }
     var exportRangeStart by remember {
         val cal = Calendar.getInstance().apply {
@@ -443,6 +447,39 @@ internal fun AnalyticsDataExportCard(
                 exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }.contains(selectedExportMemberId)
 
             matchesPeriod && matchesCategory && matchesMember
+        }
+    }
+
+    val filteredExportIncomes = remember(
+        incomes,
+        exportPeriodIndex,
+        exportRangeStart,
+        exportRangeEnd,
+        selectedExportMemberId
+    ) {
+        val nowCal = Calendar.getInstance()
+        val curYear = nowCal.get(Calendar.YEAR)
+        val curMonth = nowCal.get(Calendar.MONTH)
+        val prevCal = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
+        val prevYear = prevCal.get(Calendar.YEAR)
+        val prevMonth = prevCal.get(Calendar.MONTH)
+        val reusableCal = Calendar.getInstance()
+
+        incomes.filter { inc ->
+            val matchesPeriod = when (exportPeriodIndex) {
+                0 -> {
+                    reusableCal.timeInMillis = inc.timestamp
+                    reusableCal.get(Calendar.YEAR) == curYear && reusableCal.get(Calendar.MONTH) == curMonth
+                }
+                1 -> {
+                    reusableCal.timeInMillis = inc.timestamp
+                    reusableCal.get(Calendar.YEAR) == prevYear && reusableCal.get(Calendar.MONTH) == prevMonth
+                }
+                2 -> inc.timestamp in exportRangeStart..exportRangeEnd
+                else -> true
+            }
+            val matchesMember = selectedExportMemberId == null || inc.memberId == selectedExportMemberId
+            matchesPeriod && matchesMember
         }
     }
 
@@ -743,15 +780,27 @@ internal fun AnalyticsDataExportCard(
                         if (!isPro) {
                             onShowPremiumPaywall("export_report")
                         } else {
-                            val targetList = if (filteredExportExpenses.isNotEmpty()) filteredExportExpenses else expenses
-                            val targetTitle = if (filteredExportExpenses.isNotEmpty()) exportPeriodTitle else (if (isGreek) "Όλα τα Έξοδα" else "All Expenses")
-                            val startMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeStart else null
-                            val endMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeEnd else null
-                            if (targetList.isEmpty()) {
-                                Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένα έξοδα προς εξαγωγή" else "No expenses to export", Toast.LENGTH_SHORT).show()
+                            val hasFiltered = filteredExportExpenses.isNotEmpty() || filteredExportIncomes.isNotEmpty()
+                            val targetList = if (hasFiltered) filteredExportExpenses else expenses
+                            val targetIncomes = if (hasFiltered) filteredExportIncomes else incomes
+                            val targetTitle = if (hasFiltered) exportPeriodTitle else (if (isGreek) "Όλες οι Συναλλαγές" else "All Transactions")
+                            val startMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeStart else null
+                            val endMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeEnd else null
+                            if (targetList.isEmpty() && targetIncomes.isEmpty()) {
+                                Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένες συναλλαγές προς εξαγωγή" else "No transactions to export", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση PDF..." else "Generating and sharing PDF...", Toast.LENGTH_SHORT).show()
-                                ExpenseReportExporter.exportPdf(context, targetList, targetTitle, startMs, endMs)
+                                ExpenseReportExporter.exportPdf(
+                                    context = context,
+                                    expenses = targetList,
+                                    periodTitle = targetTitle,
+                                    startDateMillis = startMs,
+                                    endDateMillis = endMs,
+                                    incomes = targetIncomes,
+                                    members = members,
+                                    currencySymbol = currencySymbol,
+                                    isEnglish = !isGreek
+                                )
                             }
                         }
                     },
@@ -779,15 +828,27 @@ internal fun AnalyticsDataExportCard(
                         if (!isPro) {
                             onShowPremiumPaywall("export_report")
                         } else {
-                            val targetList = if (filteredExportExpenses.isNotEmpty()) filteredExportExpenses else expenses
-                            val targetTitle = if (filteredExportExpenses.isNotEmpty()) exportPeriodTitle else (if (isGreek) "Όλα τα Έξοδα" else "All Expenses")
-                            val startMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeStart else null
-                            val endMs = if (filteredExportExpenses.isNotEmpty() && exportPeriodIndex == 2) exportRangeEnd else null
-                            if (targetList.isEmpty()) {
-                                Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένα έξοδα προς εξαγωγή" else "No expenses to export", Toast.LENGTH_SHORT).show()
+                            val hasFiltered = filteredExportExpenses.isNotEmpty() || filteredExportIncomes.isNotEmpty()
+                            val targetList = if (hasFiltered) filteredExportExpenses else expenses
+                            val targetIncomes = if (hasFiltered) filteredExportIncomes else incomes
+                            val targetTitle = if (hasFiltered) exportPeriodTitle else (if (isGreek) "Όλες οι Συναλλαγές" else "All Transactions")
+                            val startMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeStart else null
+                            val endMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeEnd else null
+                            if (targetList.isEmpty() && targetIncomes.isEmpty()) {
+                                Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένες συναλλαγές προς εξαγωγή" else "No transactions to export", Toast.LENGTH_SHORT).show()
                             } else {
                                 Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση CSV..." else "Generating and sharing CSV...", Toast.LENGTH_SHORT).show()
-                                ExpenseReportExporter.exportCsv(context, targetList, targetTitle, startMs, endMs)
+                                ExpenseReportExporter.exportCsv(
+                                    context = context,
+                                    expenses = targetList,
+                                    periodTitle = targetTitle,
+                                    startDateMillis = startMs,
+                                    endDateMillis = endMs,
+                                    incomes = targetIncomes,
+                                    members = members,
+                                    currencySymbol = currencySymbol,
+                                    isEnglish = !isGreek
+                                )
                             }
                         }
                     },

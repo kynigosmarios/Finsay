@@ -526,4 +526,129 @@ test("Clients cannot self-grant or tamper with isPremium on /users or /household
   );
 });
 
+test("Sensitive profile PII lives exclusively in owner-only /users/{uid}/private/profile and is blocked on /users/{uid}", async () => {
+  await seedSharedHousehold();
+  const creatorDb = testEnv.authenticatedContext(CREATOR_UID).firestore();
+  const editorDb = testEnv.authenticatedContext(EDITOR_UID).firestore();
+  const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore();
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const newUid = "privacy_new_uid";
+  const newDb = testEnv.authenticatedContext(newUid).firestore();
+
+  // 1. Creating a user profile with sensitive PII on root /users/{uid} must FAIL
+  await assertFails(
+    newDb.collection("users").doc(newUid).set({
+      uid: newUid,
+      email: "privacy@example.com",
+      displayName: "Privacy User",
+      phoneNumber: "+306900000000",
+      birthDate: "01/01/1990",
+      occupation: "Engineer",
+      city: "Athens",
+    })
+  );
+
+  // 2. Creating clean public profile on /users/{uid} + private PII in /users/{uid}/private/profile must SUCCEED
+  await assertSucceeds(
+    newDb.collection("users").doc(newUid).set({
+      uid: newUid,
+      email: "privacy@example.com",
+      displayName: "Privacy User",
+      firstName: "Privacy",
+      lastName: "User",
+      isPremium: false,
+    })
+  );
+  await assertSucceeds(
+    newDb.collection("users").doc(newUid).collection("private").doc("profile").set({
+      phoneNumber: "+306900000000",
+      birthDate: "01/01/1990",
+      occupation: "Engineer",
+      city: "Athens",
+    })
+  );
+
+  // 3. Owner can read and update their own /users/{uid}/private/profile
+  await assertSucceeds(
+    newDb.collection("users").doc(newUid).collection("private").doc("profile").get()
+  );
+  await assertSucceeds(
+    newDb.collection("users").doc(newUid).collection("private").doc("profile").update({
+      city: "Thessaloniki",
+    })
+  );
+
+  // 4. Other authenticated users (even household members) and unauthenticated users CANNOT read or write /users/{uid}/private/profile
+  await assertFails(
+    creatorDb.collection("users").doc(newUid).collection("private").doc("profile").get()
+  );
+  await assertFails(
+    editorDb.collection("users").doc(newUid).collection("private").doc("profile").get()
+  );
+  await assertFails(
+    outsiderDb.collection("users").doc(newUid).collection("private").doc("profile").get()
+  );
+  await assertFails(
+    unauthDb.collection("users").doc(newUid).collection("private").doc("profile").get()
+  );
+  await assertFails(
+    outsiderDb.collection("users").doc(newUid).collection("private").doc("profile").set({ city: "Hacked" })
+  );
+
+  // 5. Updating /users/{uid} to add sensitive PII must FAIL
+  await assertFails(
+    newDb.collection("users").doc(newUid).update({ phoneNumber: "+306911111111" })
+  );
+  await assertFails(
+    newDb.collection("users").doc(newUid).set({ city: "Athens" }, { merge: true })
+  );
+
+  // 6. Legacy migration: existing user with legacy PII on /users/{uid} can migrate to /private/profile and scrub root fields
+  const legacyUid = "legacy_user_uid";
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await ctx.firestore().collection("users").doc(legacyUid).set({
+      uid: legacyUid,
+      email: "legacy@example.com",
+      displayName: "Legacy User",
+      phoneNumber: "+306922222222",
+      birthDate: "15/05/1988",
+      occupation: "Teacher",
+      city: "Patras",
+    });
+  });
+  const legacyDb = testEnv.authenticatedContext(legacyUid).firestore();
+  await assertSucceeds(
+    legacyDb.collection("users").doc(legacyUid).collection("private").doc("profile").set({
+      phoneNumber: "+306922222222",
+      birthDate: "15/05/1988",
+      occupation: "Teacher",
+      city: "Patras",
+    })
+  );
+  // Pre-migration unrelated preference update still succeeds
+  await assertSucceeds(
+    legacyDb.collection("users").doc(legacyUid).set({ themeMode: "DARK" }, { merge: true })
+  );
+  // Deleting legacy PII fields from root via rewrite without those keys succeeds
+  await assertSucceeds(
+    legacyDb.collection("users").doc(legacyUid).set({
+      uid: legacyUid,
+      email: "legacy@example.com",
+      displayName: "Legacy User",
+      themeMode: "DARK",
+    })
+  );
+
+  // 7. Household sharing email lookup still succeeds on public /users/{uid}
+  await assertSucceeds(
+    creatorDb.collection("users").where("email", "==", "privacy@example.com").limit(1).get()
+  );
+
+  // 8. Owner can delete /users/{uid}/private/profile on account deletion
+  await assertSucceeds(
+    newDb.collection("users").doc(newUid).collection("private").doc("profile").delete()
+  );
+});
+
+
 

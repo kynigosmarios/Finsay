@@ -2,12 +2,13 @@ package com.example
 
 import android.content.Intent
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import android.util.Log
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -15,26 +16,34 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.components.AppLockScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.EmailVerificationScreen
 import com.example.ui.screens.MainScreen
-import android.util.Log
-import androidx.compose.foundation.isSystemInDarkTheme
 import com.example.ui.theme.Emerald700
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.OikoNomosViewModel
+import com.example.util.AppLockManager
+import com.example.util.InAppReviewManager
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     companion object {
         const val ACTION_QUICK_EXPENSE = "ACTION_QUICK_EXPENSE"
+        const val ACTION_SHORTCUT_VOICE = "com.example.ACTION_SHORTCUT_VOICE"
+        const val ACTION_SHORTCUT_SCAN = "com.example.ACTION_SHORTCUT_SCAN"
+        const val ACTION_SHORTCUT_EXPENSE = "com.example.ACTION_SHORTCUT_EXPENSE"
     }
 
     private val viewModel: OikoNomosViewModel by viewModels()
     private lateinit var billingManager: com.example.billing.BillingManager
+    private var isAppLocked by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +51,14 @@ class MainActivity : ComponentActivity() {
             enableEdgeToEdge()
         } catch (t: Throwable) {
             Log.w("MainActivity", "enableEdgeToEdge safe fallback: ${t.message}")
+        }
+
+        isAppLocked = AppLockManager.shouldShowLockOnLaunch(this)
+
+        try {
+            InAppReviewManager.recordAppOpen(this)
+        } catch (t: Throwable) {
+            Log.w("MainActivity", "InAppReviewManager init: ${t.message}")
         }
 
         try {
@@ -91,6 +108,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+            val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
             val isDarkTheme = when {
                 themeMode.equals("DARK", ignoreCase = true) -> true
                 themeMode.equals("LIGHT", ignoreCase = true) -> false
@@ -101,23 +119,39 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppRootNavigator(
-                        viewModel = viewModel,
-                        onLaunchBilling = { act, planId ->
-                            try {
-                                if (::billingManager.isInitialized) {
-                                    billingManager.launchPurchaseFlow(act, planId)
-                                } else {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AppRootNavigator(
+                            viewModel = viewModel,
+                            onLaunchBilling = { act, planId ->
+                                try {
+                                    if (::billingManager.isInitialized) {
+                                        billingManager.launchPurchaseFlow(act, planId)
+                                    } else {
+                                        false
+                                    }
+                                } catch (t: Throwable) {
+                                    Log.w("MainActivity", "launchPurchaseFlow safe fallback: ${t.message}")
                                     false
                                 }
-                            } catch (t: Throwable) {
-                                Log.w("MainActivity", "launchPurchaseFlow safe fallback: ${t.message}")
-                                false
                             }
+                        )
+
+                        if (isAppLocked) {
+                            AppLockScreen(
+                                appLanguage = appLanguage,
+                                onUnlocked = { isAppLocked = false }
+                            )
                         }
-                    )
+                    }
                 }
             }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            AppLockManager.onAppBackgrounded()
         }
     }
 
@@ -145,6 +179,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         try {
+            if (AppLockManager.shouldRelockOnResume(this)) {
+                isAppLocked = true
+            }
             viewModel.onAppResumed()
             if (::billingManager.isInitialized) {
                 billingManager.queryActivePurchases()
@@ -164,14 +201,22 @@ class MainActivity : ComponentActivity() {
             val action = intent.action
             val extraAction = intent.getStringExtra("EXTRA_QUICK_ACTION")
 
-            if (action == ACTION_QUICK_EXPENSE || extraAction == ACTION_QUICK_EXPENSE) {
-                viewModel.openVoiceInputDialog()
+            when {
+                action == ACTION_SHORTCUT_VOICE ||
+                    action == ACTION_QUICK_EXPENSE ||
+                    extraAction == ACTION_QUICK_EXPENSE -> {
+                    viewModel.openVoiceInputDialog()
+                }
+                action == ACTION_SHORTCUT_SCAN -> {
+                    viewModel.openReceiptScanDialog()
+                }
+                action == ACTION_SHORTCUT_EXPENSE -> {
+                    viewModel.openManualExpenseDialog(null)
+                }
             }
 
             val bankTxId = intent.getStringExtra("EXTRA_BANK_TX_ID")
             if (!bankTxId.isNullOrBlank()) {
-                // User opened app by tapping notification. Do not auto-confirm;
-                // Keep the pending transaction in BankNotificationHolder so the banner card stack displays it.
                 Log.d("MainActivity", "User opened app from bank transaction notification: $bankTxId")
             }
 

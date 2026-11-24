@@ -218,22 +218,23 @@ object SettleUpCalculator {
     fun formatSummaryText(
         result: SettleUpResult,
         householdTitle: String,
-        isGreek: Boolean = true
+        isGreek: Boolean = true,
+        currencySymbol: String = CurrencyFormatter.currentSymbol
     ): String {
         val sb = StringBuilder()
         if (isGreek) {
             sb.appendLine("📊 ΕΚΚΑΘΑΡΙΣΗ ΕΞΟΔΩΝ - $householdTitle")
             sb.appendLine("────────────────────────────")
-            sb.appendLine("Σύνολο Εξόδων: ${String.format(Locale.GERMANY, "%.2f €", result.totalHouseholdExpenses)}")
+            sb.appendLine("Σύνολο Εξόδων: ${String.format(Locale.GERMANY, "%.2f", result.totalHouseholdExpenses)} $currencySymbol")
             sb.appendLine()
             sb.appendLine("👤 Συνοπτική Εικόνα:")
             for (s in result.memberSummaries) {
                 val status = when {
-                    s.netBalance > 0.01 -> "(+${String.format(Locale.GERMANY, "%.2f €", s.netBalance)} επιστροφή)"
-                    s.netBalance < -0.01 -> "(-${String.format(Locale.GERMANY, "%.2f €", abs(s.netBalance))} οφειλή)"
+                    s.netBalance > 0.01 -> "(+${String.format(Locale.GERMANY, "%.2f", s.netBalance)} $currencySymbol επιστροφή)"
+                    s.netBalance < -0.01 -> "(-${String.format(Locale.GERMANY, "%.2f", abs(s.netBalance))} $currencySymbol οφειλή)"
                     else -> "(τακτοποιημένο)"
                 }
-                sb.appendLine("• ${s.member.name}: Πλήρωσε ${String.format(Locale.GERMANY, "%.2f €", s.totalPaid)} | Μερίδιο ${String.format(Locale.GERMANY, "%.2f €", s.totalShare)} $status")
+                sb.appendLine("• ${s.member.name}: Πλήρωσε ${String.format(Locale.GERMANY, "%.2f", s.totalPaid)} $currencySymbol | Μερίδιο ${String.format(Locale.GERMANY, "%.2f", s.totalShare)} $currencySymbol $status")
             }
             sb.appendLine()
             if (result.transfers.isEmpty()) {
@@ -241,7 +242,7 @@ object SettleUpCalculator {
             } else {
                 sb.appendLine("🤝 Προτεινόμενες Μεταφορές:")
                 for (t in result.transfers) {
-                    sb.appendLine("👉 ${t.fromMember.name} ➜ ${t.toMember.name}: ${String.format(Locale.GERMANY, "%.2f €", t.amount)}")
+                    sb.appendLine("👉 ${t.fromMember.name} ➜ ${t.toMember.name}: ${String.format(Locale.GERMANY, "%.2f", t.amount)} $currencySymbol")
                 }
             }
             sb.appendLine("────────────────────────────")
@@ -249,16 +250,16 @@ object SettleUpCalculator {
         } else {
             sb.appendLine("📊 EXPENSE SETTLEMENT - $householdTitle")
             sb.appendLine("────────────────────────────")
-            sb.appendLine("Total Expenses: ${String.format(Locale.US, "%.2f €", result.totalHouseholdExpenses)}")
+            sb.appendLine("Total Expenses: ${String.format(Locale.US, "%.2f", result.totalHouseholdExpenses)} $currencySymbol")
             sb.appendLine()
             sb.appendLine("👤 Member Breakdown:")
             for (s in result.memberSummaries) {
                 val status = when {
-                    s.netBalance > 0.01 -> "(+${String.format(Locale.US, "%.2f €", s.netBalance)} get back)"
-                    s.netBalance < -0.01 -> "(-${String.format(Locale.US, "%.2f €", abs(s.netBalance))} owes)"
+                    s.netBalance > 0.01 -> "(+${String.format(Locale.US, "%.2f", s.netBalance)} $currencySymbol get back)"
+                    s.netBalance < -0.01 -> "(-${String.format(Locale.US, "%.2f", abs(s.netBalance))} $currencySymbol owes)"
                     else -> "(settled)"
                 }
-                sb.appendLine("• ${s.member.name}: Paid ${String.format(Locale.US, "%.2f €", s.totalPaid)} | Share ${String.format(Locale.US, "%.2f €", s.totalShare)} $status")
+                sb.appendLine("• ${s.member.name}: Paid ${String.format(Locale.US, "%.2f", s.totalPaid)} $currencySymbol | Share ${String.format(Locale.US, "%.2f", s.totalShare)} $currencySymbol $status")
             }
             sb.appendLine()
             if (result.transfers.isEmpty()) {
@@ -266,7 +267,7 @@ object SettleUpCalculator {
             } else {
                 sb.appendLine("🤝 Recommended Transfers:")
                 for (t in result.transfers) {
-                    sb.appendLine("👉 ${t.fromMember.name} ➜ ${t.toMember.name}: ${String.format(Locale.US, "%.2f €", t.amount)}")
+                    sb.appendLine("👉 ${t.fromMember.name} ➜ ${t.toMember.name}: ${String.format(Locale.US, "%.2f", t.amount)} $currencySymbol")
                 }
             }
             sb.appendLine("────────────────────────────")

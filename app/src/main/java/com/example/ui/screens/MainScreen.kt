@@ -81,6 +81,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -162,6 +163,8 @@ import com.example.ui.theme.LogoGreen
 import com.example.ui.theme.ModernFontFamily
 import com.example.ui.viewmodel.OikoNomosViewModel
 import com.example.util.AppUpdateChecker
+import com.example.util.InAppReviewManager
+import com.example.util.LocalCurrencySymbol
 import com.example.util.SpeechRecognitionHelper
 import kotlinx.coroutines.launch
 
@@ -289,6 +292,7 @@ fun MainScreen(
     val bankAutoCatcherEnabled by viewModel.bankAutoCatcherEnabled.collectAsStateWithLifecycle()
     val legalDocumentsInitialTab by viewModel.legalDocumentsInitialTab.collectAsStateWithLifecycle()
     val isUserPro by viewModel.isProUser.collectAsStateWithLifecycle()
+    val pendingInAppReviewPrompt by viewModel.pendingInAppReviewPrompt.collectAsStateWithLifecycle()
 
     val activeSubPage = when {
         legalDocumentsInitialTab != null -> InAppSubPage.LEGAL
@@ -315,6 +319,17 @@ fun MainScreen(
         snackbarMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.clearSnackbar()
+        }
+    }
+
+    // Discreet Google Play In-App Review prompt once user meets usage milestones
+    LaunchedEffect(pendingInAppReviewPrompt) {
+        if (pendingInAppReviewPrompt) {
+            viewModel.consumeInAppReviewPrompt()
+            val act = context as? android.app.Activity
+            if (act != null) {
+                InAppReviewManager.launchReviewIfEligible(act)
+            }
         }
     }
 
@@ -395,6 +410,7 @@ fun MainScreen(
         else -> isSystemInDarkTheme()
     }
 
+    CompositionLocalProvider(LocalCurrencySymbol provides currencySymbol) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val screenHeightDp = maxHeight
         val fontScale = LocalDensity.current.fontScale
@@ -656,6 +672,11 @@ fun MainScreen(
                 BankNotificationBanner(
                     transactions = pendingBankTransactions,
                     appLanguage = appLanguage,
+                    resolveSuggestedCategory = { tx ->
+                        viewModel.resolveSuggestedCategoryForBankTx(tx)?.let {
+                            com.example.util.Localization.translateCategory(it.name, lang)
+                        }
+                    },
                     onConfirmTransaction = { viewModel.confirmBankTransaction(it) },
                     onDismissTransaction = { viewModel.dismissBankTransaction(it) }
                 )
@@ -754,6 +775,7 @@ fun MainScreen(
                         onVoiceExpense = { viewModel.openVoiceInputDialog() },
                         onEditExpense = { viewModel.openManualExpenseDialog(it) },
                         onDeleteExpense = { viewModel.deleteExpense(it) },
+                        onDuplicateExpense = { viewModel.duplicateExpenseToday(it) },
                         onEditIncome = { viewModel.openManualIncomeDialog(it) },
                         onDeleteIncome = { viewModel.deleteIncome(it) },
                         onExportExcel = { viewModel.openExportReportDialog() },
@@ -872,6 +894,8 @@ fun MainScreen(
                         onRenameHouseholdById = { id, name -> viewModel.renameHousehold(id, name) },
                         onSelectHousehold = { viewModel.switchExodologio(it) },
                         onCreateNewHousehold = { viewModel.createNewExodologio(it) },
+                        onCreateNewHouseholdWithCurrency = { name, code -> viewModel.createNewExodologio(name, code) },
+                        onUpdateHouseholdCurrency = { hid, code -> viewModel.updateHouseholdCurrency(hid, code) },
                         onDeleteHousehold = { viewModel.deleteHousehold(it) },
                         onManageMembers = {
                             viewModel.clearVerifiedUserLookupState()
@@ -1211,6 +1235,8 @@ fun MainScreen(
             currentUserId = currentUser?.uid.orEmpty(),
             onSelectHousehold = { viewModel.switchExodologio(it) },
             onCreateNewHousehold = { viewModel.createNewExodologio(it) },
+            onCreateNewHouseholdWithCurrency = { name, code -> viewModel.createNewExodologio(name, code) },
+            onUpdateHouseholdCurrency = { hid, code -> viewModel.updateHouseholdCurrency(hid, code) },
             onDeleteHousehold = { viewModel.deleteHousehold(it) },
             onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
             onDismiss = {
@@ -1303,10 +1329,14 @@ fun MainScreen(
         )
     }
 
-    // Feature 4: Excel / CSV Export Report Dialog
+    // Feature 4: Excel / PDF / CSV Full Financial Export Report Dialog
     if (showExportReportDialog) {
         ExportReportDialog(
             expenses = allExpenses,
+            incomes = allIncomes,
+            members = members,
+            householdName = currentHousehold?.name.orEmpty(),
+            appLanguage = appLanguage,
             onDismiss = { viewModel.dismissExportReportDialog() },
             onShowMessage = { viewModel.showSnackbar(it) }
         )
@@ -1361,20 +1391,22 @@ fun MainScreen(
         )
     }
 
-    // New-User Welcome Onboarding Carousel
+    // New-User Welcome Onboarding Modal (Streamlined)
     if (showWelcomeCarousel) {
         WelcomeOnboardingCarouselDialog(
             appLanguage = appLanguage,
             onDismiss = { viewModel.dismissWelcomeCarousel() },
-            onOpenProPaywall = { viewModel.showPremiumPaywall("welcome_carousel") }
+            onOpenProPaywall = { viewModel.showPremiumPaywall("welcome_carousel") },
+            onOpenLegalDocument = { tab -> viewModel.openLegalDocumentsPage(tab) }
         )
     }
 
-    // GDPR / Privacy Consent Modal on App Start
+    // GDPR / Privacy Consent Modal on App Start (Legacy fallback)
     if (showPrivacyConsentDialog) {
         PrivacyConsentDialog(
             appLanguage = appLanguage,
             onAccept = { viewModel.acceptPrivacyConsent() }
         )
+    }
     }
 }

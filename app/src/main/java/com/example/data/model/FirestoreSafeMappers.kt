@@ -331,6 +331,7 @@ fun mapHouseholdFromFields(
         memberNames = namesMap,
         memberDefaultPayers = defaultPayersMap,
         pendingInviteRole = coerceSafeString(getField("pendingInviteRole")) ?: existing?.pendingInviteRole ?: "REGISTAR",
+        currencyCode = coerceSafeString(getField("currencyCode"))?.ifBlank { null } ?: existing?.currencyCode?.ifBlank { null } ?: "EUR",
         isPremium = isPrem,
         createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt,
         updatedAt = coerceSafeTimestamp(getField("updatedAt")) ?: existing?.updatedAt

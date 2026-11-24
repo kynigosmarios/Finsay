@@ -93,6 +93,7 @@ dependencies {
     implementation(platform(libs.firebase.bom))
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.biometric)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.compose.material3)
@@ -123,6 +124,8 @@ dependencies {
     implementation(libs.play.billing)
     implementation(libs.play.app.update)
     implementation(libs.play.app.update.ktx)
+    implementation(libs.play.review)
+    implementation(libs.play.review.ktx)
     implementation(libs.play.services.mlkit.text.recognition)
     implementation(libs.play.services.mlkit.barcode.scanning)
     implementation(libs.retrofit)

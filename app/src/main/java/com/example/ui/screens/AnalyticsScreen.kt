@@ -594,6 +594,7 @@ fun AnalyticsScreen(
         item(key = "data_export", contentType = "data_export") {
             AnalyticsDataExportCard(
                 expenses = expenses,
+                incomes = incomes,
                 categories = categories,
                 members = members,
                 isPro = isPro,

@@ -125,7 +125,8 @@ object Localization {
     fun editCategoryTitle(lang: Language): String = if (lang == Language.ENGLISH) "Edit Category" else "Επεξεργασία Κατηγορίας"
     fun categoryNameLabel(lang: Language): String = if (lang == Language.ENGLISH) "Category Name *" else "Όνομα Κατηγορίας *"
     fun categoryNamePlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. Gym, Pets, Entertainment" else "π.χ. Γυμναστήριο, Κατοικίδια, Χόμπι"
-    fun monthlyBudgetLimitLabel(lang: Language): String = if (lang == Language.ENGLISH) "Monthly Budget Limit (€)" else "Μηνιαίο Όριο Budget (€)"
+    fun monthlyBudgetLimitLabel(lang: Language, currencySymbol: String = CurrencyFormatter.currentSymbol): String =
+        if (lang == Language.ENGLISH) "Monthly Budget Limit ($currencySymbol)" else "Μηνιαίο Όριο Budget ($currencySymbol)"
     fun categoryIconLabel(lang: Language): String = if (lang == Language.ENGLISH) "Choose Icon" else "Επιλογή Εικονιδίου"
     fun categoryKeywordsLabel(lang: Language): String = if (lang == Language.ENGLISH) "Voice keywords: comma-separated" else "Φωνητικές λέξεις: χωρισμένες με κόμμα"
     fun categoryKeywordsPlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. supermarket, groceries, food" else "π.χ. σουπερ μαρκετ, σκλαβενιτης, φαγητο"
@@ -148,8 +149,10 @@ object Localization {
     fun executeNowAction(lang: Language): String = if (lang == Language.ENGLISH) "Execute now" else "Εκτέλεση τώρα"
     fun goalTitleLabel(lang: Language): String = if (lang == Language.ENGLISH) "Goal Title" else "Τίτλος στόχου"
     fun goalTitlePlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. Vacation, Car, Emergency" else "π.χ. Διακοπές, Αυτοκίνητο, Έκτακτη ανάγκη"
-    fun targetAmountLabel(lang: Language): String = if (lang == Language.ENGLISH) "Target Amount (€)" else "Ποσό στόχου (€)"
-    fun currentSavedLabel(lang: Language): String = if (lang == Language.ENGLISH) "Already Saved (€)" else "Αρχικό ποσό (€)"
+    fun targetAmountLabel(lang: Language, currencySymbol: String = CurrencyFormatter.currentSymbol): String =
+        if (lang == Language.ENGLISH) "Target Amount ($currencySymbol)" else "Ποσό στόχου ($currencySymbol)"
+    fun currentSavedLabel(lang: Language, currencySymbol: String = CurrencyFormatter.currentSymbol): String =
+        if (lang == Language.ENGLISH) "Already Saved ($currencySymbol)" else "Αρχικό ποσό ($currencySymbol)"
     fun recurringDescLabel(lang: Language): String = if (lang == Language.ENGLISH) "Description" else "Περιγραφή πάγιας"
     fun recurringDescPlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. Rent, Netflix, Electric bill" else "π.χ. Ενοίκιο, Netflix, ΔΕΗ"
     fun dayOfMonthLabel(lang: Language): String = if (lang == Language.ENGLISH) "Day of month (1-31)" else "Ημέρα μήνα (1-31)"
@@ -157,7 +160,8 @@ object Localization {
     fun editExpenseTitle(lang: Language): String = if (lang == Language.ENGLISH) "Edit Expense" else "Επεξεργασία Εξόδου"
     fun expenseDescLabel(lang: Language): String = if (lang == Language.ENGLISH) "Description" else "Περιγραφή εξόδου"
     fun expenseDescPlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. Sklavenitis, Pharmacy, Coffee" else "π.χ. Σκλαβενίτης, Φαρμακείο, Καφές"
-    fun expenseAmountLabel(lang: Language): String = if (lang == Language.ENGLISH) "Amount (€)" else "Ποσό (€)"
+    fun expenseAmountLabel(lang: Language, currencySymbol: String = CurrencyFormatter.currentSymbol): String =
+        if (lang == Language.ENGLISH) "Amount ($currencySymbol)" else "Ποσό ($currencySymbol)"
     fun memberWhoPaid(lang: Language): String = if (lang == Language.ENGLISH) "Payer" else "Πληρωτής"
     fun payersSectionTitle(lang: Language): String = if (lang == Language.ENGLISH) "Who paid?" else "Ποιος πλήρωσε"
     fun payersSubtitle(lang: Language): String = if (lang == Language.ENGLISH) "Select one or more members who contributed" else "Επιλέξτε ένα ή περισσότερα μέλη που συνεισέφεραν"
@@ -179,7 +183,8 @@ object Localization {
     fun editIncomeTitle(lang: Language): String = if (lang == Language.ENGLISH) "Edit Income" else "Επεξεργασία Εσόδου"
     fun incomeDescLabel(lang: Language): String = if (lang == Language.ENGLISH) "Income Description *" else "Περιγραφή Εσόδου *"
     fun incomeDescPlaceholder(lang: Language): String = if (lang == Language.ENGLISH) "e.g. October Salary, Rent" else "π.χ. Μισθός Οκτωβρίου, Ενοίκιο"
-    fun incomeAmountLabel(lang: Language): String = if (lang == Language.ENGLISH) "Income Amount (€) *" else "Ποσό Εσόδου (€) *"
+    fun incomeAmountLabel(lang: Language, currencySymbol: String = CurrencyFormatter.currentSymbol): String =
+        if (lang == Language.ENGLISH) "Income Amount ($currencySymbol) *" else "Ποσό Εσόδου ($currencySymbol) *"
     fun memberWhoContributed(lang: Language): String = if (lang == Language.ENGLISH) "MEMBER WHO CONTRIBUTED *" else "ΜΕΛΟΣ ΠΟΥ ΣΥΝΕΙΣΕΦΕΡΕ *"
     fun noMembersIncomeHint(lang: Language): String = if (lang == Language.ENGLISH) "No members registered. The income will be logged as Common." else "Δεν έχουν καταχωρηθεί μέλη. Το έσοδο θα καταχωρηθεί ως Κοινό."
     fun incomeCategoryLabel(lang: Language): String = if (lang == Language.ENGLISH) "INCOME CATEGORY" else "ΚΑΤΗΓΟΡΙΑ ΕΣΟΔΟΥ"

@@ -397,8 +397,9 @@ fun ReminderNotificationBanner(
                                 }
                             }
 
+                            val currencySymbol = com.example.util.LocalCurrencySymbol.current
                             Text(
-                                text = String.format(Locale.GERMANY, "%.2f €", currentReminder.amount),
+                                text = "${String.format(Locale.GERMANY, "%.2f", currentReminder.amount)} $currencySymbol",
                                 fontSize = 17.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Emerald700,

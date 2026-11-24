@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.ui.theme.Emerald700
+import com.example.util.LocalCurrencySymbol
 import com.example.util.PendingBankTransaction
 import java.util.Locale
 import kotlin.math.abs
@@ -75,10 +76,12 @@ fun BankNotificationBanner(
     appLanguage: String,
     onConfirmTransaction: (PendingBankTransaction) -> Unit,
     onDismissTransaction: (PendingBankTransaction) -> Unit,
+    resolveSuggestedCategory: (PendingBankTransaction) -> String? = { null },
     modifier: Modifier = Modifier
 ) {
     if (transactions.isEmpty()) return
     val isGreek = appLanguage != "EN"
+    val currencySymbol = LocalCurrencySymbol.current
 
     var selectedIndex by remember { mutableIntStateOf(0) }
     LaunchedEffect(transactions.size) {
@@ -354,25 +357,50 @@ fun BankNotificationBanner(
                                     overflow = TextOverflow.Ellipsis
                                 )
 
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Emerald700.copy(alpha = 0.12f)
+                                val suggestedCategory = remember(currentTx.id, currentTx.merchantName) {
+                                    resolveSuggestedCategory(currentTx)?.takeIf { it.isNotBlank() }
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
-                                    Text(
-                                        text = currentTx.bankName,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Emerald700,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Emerald700.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = currentTx.bankName,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Emerald700,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    if (suggestedCategory != null) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+                                        ) {
+                                            Text(
+                                                text = suggestedCategory,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
 
                             Text(
-                                text = String.format(Locale.GERMANY, "%.2f €", currentTx.amount),
+                                text = String.format(Locale.GERMANY, "%.2f %s", currentTx.amount, currencySymbol),
                                 fontSize = 17.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Emerald700,

@@ -52,8 +52,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.entity.Expense
+import com.example.data.entity.FamilyMember
+import com.example.data.entity.Income
 import com.example.ui.theme.Emerald700
 import com.example.util.ExpenseReportExporter
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -62,11 +65,16 @@ import java.util.Locale
 @Composable
 fun ExportReportDialog(
     expenses: List<Expense>,
+    incomes: List<Income> = emptyList(),
+    members: List<FamilyMember> = emptyList(),
+    householdName: String = "",
     appLanguage: String = "EL",
     onDismiss: () -> Unit,
     onShowMessage: (String) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
+    val isEnglish = lang == Localization.Language.ENGLISH
+    val currencySymbol = LocalCurrencySymbol.current
     val context = LocalContext.current
 
     // 0: Current Month, 1: Specific Single Day, 2: Custom Date Range, 3: All Time
@@ -128,14 +136,39 @@ fun ExportReportDialog(
         }
     }
 
+    val targetIncomes = remember(incomes, selectedFilterIndex, selectedSingleDayTimestamp, rangeStartTimestamp, rangeEndTimestamp) {
+        when (selectedFilterIndex) {
+            0 -> {
+                val cal = Calendar.getInstance()
+                val curYear = cal.get(Calendar.YEAR)
+                val curMonth = cal.get(Calendar.MONTH)
+                incomes.filter {
+                    val incCal = Calendar.getInstance().apply { timeInMillis = it.timestamp }
+                    incCal.get(Calendar.YEAR) == curYear && incCal.get(Calendar.MONTH) == curMonth
+                }
+            }
+            1 -> {
+                val dayStart = selectedSingleDayTimestamp
+                val dayEnd = selectedSingleDayTimestamp + 24 * 60 * 60 * 1000L
+                incomes.filter { it.timestamp in dayStart until dayEnd }
+            }
+            2 -> {
+                incomes.filter { it.timestamp in rangeStartTimestamp..rangeEndTimestamp }
+            }
+            else -> incomes
+        }
+    }
+
     val periodTitle = when (selectedFilterIndex) {
-        0 -> if (lang == Localization.Language.ENGLISH) "Current Month" else "Τρέχων Μήνας"
-        1 -> if (lang == Localization.Language.ENGLISH) "Day: ${dateSdf.format(selectedSingleDayTimestamp)}" else "Ημέρα: ${dateSdf.format(selectedSingleDayTimestamp)}"
-        2 -> if (lang == Localization.Language.ENGLISH) "${dateSdf.format(rangeStartTimestamp)} - ${dateSdf.format(rangeEndTimestamp)}" else "${dateSdf.format(rangeStartTimestamp)} - ${dateSdf.format(rangeEndTimestamp)}"
-        else -> if (lang == Localization.Language.ENGLISH) "All Transactions" else "Όλες οι Συναλλαγές"
+        0 -> if (isEnglish) "Current Month" else "Τρέχων Μήνας"
+        1 -> if (isEnglish) "Day: ${dateSdf.format(selectedSingleDayTimestamp)}" else "Ημέρα: ${dateSdf.format(selectedSingleDayTimestamp)}"
+        2 -> "${dateSdf.format(rangeStartTimestamp)} - ${dateSdf.format(rangeEndTimestamp)}"
+        else -> if (isEnglish) "All Transactions" else "Όλες οι Συναλλαγές"
     }
 
     val totalAmount = targetExpenses.sumOf { it.amount }
+    val totalIncomeAmount = targetIncomes.sumOf { it.amount }
+    val netBalance = totalIncomeAmount - totalAmount
 
     fun showSingleDatePicker() {
         val cal = Calendar.getInstance().apply { timeInMillis = selectedSingleDayTimestamp }
@@ -405,7 +438,7 @@ fun ExportReportDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = if (lang == Localization.Language.ENGLISH) "Period:" else "Περίοδος:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = if (isEnglish) "Period:" else "Περίοδος:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(text = periodTitle, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
@@ -413,24 +446,48 @@ fun ExportReportDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = if (lang == Localization.Language.ENGLISH) "Expenses count:" else "Πλήθος Εξόδων:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = if (isEnglish) "Expenses (${targetExpenses.size}):" else "Έξοδα (${targetExpenses.size}):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "${targetExpenses.size} transactions" else "${targetExpenses.size} συναλλαγές",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                text = "${String.format(Locale.US, "%.2f", totalAmount)} $currencySymbol",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFDC2626)
                             )
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(5.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = if (lang == Localization.Language.ENGLISH) "Total Amount:" else "Συνολικό Ποσό:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Emerald700)
+                            Text(text = if (isEnglish) "Incomes (${targetIncomes.size}):" else "Έσοδα (${targetIncomes.size}):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
-                                text = "${String.format(Locale.US, "%.2f", totalAmount)} €",
+                                text = "+${String.format(Locale.US, "%.2f", totalIncomeAmount)} $currencySymbol",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Emerald700
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        val netColor = if (netBalance >= 0.0) Emerald700 else Color(0xFFDC2626)
+                        val netSign = if (netBalance > 0.0) "+" else ""
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = if (isEnglish) "Net Balance:" else "Καθαρό Υπόλοιπο:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = netColor)
+                            Text(
+                                text = "$netSign${String.format(Locale.US, "%.2f", netBalance)} $currencySymbol",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Black,
-                                color = Emerald700
+                                color = netColor
+                            )
+                        }
+                        if (members.size > 1 && targetExpenses.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (isEnglish) "Includes member Settle-Up breakdown & transfers" else "Περιλαμβάνει εκκαθάριση μελών & προτεινόμενες μεταφορές",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -449,10 +506,21 @@ fun ExportReportDialog(
                     else -> null
                 }
 
-                // Action Button 1: Real Excel Export
+                // Action Button 1: Full Excel Export
                 Button(
                     onClick = {
-                        ExpenseReportExporter.exportExcel(context, targetExpenses, periodTitle, exportStartMs, exportEndMs)
+                        ExpenseReportExporter.exportExcel(
+                            context = context,
+                            expenses = targetExpenses,
+                            periodTitle = periodTitle,
+                            startDateMillis = exportStartMs,
+                            endDateMillis = exportEndMs,
+                            incomes = targetIncomes,
+                            members = members,
+                            currencySymbol = currencySymbol,
+                            householdName = householdName,
+                            isEnglish = isEnglish
+                        )
                         onDismiss()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Emerald700, contentColor = Color.White),
@@ -465,7 +533,7 @@ fun ExportReportDialog(
                     Icon(Icons.Default.TableChart, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Export to Excel" else "Εξαγωγή σε Excel",
+                        text = if (isEnglish) "Export to Excel (.xls)" else "Εξαγωγή σε Excel (.xls)",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = Color.White
@@ -474,10 +542,21 @@ fun ExportReportDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Action Button 2: Real PDF Export
+                // Action Button 2: Full PDF Export
                 Button(
                     onClick = {
-                        ExpenseReportExporter.exportPdf(context, targetExpenses, periodTitle, exportStartMs, exportEndMs)
+                        ExpenseReportExporter.exportPdf(
+                            context = context,
+                            expenses = targetExpenses,
+                            periodTitle = periodTitle,
+                            startDateMillis = exportStartMs,
+                            endDateMillis = exportEndMs,
+                            incomes = targetIncomes,
+                            members = members,
+                            currencySymbol = currencySymbol,
+                            householdName = householdName,
+                            isEnglish = isEnglish
+                        )
                         onDismiss()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White),
@@ -490,10 +569,46 @@ fun ExportReportDialog(
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Export to PDF" else "Εξαγωγή σε PDF",
+                        text = if (isEnglish) "Export to PDF (.pdf)" else "Εξαγωγή σε PDF (.pdf)",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Action Button 3: Full CSV Export
+                OutlinedButton(
+                    onClick = {
+                        ExpenseReportExporter.exportCsv(
+                            context = context,
+                            expenses = targetExpenses,
+                            periodTitle = periodTitle,
+                            startDateMillis = exportStartMs,
+                            endDateMillis = exportEndMs,
+                            incomes = targetIncomes,
+                            members = members,
+                            currencySymbol = currencySymbol,
+                            householdName = householdName,
+                            isEnglish = isEnglish
+                        )
+                        onDismiss()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Emerald700.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .testTag("export_csv_action_button")
+                ) {
+                    Icon(Icons.Default.TableChart, contentDescription = null, tint = Emerald700, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isEnglish) "Export to CSV (.csv)" else "Εξαγωγή σε CSV (.csv)",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp,
+                        color = Emerald700
                     )
                 }
             }

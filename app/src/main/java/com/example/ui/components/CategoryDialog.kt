@@ -289,8 +289,9 @@ fun CategoryDialog(
 
                                     Spacer(modifier = Modifier.width(8.dp))
 
+                                    val currencySymbol = com.example.util.LocalCurrencySymbol.current
                                     Text(
-                                        text = "35.50 €",
+                                        text = "35.50 $currencySymbol",
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = previewFontColor

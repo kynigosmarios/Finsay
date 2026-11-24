@@ -57,6 +57,7 @@ import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsSpecialFilter
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import java.util.Locale
 
@@ -83,6 +84,7 @@ internal fun ExpensesHeroDashboardCard(
     onAddManualIncome: () -> Unit,
     onTypeFilterChange: (String) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     var showMonthDropdown by remember { mutableStateOf(false) }
 
     Surface(
@@ -254,7 +256,7 @@ internal fun ExpensesHeroDashboardCard(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = String.format(Locale.US, "%s%.2f €", if (netBalance >= 0) "+" else "", netBalance),
+                        text = "${String.format(Locale.US, "%s%.2f", if (netBalance >= 0) "+" else "", netBalance)} $currencySymbol",
                         fontSize = 35.sp,
                         fontWeight = FontWeight.Black,
                         color = Color.White
@@ -333,7 +335,7 @@ internal fun ExpensesHeroDashboardCard(
                                         color = Color(0xFFA7F3D0)
                                     )
                                     Text(
-                                        text = String.format(Locale.US, "%.2f €", totalIncomesAmount),
+                                        text = "${String.format(Locale.US, "%.2f", totalIncomesAmount)} $currencySymbol",
                                         fontSize = 17.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
@@ -377,7 +379,7 @@ internal fun ExpensesHeroDashboardCard(
                                         color = Color(0xFFFCA5A5)
                                     )
                                     Text(
-                                        text = String.format(Locale.US, "%.2f €", totalExpensesAmount),
+                                        text = "${String.format(Locale.US, "%.2f", totalExpensesAmount)} $currencySymbol",
                                         fontSize = 17.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
@@ -463,12 +465,7 @@ internal fun ExpensesHeroDashboardCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = String.format(
-                                Locale.US,
-                                "%.2f € / %.2f €",
-                                totalExpensesAmount,
-                                totalBudget
-                            ),
+                            text = "${String.format(Locale.US, "%.2f", totalExpensesAmount)} $currencySymbol / ${String.format(Locale.US, "%.2f", totalBudget)} $currencySymbol",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color.White
@@ -481,7 +478,7 @@ internal fun ExpensesHeroDashboardCard(
                             val remaining = totalBudget - totalExpensesAmount
                             Text(
                                 text = if (totalBudget > 0.0) {
-                                    "$budgetPercent% (${String.format(Locale.US, "%s%.2f €", if (remaining >= 0) "+" else "", remaining)})"
+                                    "$budgetPercent% (${String.format(Locale.US, "%s%.2f", if (remaining >= 0) "+" else "", remaining)} $currencySymbol)"
                                 } else {
                                     "0%"
                                 },
@@ -539,7 +536,7 @@ internal fun ExpensesHeroDashboardCard(
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = String.format(Locale.US, "%.2f €", sharedExpenses),
+                                    text = "${String.format(Locale.US, "%.2f", sharedExpenses)} $currencySymbol",
                                     fontSize = 17.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -575,7 +572,7 @@ internal fun ExpensesHeroDashboardCard(
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = String.format(Locale.US, "%.2f €", individualExpenses),
+                                    text = "${String.format(Locale.US, "%.2f", individualExpenses)} $currencySymbol",
                                     fontSize = 17.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -899,6 +896,7 @@ internal fun MonthlySummaryExpandableCard(
     isExpanded: Boolean,
     onToggleExpanded: () -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     val chevronRotation by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
         animationSpec = androidx.compose.animation.core.tween(200),
@@ -967,7 +965,7 @@ internal fun MonthlySummaryExpandableCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = String.format(Locale.US, "%.2f €", displayTotalAmount),
+                    text = "${String.format(Locale.US, "%.2f", displayTotalAmount)} $currencySymbol",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF047857)

@@ -150,12 +150,13 @@ fun Expense.getPayerDisplay(members: List<FamilyMember> = emptyList()): String {
     // Check if shares are virtually equal
     val firstAmt = shares[0].amount
     val areEqual = shares.all { Math.abs(it.amount - firstAmt) < 0.01 }
+    val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
     return if (areEqual) {
         // e.g. "Μαρία & Γιάννης (από 20,00 €)"
-        "${shares.joinToString(" & ") { it.memberName }} (από ${String.format(java.util.Locale.US, "%.2f €", firstAmt)})"
+        "${shares.joinToString(" & ") { it.memberName }} (από ${String.format(java.util.Locale.US, "%.2f", firstAmt)} $curSymbol)"
     } else {
         // e.g. "Μαρία (30,00 €) & Γιάννης (10,00 €)"
-        shares.joinToString(" & ") { "${it.memberName} (${String.format(java.util.Locale.US, "%.2f €", it.amount)})" }
+        shares.joinToString(" & ") { "${it.memberName} (${String.format(java.util.Locale.US, "%.2f", it.amount)} $curSymbol)" }
     }
 }
 

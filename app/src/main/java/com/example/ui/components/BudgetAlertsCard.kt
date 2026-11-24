@@ -234,8 +234,9 @@ fun BudgetAlertsCard(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
+                        val currencySymbol = com.example.util.LocalCurrencySymbol.current
                         Text(
-                            text = "${String.format(java.util.Locale.US, "%.1f", status.spent)}€ / ${String.format(java.util.Locale.US, "%.0f", status.budget)}€ (${(status.percentage * 100).toInt()}%)",
+                            text = "${String.format(java.util.Locale.US, "%.1f", status.spent)}$currencySymbol / ${String.format(java.util.Locale.US, "%.0f", status.budget)}$currencySymbol (${(status.percentage * 100).toInt()}%)",
                             fontSize = 11.sp,
                             fontWeight = if (status.isExceeded) FontWeight.Bold else FontWeight.Normal,
                             color = barColor

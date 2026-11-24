@@ -454,10 +454,11 @@ fun ReceiptScanDialog(
                         )
 
                         // Amount field
+                        val currencySymbol = com.example.util.LocalCurrencySymbol.current
                         OutlinedTextField(
                             value = amountInput,
                             onValueChange = { amountInput = it.replace(',', '.') },
-                            label = { Text(if (isGreek) "Ποσό (€)" else "Amount (€)") },
+                            label = { Text(if (isGreek) "Ποσό ($currencySymbol)" else "Amount ($currencySymbol)") },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),

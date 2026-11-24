@@ -55,6 +55,7 @@ import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsExpenseFilterHelper
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.HomeDrillDownRequest
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import com.example.util.SettleUpCalculator
 import com.example.util.SettlementTransfer
@@ -72,6 +73,7 @@ internal fun AnalyticsSettleUpCard(
     onSettleTransfer: (FamilyMember, FamilyMember, Double, Long) -> Unit
 ) {
     val clipboardManager = LocalClipboardManager.current
+    val currencySymbol = LocalCurrencySymbol.current
     val settleUpResult = remember(periodExpenses, members) {
         SettleUpCalculator.calculate(periodExpenses, members)
     }
@@ -186,7 +188,7 @@ internal fun AnalyticsSettleUpCard(
                                         modifier = Modifier.weight(1f).padding(end = 8.dp)
                                     )
                                     Text(
-                                        text = String.format(Locale.GERMANY, "%.2f €", t.amount),
+                                        text = "${String.format(Locale.GERMANY, "%.2f", t.amount)} $currencySymbol",
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Amber700
@@ -279,7 +281,7 @@ internal fun AnalyticsSettleUpCard(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${if (isGreek) "Πλ." else "Paid"} ${String.format(Locale.GERMANY, "%.0f€", s.totalPaid)} • ${if (isGreek) "Μερ." else "Share"} ${String.format(Locale.GERMANY, "%.0f€", s.totalShare)}",
+                            text = "${if (isGreek) "Πλ." else "Paid"} ${String.format(Locale.GERMANY, "%.0f", s.totalPaid)}$currencySymbol • ${if (isGreek) "Μερ." else "Share"} ${String.format(Locale.GERMANY, "%.0f", s.totalShare)}$currencySymbol",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -288,9 +290,9 @@ internal fun AnalyticsSettleUpCard(
                         val isNegative = s.netBalance < -0.01
                         Text(
                             text = when {
-                                isPositive -> "+${String.format(Locale.GERMANY, "%.2f €", s.netBalance)}"
-                                isNegative -> "-${String.format(Locale.GERMANY, "%.2f €", kotlin.math.abs(s.netBalance))}"
-                                else -> "0,00 €"
+                                isPositive -> "+${String.format(Locale.GERMANY, "%.2f", s.netBalance)} $currencySymbol"
+                                isNegative -> "-${String.format(Locale.GERMANY, "%.2f", kotlin.math.abs(s.netBalance))} $currencySymbol"
+                                else -> "0,00 $currencySymbol"
                             },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -308,7 +310,12 @@ internal fun AnalyticsSettleUpCard(
 
             OutlinedButton(
                 onClick = {
-                    val text = SettleUpCalculator.formatSummaryText(settleUpResult, if (isGreek) "Εξοδολόγιο" else "Household", isGreek)
+                    val text = SettleUpCalculator.formatSummaryText(
+                        result = settleUpResult,
+                        householdTitle = if (isGreek) "Εξοδολόγιο" else "Household",
+                        isGreek = isGreek,
+                        currencySymbol = currencySymbol
+                    )
                     clipboardManager.setText(AnnotatedString(text))
                 },
                 modifier = Modifier
@@ -329,7 +336,7 @@ internal fun AnalyticsSettleUpCard(
     }
 
     pendingSettlement?.let { targetTransfer ->
-        val formattedAmt = String.format(Locale.US, "%.2f €", targetTransfer.amount)
+        val formattedAmt = "${String.format(Locale.US, "%.2f", targetTransfer.amount)} $currencySymbol"
         AlertDialog(
             onDismissRequest = { pendingSettlement = null },
             title = {

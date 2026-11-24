@@ -164,7 +164,8 @@ internal object GuideContentData {
                         "Log expenses by voice using the floating microphone button, or scan receipts via Camera OCR & AADE QR.",
                         "Confirm or dismiss detected bank/Google Pay payment notifications and due bill reminders right from the top banners.",
                         "Filter transactions by month, type (Expenses / Income / All), member, category, or free-text search.",
-                        "Tap any entry to edit it, or delete it with an instant 5-second Undo banner."
+                        "Tap any entry to edit it, swipe left on an expense card to delete it immediately (with a 5-second Undo banner), or swipe right to repeat the expense today.",
+                        "Long-press the Finsay app icon on your home screen for instant App Shortcuts: Voice Entry, Scan Receipt, or New Expense."
                     )
                 ),
                 TabGuideSection(
@@ -221,7 +222,7 @@ internal object GuideContentData {
                     capabilities = listOf(
                         "Quickly switch your active expense book from the top bar or check real-time Cloud Sync status with manual refresh.",
                         "Open the Activity History bell to see who added, updated, or deleted items in shared books.",
-                        "Create, rename, clear expenses, or delete books in Manage Expense Books.",
+                        "Create, rename, pick a custom currency (€, $, £, CHF, etc.), clear expenses, or delete books in Manage Expense Books.",
                         "Share a book with verified email accounts, manage roles (Creator, Editor, Registrar), and assign each user's default payer."
                     )
                 ),
@@ -262,8 +263,8 @@ internal object GuideContentData {
                     accentColor = Color(0xFF475569),
                     capabilities = listOf(
                         "Profile: Update personal details and avatar photo, review account stats, manage Pro access, sign out, or delete your account.",
-                        "Settings: Switch Light / Dark / System theme, change language (Greek / English), and toggle Quick Launch Chooser.",
-                        "Notifications: Configure Evening Daily Reminder time and enable Bank/Google Pay Auto-Catcher.",
+                        "Settings: Switch Light / Dark / System theme, change language (Greek / English), enable optional App Lock (Biometrics / 4-digit PIN), and toggle Quick Launch Chooser.",
+                        "Notifications: Configure Evening Daily Reminder time and enable Bank/Google Pay Auto-Catcher (which remembers your category corrections per merchant).",
                         "Widgets & Legal: Pin a Quick-Add Home Screen shortcut/tile and review Terms of Service & Privacy Policy (GDPR)."
                     )
                 )
@@ -284,7 +285,8 @@ internal object GuideContentData {
                         "Καταγράψτε έξοδα με τη φωνή σας στα Ελληνικά (πλωτό μικρόφωνο) ή σκανάρετε αποδείξεις με Κάμερα OCR & QR ΑΑΔΕ.",
                         "Επιβεβαιώστε ή απορρίψτε αυτόματα εντοπισμένες τραπεζικές πληρωμές και ειδοποιήσεις πάγιων λογαριασμών από το επάνω μέρος.",
                         "Φιλτράρετε τις κινήσεις ανά μήνα, τύπο (Έξοδα / Έσοδα / Όλα), μέλος, κατηγορία ή ελεύθερη αναζήτηση.",
-                        "Πατήστε σε οποιαδήποτε εγγραφή για επεξεργασία ή διαγράψτε τη με άμεση δυνατότητα Αναίρεσης (5 δευτ.)."
+                        "Πατήστε σε οποιαδήποτε εγγραφή για επεξεργασία, σύρετε αριστερά σε μια κάρτα εξόδου για άμεση διαγραφή (με 5 δευτ. Αναίρεση), ή σύρετε δεξιά για άμεση «Επανάληψη σήμερα».",
+                        "Πατήστε παρατεταμένα το εικονίδιο του Finsay στην αρχική οθόνη για άμεσες συντομεύσεις: Φωνητική Καταχώρηση, Σάρωση Απόδειξης ή Νέο Έξοδο."
                     )
                 ),
                 TabGuideSection(
@@ -341,7 +343,7 @@ internal object GuideContentData {
                     capabilities = listOf(
                         "Αλλάξτε ενεργό εξοδολόγιο από την επάνω μπάρα και ελέγξτε/ανανεώστε τον συγχρονισμό Cloud με ένα πάτημα.",
                         "Ανοίξτε το Ιστορικό Δραστηριότητας (καμπανάκι) για να βλέπετε ποιος πρόσθεσε ή άλλαξε κάθε εγγραφή.",
-                        "Δημιουργήστε νέα εξοδολόγια, μετονομάστε τα, καθαρίστε τα έξοδα ή διαγράψτε τα από τη «Διαχείριση εξοδολογίων».",
+                        "Δημιουργήστε νέα εξοδολόγια, μετονομάστε τα, επιλέξτε νόμισμα (€, $, £, CHF κ.λπ.), καθαρίστε τα έξοδα ή διαγράψτε τα από τη «Διαχείριση εξοδολογίων».",
                         "Κοινοποιήστε εξοδολόγια σε επιβεβαιωμένους χρήστες με ρόλους (Δημιουργός, Συντάκτης, Καταχωρητής) και αντιστοίχιση προεπιλεγμένου πληρωτή."
                     )
                 ),
@@ -382,8 +384,8 @@ internal object GuideContentData {
                     accentColor = Color(0xFF475569),
                     capabilities = listOf(
                         "Προφίλ: Ενημερώστε τα προσωπικά στοιχεία και τη φωτογραφία σας, δείτε στατιστικά, διαχειριστείτε την έκδοση Pro, αποσυνδεθείτε ή διαγράψτε τον λογαριασμό.",
-                        "Ρυθμίσεις: Επιλέξτε Θέμα (Ανοιχτό / Σκούρο / Συστήματος), Γλώσσα (Ελληνικά / English) και αν θα ανοίγει γρήγορο μενού κατά την εκκίνηση.",
-                        "Ειδοποιήσεις: Ορίστε ώρα βραδινής υπενθύμισης και ενεργοποιήστε τον Αυτόματο Εντοπισμό Τραπεζικών Συναλλαγών.",
+                        "Ρυθμίσεις: Επιλέξτε Θέμα (Ανοιχτό / Σκούρο / Συστήματος), Γλώσσα (Ελληνικά / English), προαιρετικό Κλείδωμα Εφαρμογής (Βιομετρικά / 4-ψήφιο PIN) και γρήγορο μενού εκκίνησης.",
+                        "Ειδοποιήσεις: Ορίστε ώρα βραδινής υπενθύμισης και ενεργοποιήστε τον Αυτόματο Εντοπισμό Τραπεζικών Συναλλαγών (με έξυπνη μνήμη κατηγορίας ανά έμπορο).",
                         "Συντομεύσεις & Όροι: Προσθέστε γρήγορο πλακίδιο (Widget) στην αρχική οθόνη και διαβάστε τους Όρους Χρήσης & την Πολιτική Απορρήτου."
                     )
                 )

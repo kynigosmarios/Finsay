@@ -29,6 +29,7 @@ import com.example.util.AnalyticsExpenseFilterHelper
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.BankNotificationHolder
 import com.example.util.BankNotificationSystemManager
+import com.example.util.CurrencyFormatter
 import com.example.util.DefaultPayerHelper
 import com.example.util.GreekVoiceParser
 import com.example.util.HomeDrillDownRequest
@@ -409,6 +410,23 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     internal val _currencySymbol = MutableStateFlow(prefs.getString("currency_symbol", "€") ?: "€")
     val currencySymbol = _currencySymbol.asStateFlow()
 
+    internal val _pendingInAppReviewPrompt = MutableStateFlow(false)
+    val pendingInAppReviewPrompt = _pendingInAppReviewPrompt.asStateFlow()
+
+    fun consumeInAppReviewPrompt() {
+        _pendingInAppReviewPrompt.value = false
+    }
+
+    internal fun syncCurrencyFromHousehold(household: Household?) {
+        val code = household?.currencyCode?.takeIf { it.isNotBlank() } ?: CurrencyFormatter.DEFAULT_CURRENCY_CODE
+        val symbol = CurrencyFormatter.symbolForCode(code)
+        CurrencyFormatter.updateActiveCurrency(code)
+        if (_currencySymbol.value != symbol) {
+            _currencySymbol.value = symbol
+        }
+        prefs.edit().putString("currency_symbol", symbol).putString("currency_code", code).apply()
+    }
+
     internal val _launchWithChooser = MutableStateFlow(prefs.getBoolean("launch_with_chooser", false))
     val launchWithChooser = _launchWithChooser.asStateFlow()
 
@@ -631,6 +649,15 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             auth.setLanguageCode(if (savedLang == "EN") "en" else "el")
         } catch (t: Throwable) {
             Log.w("OikoNomosVM", "auth.setLanguageCode warning: ${t.message}")
+        }
+
+        CurrencyFormatter.updateActiveCurrency(_currencySymbol.value)
+        viewModelScope.launch(coroutineExceptionHandler) {
+            _currentHousehold.collect { household ->
+                if (household != null) {
+                    syncCurrencyFromHousehold(household)
+                }
+            }
         }
 
         val clearJob = viewModelScope.launch(Dispatchers.IO + coroutineExceptionHandler) {
@@ -913,7 +940,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun leaveSharedHousehold(household: Household) = householdDelegate.leaveSharedHousehold(household)
     fun renameHousehold(householdId: String, newName: String) = householdDelegate.renameHousehold(householdId, newName)
     fun renameCurrentHousehold(newName: String) = householdDelegate.renameCurrentHousehold(newName)
-    fun createNewExodologio(name: String) = householdDelegate.createNewExodologio(name)
+    fun updateHouseholdCurrency(householdId: String, currencyCode: String) = householdDelegate.updateHouseholdCurrency(householdId, currencyCode)
+    fun createNewExodologio(name: String, currencyCode: String = "EUR") = householdDelegate.createNewExodologio(name, currencyCode)
     fun switchExodologio(household: Household) = householdDelegate.switchExodologio(household)
 
     fun onAppResumed() = syncDelegate.onAppResumed()
@@ -963,6 +991,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         transactionDelegate.suggestCategoryForMerchant(merchantOrText, merchantAfm)
     fun learnCategoryForMerchant(merchantOrText: String, categoryId: Long, categoryName: String, merchantAfm: String = "") =
         transactionDelegate.learnCategoryForMerchant(merchantOrText, categoryId, categoryName, merchantAfm)
+    fun resolveSuggestedCategoryForBankTx(tx: PendingBankTransaction): ExpenseCategory? =
+        transactionDelegate.resolveSuggestedCategoryForBankTx(tx)
     fun confirmBankTransaction(tx: PendingBankTransaction) = transactionDelegate.confirmBankTransaction(tx)
     fun dismissBankTransaction(tx: PendingBankTransaction) = transactionDelegate.dismissBankTransaction(tx)
     fun processVoiceInput(spokenText: String) = transactionDelegate.processVoiceInput(spokenText)
@@ -972,9 +1002,14 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun confirmPendingExpense() = transactionDelegate.confirmPendingExpense()
     fun editPendingExpense() = transactionDelegate.editPendingExpense()
     fun openManualExpenseDialog(expense: Expense? = null) { _editingExpense.value = expense; _showManualExpenseDialog.value = true }
-    fun dismissManualExpenseDialog() { _editingExpense.value = null; _showManualExpenseDialog.value = false }
+    fun dismissManualExpenseDialog() {
+        transactionDelegate.clearPendingBankMerchantForLearning()
+        _editingExpense.value = null
+        _showManualExpenseDialog.value = false
+    }
     fun saveExpense(id: Long = 0, title: String, amount: Double, categoryId: Long, categoryName: String, timestamp: Long, splitType: String, memberIds: List<Long>, memberNamesDisplay: String, note: String, payerMemberId: Long = 0L, payerMemberName: String = "", payerMemberIdsCsv: String = "", payerAmountsCsv: String = "") =
         transactionDelegate.saveExpense(id, title, amount, categoryId, categoryName, timestamp, splitType, memberIds, memberNamesDisplay, note, payerMemberId, payerMemberName, payerMemberIdsCsv, payerAmountsCsv)
+    fun duplicateExpenseToday(expense: Expense) = transactionDelegate.duplicateExpenseToday(expense)
     fun deleteExpense(expense: Expense) = transactionDelegate.deleteExpense(expense)
     fun openManualIncomeDialog(income: Income? = null) { _editingIncome.value = income; _showManualIncomeDialog.value = true }
     fun dismissManualIncomeDialog() { _editingIncome.value = null; _showManualIncomeDialog.value = false }

@@ -778,16 +778,15 @@ internal class OikoNomosAuthDelegate(
 
     fun dismissWelcomeCarousel() {
         vm._showWelcomeCarousel.value = false
-        vm.prefs.edit().putBoolean("onboarding_shown_v3", true).apply()
         val uid = vm.auth.currentUser?.uid ?: vm._currentUser.value?.uid
+        val editor = vm.prefs.edit()
+            .putBoolean("onboarding_shown_v3", true)
+            .putBoolean("gdpr_privacy_consent_accepted", true)
         if (!uid.isNullOrBlank()) {
-            vm.prefs.edit().putBoolean("onboarding_shown_$uid", true).apply()
+            editor.putBoolean("onboarding_shown_$uid", true)
+            editor.putBoolean("gdpr_privacy_consent_accepted_$uid", true)
         }
-        val privacyAccepted = vm.prefs.getBoolean("gdpr_privacy_consent_accepted", false) ||
-            (!uid.isNullOrBlank() && vm.prefs.getBoolean("gdpr_privacy_consent_accepted_$uid", false))
-        if (!privacyAccepted) {
-            vm._showPrivacyConsentDialog.value = true
-        }
+        editor.apply()
     }
 
     fun saveUserProfileToPrefs(profile: UserProfile) {

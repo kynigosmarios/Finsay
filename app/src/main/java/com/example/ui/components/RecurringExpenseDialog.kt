@@ -243,13 +243,14 @@ fun RecurringExpenseDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Field 2 & 3: Amount & Schedule Day
+                val currencySymbol = com.example.util.LocalCurrencySymbol.current
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = { amountText = it },
-                        label = { Text(if (isEn) "Amount (€)" else "Ποσό (€)") },
+                        label = { Text(if (isEn) "Amount ($currencySymbol)" else "Ποσό ($currencySymbol)") },
                         placeholder = { Text("0,00") },
-                        trailingIcon = { Text("€", fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
+                        trailingIcon = { Text(currencySymbol, fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),

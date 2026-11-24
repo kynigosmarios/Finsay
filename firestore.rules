@@ -54,13 +54,28 @@ service cloud.firestore {
       return isOwner(userId) &&
         (!('uid' in incoming()) || incoming().uid == userId) &&
         (!('email' in incoming()) || incoming().email is string) &&
-        (!('isPremium' in incoming()) || incoming().isPremium == false);
+        (!('isPremium' in incoming()) || incoming().isPremium == false) &&
+        !('birthDate' in incoming()) &&
+        !('phoneNumber' in incoming()) &&
+        !('occupation' in incoming()) &&
+        !('city' in incoming());
     }
 
     function isValidUserUpdate(userId) {
       return isOwner(userId) &&
         (!('uid' in incoming()) || incoming().uid == userId) &&
-        (!('isPremium' in incoming()) || incoming().isPremium == existing().get('isPremium', false));
+        (!('isPremium' in incoming()) || incoming().isPremium == existing().get('isPremium', false)) &&
+        (!('birthDate' in incoming()) || incoming().birthDate == existing().get('birthDate', '')) &&
+        (!('phoneNumber' in incoming()) || incoming().phoneNumber == existing().get('phoneNumber', '')) &&
+        (!('occupation' in incoming()) || incoming().occupation == existing().get('occupation', '')) &&
+        (!('city' in incoming()) || incoming().city == existing().get('city', ''));
+    }
+
+    function isValidPrivateProfileWrite() {
+      return (!('birthDate' in incoming()) || (incoming().birthDate is string && incoming().birthDate.size() <= 40)) &&
+        (!('phoneNumber' in incoming()) || (incoming().phoneNumber is string && incoming().phoneNumber.size() <= 40)) &&
+        (!('occupation' in incoming()) || (incoming().occupation is string && incoming().occupation.size() <= 120)) &&
+        (!('city' in incoming()) || (incoming().city is string && incoming().city.size() <= 120));
     }
 
     function isValidHouseholdCreate() {
@@ -122,9 +137,16 @@ service cloud.firestore {
       allow update: if isValidUserUpdate(userId);
       allow delete: if isOwner(userId);
 
+      // Owner-only private profile details (birthDate, phoneNumber, occupation, city)
+      match /private/{docId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidPrivateProfileWrite();
+        allow delete: if isOwner(userId);
+      }
+
       // Personal user subcollections (expenses, incomes, categories, members, savings_goals, recurring_expenses)
       match /{subcollection}/{document=**} {
-        allow read, write: if isOwner(userId);
+        allow read, write: if isOwner(userId) && subcollection != 'private';
       }
     }
 

@@ -63,6 +63,7 @@ import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.HomeDrillDownRequest
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -159,6 +160,7 @@ fun PieChartView(
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
+    val currencySymbol = LocalCurrencySymbol.current
     val total = totalAmount.coerceAtLeast(1.0)
     val validSlices = slices.filter { it.value > 0.001 }
 
@@ -239,7 +241,7 @@ fun PieChartView(
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = String.format(Locale.US, "%.2f €", totalAmount),
+                    text = "${String.format(Locale.US, "%.2f", totalAmount)} $currencySymbol",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -277,7 +279,7 @@ fun PieChartView(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${slice.label} ($pct%): ${String.format(Locale.US, "%.2f€", slice.value)}",
+                        text = "${slice.label} ($pct%): ${String.format(Locale.US, "%.2f", slice.value)}$currencySymbol",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
@@ -735,6 +737,7 @@ internal fun AnalyticsSummaryKpiCard(
     lang: Localization.Language,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -775,7 +778,7 @@ internal fun AnalyticsSummaryKpiCard(
                         Text(Localization.incomes(lang), fontSize = 11.sp, color = Color(0xFF047857), fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(3.dp))
                         Text(
-                            text = String.format(Locale.US, "+%.2f €", totalIncome),
+                            text = "+${String.format(Locale.US, "%.2f", totalIncome)} $currencySymbol",
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Black,
                             color = Color(0xFF059669)
@@ -811,7 +814,7 @@ internal fun AnalyticsSummaryKpiCard(
                         Text(Localization.expenses(lang), fontSize = 11.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(3.dp))
                         Text(
-                            text = String.format(Locale.US, "%.2f €", totalSpend),
+                            text = "${String.format(Locale.US, "%.2f", totalSpend)} $currencySymbol",
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Black,
                             color = Color(0xFFDC2626)
@@ -837,7 +840,7 @@ internal fun AnalyticsSummaryKpiCard(
                         Text(Localization.netBalanceTitle(lang), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                         Spacer(modifier = Modifier.height(3.dp))
                         Text(
-                            text = String.format(Locale.US, "%s%.2f €", if (netBalance >= 0) "+" else "", netBalance),
+                            text = "${String.format(Locale.US, "%s%.2f", if (netBalance >= 0) "+" else "", netBalance)} $currencySymbol",
                             fontSize = 14.5.sp,
                             fontWeight = FontWeight.Black,
                             color = if (netBalance >= 0) Color(0xFF059669) else Color(0xFFDC2626)
@@ -896,7 +899,7 @@ internal fun AnalyticsSummaryKpiCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = String.format(Locale.US, "%.2f €", dailyAverageExpense),
+                            text = "${String.format(Locale.US, "%.2f", dailyAverageExpense)} $currencySymbol",
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -1001,7 +1004,7 @@ internal fun AnalyticsSummaryKpiCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = peakSpendingDayInfo?.let { String.format(Locale.US, "%.0f €", it.third) } ?: "-",
+                            text = peakSpendingDayInfo?.let { "${String.format(Locale.US, "%.0f", it.third)} $currencySymbol" } ?: "-",
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,

@@ -62,6 +62,7 @@ import com.example.data.entity.ExpenseCategory
 import com.example.ui.components.CategoryIconHelper
 import com.example.ui.components.SmoothDialogContent
 import com.example.ui.theme.Emerald700
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import java.util.Locale
 
@@ -83,6 +84,7 @@ fun CategoriesScreen(
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
     val isGreek = lang != Localization.Language.ENGLISH
+    val currencySymbol = LocalCurrencySymbol.current
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     var categoryToDelete by remember { mutableStateOf<ExpenseCategory?>(null) }
     var showDeletedCategoriesDialog by remember { mutableStateOf(false) }
@@ -330,7 +332,7 @@ fun CategoriesScreen(
                                             color = budgetColor.copy(alpha = if (isDark) 0.22f else 0.12f)
                                         ) {
                                             Text(
-                                                text = "🎯 ${String.format(Locale.US, "%.2f €", category.monthlyBudget)}",
+                                                text = "🎯 ${String.format(Locale.US, "%.2f", category.monthlyBudget)} $currencySymbol",
                                                 fontSize = 11.sp,
                                                 color = budgetColor,
                                                 fontWeight = FontWeight.SemiBold,
@@ -619,7 +621,7 @@ fun CategoriesScreen(
                                                 )
                                                 if (cat.monthlyBudget > 0.0) {
                                                     Text(
-                                                        text = "🎯 ${String.format(Locale.US, "%.2f €", cat.monthlyBudget)}",
+                                                        text = "🎯 ${String.format(Locale.US, "%.2f", cat.monthlyBudget)} $currencySymbol",
                                                         fontSize = 10.5.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )

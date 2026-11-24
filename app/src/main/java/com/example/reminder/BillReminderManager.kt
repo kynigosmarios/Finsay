@@ -197,7 +197,8 @@ object BillReminderManager {
                 com.example.util.Localization.Language.GREEK
             )
             val notifTitle = "Υπενθύμιση: $title"
-            val notifBody = "${String.format(Locale.GERMANY, "%.2f €", amount)} • $scheduleLabel • Πατήστε για καταγραφή"
+            val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
+            val notifBody = "${String.format(Locale.GERMANY, "%.2f", amount)} $curSymbol • $scheduleLabel • Πατήστε για καταγραφή"
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_infinity)

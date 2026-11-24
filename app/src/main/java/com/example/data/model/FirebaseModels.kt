@@ -68,6 +68,7 @@ data class Household(
     var memberNames: Map<String, String> = emptyMap(), // uid -> displayName
     var memberDefaultPayers: Map<String, String> = emptyMap(), // uid -> CSV of default payer FamilyMember IDs
     var pendingInviteRole: String = "REGISTAR",
+    var currencyCode: String = "EUR",
     var isPremium: Boolean = false,
     var createdAt: Timestamp? = null,
     var updatedAt: Timestamp? = null

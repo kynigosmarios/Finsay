@@ -56,6 +56,7 @@ import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.HomeDrillDownRequest
+import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
 import com.example.util.SavingsGoalExpenseLinkHelper
 import java.util.Locale
@@ -78,6 +79,7 @@ internal fun AnalyticsMembersBreakdownCard(
     onChartTypeMembersChange: (Int) -> Unit,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -287,8 +289,8 @@ internal fun AnalyticsMembersBreakdownCard(
                                         }
                                         val subtitle = when (splitMode) {
                                             0 -> if (com > 0.01) {
-                                                if (lang == Localization.Language.ENGLISH) "Direct: ${String.format(Locale.US, "%.1f€", ind)} • Shared: ${String.format(Locale.US, "%.1f€", com)}"
-                                                else "Ατομικά: ${String.format(Locale.US, "%.1f€", ind)} • Κοινό: ${String.format(Locale.US, "%.1f€", com)}"
+                                                if (lang == Localization.Language.ENGLISH) "Direct: ${String.format(Locale.US, "%.1f", ind)}$currencySymbol • Shared: ${String.format(Locale.US, "%.1f", com)}$currencySymbol"
+                                                else "Ατομικά: ${String.format(Locale.US, "%.1f", ind)}$currencySymbol • Κοινό: ${String.format(Locale.US, "%.1f", com)}$currencySymbol"
                                             } else {
                                                 Localization.translateRole(member.role, lang)
                                             }
@@ -303,7 +305,7 @@ internal fun AnalyticsMembersBreakdownCard(
                                 }
 
                                 Text(
-                                    text = String.format(Locale.US, "%.2f €", spend),
+                                    text = "${String.format(Locale.US, "%.2f", spend)} $currencySymbol",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -341,6 +343,7 @@ internal fun AnalyticsCategoryBudgetsCard(
     lang: Localization.Language,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -470,9 +473,9 @@ internal fun AnalyticsCategoryBudgetsCard(
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (budget > 0) {
-                                    val budgetFormatted = if (budget % 1.0 == 0.0) String.format(Locale.US, "%.0f€", budget) else String.format(Locale.US, "%.2f€", budget)
+                                    val budgetFormatted = if (budget % 1.0 == 0.0) "${String.format(Locale.US, "%.0f", budget)}$currencySymbol" else "${String.format(Locale.US, "%.2f", budget)}$currencySymbol"
                                     Text(
-                                        text = "${String.format(Locale.US, "%.2f€", spent)} / $budgetFormatted",
+                                        text = "${String.format(Locale.US, "%.2f", spent)}$currencySymbol / $budgetFormatted",
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -492,7 +495,7 @@ internal fun AnalyticsCategoryBudgetsCard(
                                     }
                                 } else {
                                     Text(
-                                        text = String.format(Locale.US, "%.2f €", spent),
+                                        text = "${String.format(Locale.US, "%.2f", spent)} $currencySymbol",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Emerald700
@@ -530,6 +533,7 @@ internal fun AnalyticsSavingsGoalsCard(
     onOpenSavingsGoals: () -> Unit,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
+    val currencySymbol = LocalCurrencySymbol.current
     val isGreek = lang != Localization.Language.ENGLISH
     val savingsCategory = SavingsGoalExpenseLinkHelper.findSavingsCategory(categories)
     val periodGoalDeposits = periodExpenses.filter { exp ->
@@ -556,7 +560,7 @@ internal fun AnalyticsSavingsGoalsCard(
                 iconContainerColor = Emerald100,
                 title = if (isGreek) "Στόχοι Αποταμίευσης" else "Savings Goals",
                 subtitle = if (totalTargetAcrossGoals > 0.0) {
-                    "${String.format(Locale.US, "%.0f€", totalSavedAcrossGoals)} / ${String.format(Locale.US, "%.0f€", totalTargetAcrossGoals)}"
+                    "${String.format(Locale.US, "%.0f", totalSavedAcrossGoals)}$currencySymbol / ${String.format(Locale.US, "%.0f", totalTargetAcrossGoals)}$currencySymbol"
                 } else null,
                 modifier = Modifier
                     .clip(RoundedCornerShape(10.dp))
@@ -620,7 +624,7 @@ internal fun AnalyticsSavingsGoalsCard(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = String.format(Locale.US, "%.2f€", periodDepositedTotal),
+                        text = "${String.format(Locale.US, "%.2f", periodDepositedTotal)}$currencySymbol",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Emerald700
@@ -664,7 +668,7 @@ internal fun AnalyticsSavingsGoalsCard(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "${String.format(Locale.US, "%.0f€", saved)} / ${String.format(Locale.US, "%.0f€", target)} ($pct%)",
+                                    text = "${String.format(Locale.US, "%.0f", saved)}$currencySymbol / ${String.format(Locale.US, "%.0f", target)}$currencySymbol ($pct%)",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Emerald700

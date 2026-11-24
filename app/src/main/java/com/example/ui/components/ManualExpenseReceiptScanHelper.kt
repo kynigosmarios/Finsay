@@ -69,11 +69,12 @@ internal object ManualExpenseReceiptScanHelper {
 
         val matchedCategory = categories.find { it.name.equals(result.suggestedCategoryName, ignoreCase = true) }
         val amountFormatted = if (result.amount > 0.0) String.format(Locale.US, "%.2f", result.amount) else ""
+        val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
         val msg = if (result.title.isNotBlank() || result.amount > 0.0) {
             if (lang == Localization.Language.ENGLISH) {
-                "Receipt scanned: ${if (result.title.isNotBlank()) result.title else "Receipt"} (${if (result.amount > 0.0) "${amountFormatted}€" else ""})"
+                "Receipt scanned: ${if (result.title.isNotBlank()) result.title else "Receipt"} (${if (result.amount > 0.0) "${amountFormatted}${curSymbol}" else ""})"
             } else {
-                "Αναγνωρίστηκε: ${if (result.title.isNotBlank()) result.title else "Απόδειξη"} (${if (result.amount > 0.0) "${amountFormatted}€" else ""})"
+                "Αναγνωρίστηκε: ${if (result.title.isNotBlank()) result.title else "Απόδειξη"} (${if (result.amount > 0.0) "${amountFormatted}${curSymbol}" else ""})"
             }
         } else {
             if (lang == Localization.Language.ENGLISH) "Could not detect receipt details" else "Δεν εντοπίστηκαν στοιχεία στην απόδειξη"
