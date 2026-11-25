@@ -210,7 +210,7 @@ object ExpenseReportExporter {
             } else {
                 "Οικονομική Αναφορά Finsay (CSV) - $periodTitle"
             }
-            shareFile(context, file, "text/csv", shareTitle)
+            shareFile(context, file, "text/csv", shareTitle, isEnglish)
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting CSV: ${e.message}", e)
             Handler(Looper.getMainLooper()).post {
@@ -374,7 +374,7 @@ object ExpenseReportExporter {
             } else {
                 "Οικονομική Αναφορά Finsay (Excel) - $periodTitle"
             }
-            shareFile(context, file, "application/vnd.ms-excel", shareTitle)
+            shareFile(context, file, "application/vnd.ms-excel", shareTitle, isEnglish)
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting Excel: ${e.message}", e)
             Handler(Looper.getMainLooper()).post {
@@ -723,7 +723,7 @@ object ExpenseReportExporter {
                 } else {
                     "Οικονομική Αναφορά Finsay (PDF) - $periodTitle"
                 }
-                shareFile(context, file, "application/pdf", shareTitle)
+                shareFile(context, file, "application/pdf", shareTitle, isEnglish)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting PDF: ${e.message}", e)
@@ -734,7 +734,7 @@ object ExpenseReportExporter {
         }
     }
 
-    private fun shareFile(context: Context, file: File, mimeType: String, title: String) {
+    private fun shareFile(context: Context, file: File, mimeType: String, title: String, isEnglish: Boolean = false) {
         try {
             val uri: Uri = FileProvider.getUriForFile(
                 context,
@@ -756,7 +756,8 @@ object ExpenseReportExporter {
             context.startActivity(chooser)
         } catch (e: Exception) {
             Log.e(TAG, "Error sharing file: ${e.message}", e)
-            Toast.makeText(context, "Σφάλμα κοινοποίησης αρχείου: ${e.message}", Toast.LENGTH_LONG).show()
+            val msg = if (isEnglish) "File sharing error: ${e.localizedMessage ?: "unknown"}" else "Σφάλμα κοινοποίησης αρχείου: ${e.localizedMessage ?: "άγνωστο"}"
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }
 }

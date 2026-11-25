@@ -202,23 +202,33 @@ internal class FirestoreStructureDelegate(
         db.collection("households").document(householdId).collection("categories").document(categoryId).delete().await()
     }
 
-    suspend fun setCategoryDeleted(householdId: String, categoryId: String, categoryName: String, isDeleted: Boolean) {
+    suspend fun setCategoryDeleted(
+        householdId: String,
+        categoryId: String,
+        categoryName: String,
+        isDeleted: Boolean,
+        categoryType: String = "EXPENSE"
+    ) {
         if (householdId.isBlank()) return
         try {
             val catsCol = db.collection("households").document(householdId).collection("categories")
             val targetNameNorm = GreekVoiceParser.normalizeGreek(categoryName.trim().lowercase())
+            val targetTypeNorm = categoryType.ifBlank { "EXPENSE" }.uppercase()
             val snap = catsCol.get().await()
             var matched = false
             for (doc in snap.documents) {
                 val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
                 val docId = doc.getString("id") ?: doc.id
-                if (docId == categoryId || doc.id == categoryId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
+                val docType = doc.getString("categoryType").orEmpty().ifBlank { "EXPENSE" }.uppercase()
+                val matchesId = docId == categoryId || doc.id == categoryId
+                val matchesNameAndType = targetNameNorm.isNotBlank() && docName == targetNameNorm && docType == targetTypeNorm
+                if (matchesId || matchesNameAndType) {
                     doc.reference.update("isDeleted", isDeleted).await()
                     matched = true
                 }
             }
             if (!matched && categoryId.isNotBlank()) {
-                catsCol.document(categoryId).set(mapOf("isDeleted" to isDeleted), SetOptions.merge()).await()
+                catsCol.document(categoryId).set(mapOf("isDeleted" to isDeleted, "categoryType" to targetTypeNorm), SetOptions.merge()).await()
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -226,16 +236,25 @@ internal class FirestoreStructureDelegate(
         }
     }
 
-    suspend fun permanentDeleteCategoryExact(householdId: String, categoryId: String, categoryName: String) {
+    suspend fun permanentDeleteCategoryExact(
+        householdId: String,
+        categoryId: String,
+        categoryName: String,
+        categoryType: String = "EXPENSE"
+    ) {
         if (householdId.isBlank()) return
         try {
             val catsCol = db.collection("households").document(householdId).collection("categories")
             val targetNameNorm = GreekVoiceParser.normalizeGreek(categoryName.trim().lowercase())
+            val targetTypeNorm = categoryType.ifBlank { "EXPENSE" }.uppercase()
             val snap = catsCol.get().await()
             for (doc in snap.documents) {
                 val docName = GreekVoiceParser.normalizeGreek(doc.getString("name").orEmpty().trim().lowercase())
                 val docId = doc.getString("id") ?: doc.id
-                if (docId == categoryId || doc.id == categoryId || (targetNameNorm.isNotBlank() && docName == targetNameNorm)) {
+                val docType = doc.getString("categoryType").orEmpty().ifBlank { "EXPENSE" }.uppercase()
+                val matchesId = docId == categoryId || doc.id == categoryId
+                val matchesNameAndType = targetNameNorm.isNotBlank() && docName == targetNameNorm && docType == targetTypeNorm
+                if (matchesId || matchesNameAndType) {
                     doc.reference.delete().await()
                 }
             }
@@ -833,11 +852,14 @@ internal class FirestoreStructureDelegate(
             namesToPurge.add(oldName.trim().lowercase())
         }
 
+        val targetTypeNorm = category.categoryType.ifBlank { "EXPENSE" }.uppercase()
         for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
             try {
                 val snapshot = db.collection("households").document(hId).collection("categories").get().await()
                 for (doc in snapshot.documents) {
                     if (doc.id == canonicalDocId) continue
+                    val remoteType = doc.getString("categoryType").orEmpty().ifBlank { "EXPENSE" }.uppercase()
+                    if (remoteType != targetTypeNorm) continue
                     val remoteName = doc.getString("name").orEmpty().trim().lowercase()
                     if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
                         (remoteName == category.name.trim().lowercase())
@@ -853,6 +875,8 @@ internal class FirestoreStructureDelegate(
                 val snapshot = db.collection("users").document(userId).collection("categories").get().await()
                 for (doc in snapshot.documents) {
                     if (doc.id == canonicalDocId) continue
+                    val remoteType = doc.getString("categoryType").orEmpty().ifBlank { "EXPENSE" }.uppercase()
+                    if (remoteType != targetTypeNorm) continue
                     val remoteName = doc.getString("name").orEmpty().trim().lowercase()
                     if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
                         (remoteName == category.name.trim().lowercase())

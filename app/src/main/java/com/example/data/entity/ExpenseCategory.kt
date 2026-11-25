@@ -13,8 +13,10 @@ data class ExpenseCategory(
     val colorHex: Long = 0xFF059669,
     val voiceKeywords: String = "",
     val sortOrder: Int = 0,
-    val fontColorHex: Long = 0L
+    val fontColorHex: Long = 0L,
+    val categoryType: String = "EXPENSE" // "EXPENSE" or "INCOME"
 ) {
     val monthlyLimit: Double get() = monthlyBudget
     val iconName: String get() = iconKey
+    val isIncomeCategory: Boolean get() = categoryType.equals("INCOME", ignoreCase = true)
 }

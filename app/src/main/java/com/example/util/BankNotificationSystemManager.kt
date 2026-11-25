@@ -131,9 +131,14 @@ object BankNotificationSystemManager {
                 flags
             )
 
-            val title = "Εντοπίστηκε συναλλαγή: ${tx.bankName}"
+            val title = if (tx.isIncome) {
+                "Εντοπίστηκε έσοδο: ${tx.bankName}"
+            } else {
+                "Εντοπίστηκε έξοδο: ${tx.bankName}"
+            }
             val curSymbol = CurrencyFormatter.currentSymbol
-            val text = "${tx.merchantName} • ${String.format(Locale.GERMANY, "%.2f", tx.amount)} $curSymbol"
+            val signPrefix = if (tx.isIncome) "+" else "-"
+            val text = "${tx.merchantName} • $signPrefix${String.format(Locale.GERMANY, "%.2f", tx.amount)} $curSymbol"
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_infinity)

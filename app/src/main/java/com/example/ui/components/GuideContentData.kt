@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.ui.graphics.Color
@@ -200,16 +201,17 @@ internal object GuideContentData {
                 ),
                 TabGuideSection(
                     id = "categories",
-                    title = "Categories",
-                    subtitle = "Custom icons, colors & monthly budgets",
+                    title = "Categories (Expenses & Income)",
+                    subtitle = "Custom icons, colors, income categories & budgets",
                     locationBadge = "Bottom Tab 4",
                     icon = Icons.Default.Category,
                     accentColor = Color(0xFF7C3AED),
                     capabilities = listOf(
-                        "Seed ready-made standard categories in 1 tap or create unlimited custom categories.",
-                        "Customize category icon, badge color, ledger font color, display order, and voice keywords.",
-                        "Set a monthly budget cap per category to enable live progress bars and overspending alerts.",
-                        "Restore deleted categories from the Category Recycle Bin."
+                        "Manage both Expense Categories and Income Categories using the switcher at the top.",
+                        "Free edition allows up to 5 active Expense Categories — upgrade to Finsay Pro for unlimited expense categories.",
+                        "Customize icons, badge colors, ledger font colors, display order, and voice keywords for both expenses and incomes.",
+                        "Set monthly budget caps on expense categories for live progress bars and overspending alerts (income categories do not require a budget).",
+                        "Restore deleted categories anytime from the Category Recycle Bin."
                     )
                 ),
                 TabGuideSection(
@@ -267,6 +269,25 @@ internal object GuideContentData {
                         "Notifications: Configure Evening Daily Reminder time and enable Bank/Google Pay Auto-Catcher (which remembers your category corrections per merchant).",
                         "Widgets & Legal: Pin a Quick-Add Home Screen shortcut/tile and review Terms of Service & Privacy Policy (GDPR)."
                     )
+                ),
+                TabGuideSection(
+                    id = "finsay_pro",
+                    title = "Finsay Pro (Pricing & Benefits)",
+                    subtitle = "Full power, automation & unlimited tools",
+                    locationBadge = "Subscription / Lifetime",
+                    icon = Icons.Default.Star,
+                    accentColor = Color(0xFFD97706),
+                    capabilities = listOf(
+                        "What is Finsay Pro? The upgraded edition of Finsay that removes Free limits and unlocks all smart automation and reporting tools.",
+                        "Plans & Pricing: Monthly 2.99€/month • Yearly 29€/year (Popular — save over 19%) • Lifetime 49€ (one-time payment, forever).",
+                        "Unlimited Expense Categories (Free edition includes up to 5 active expense categories).",
+                        "Unlimited Voice Entries (Free edition includes 15 voice entries per month).",
+                        "Receipt Scanner with Camera & Gallery OCR and AADE QR recognition.",
+                        "Automatic Bank & Wallet Notification Catcher for expenses and incomes worldwide.",
+                        "Multiple independent Expense Books (Households) with custom currencies and sharing.",
+                        "Unlimited Savings Goals (Free: 1) and Unlimited Bill Reminders / Standing Orders (Free: 2).",
+                        "Export detailed financial reports to PDF and Excel (CSV)."
+                    )
                 )
             )
         } else {
@@ -321,15 +342,16 @@ internal object GuideContentData {
                 ),
                 TabGuideSection(
                     id = "categories",
-                    title = "Κατηγορίες",
-                    subtitle = "Εικονίδια, χρώματα & μηνιαία όρια προϋπολογισμού",
+                    title = "Κατηγορίες (Εξόδων & Εσόδων)",
+                    subtitle = "Εικονίδια, χρώματα, κατηγορίες εσόδων & budget",
                     locationBadge = "4η Καρτέλα",
                     icon = Icons.Default.Category,
                     accentColor = Color(0xFF7C3AED),
                     capabilities = listOf(
-                        "Προσθέστε τις έτοιμες βασικές κατηγορίες με 1 πάτημα ή δημιουργήστε όσες προσαρμοσμένες θέλετε.",
-                        "Διαλέξτε εικονίδιο, χρώμα κάρτας, χρώμα γραμματοσειράς, σειρά εμφάνισης και λέξεις-κλειδιά φωνής.",
-                        "Ορίστε μηνιαίο όριο (budget) σε κάθε κατηγορία για μπάρες προόδου και ειδοποιήσεις υπέρβασης.",
+                        "Διαχειριστείτε τόσο Κατηγορίες Εξόδων όσο και Κατηγορίες Εσόδων από τον επιλογέα στο επάνω μέρος.",
+                        "Στη δωρεάν έκδοση επιτρέπονται έως 5 ενεργές Κατηγορίες Εξόδων — με το Finsay Pro έχετε απεριόριστες κατηγορίες εξόδων.",
+                        "Προσαρμόστε εικονίδιο, χρώμα κάρτας, χρώμα γραμματοσειράς, σειρά εμφάνισης και λέξεις-κλειδιά φωνής.",
+                        "Ορίστε μηνιαίο όριο (budget) στις κατηγορίες εξόδων για μπάρες προόδου και ειδοποιήσεις υπέρβασης (στις κατηγορίες εσόδων δεν απαιτείται budget).",
                         "Επαναφέρετε διαγραμμένες κατηγορίες ανά πάσα στιγμή από τον Κάδο Ανακύκλωσης."
                     )
                 ),
@@ -388,6 +410,25 @@ internal object GuideContentData {
                         "Ειδοποιήσεις: Ορίστε ώρα βραδινής υπενθύμισης και ενεργοποιήστε τον Αυτόματο Εντοπισμό Τραπεζικών Συναλλαγών (με έξυπνη μνήμη κατηγορίας ανά έμπορο).",
                         "Συντομεύσεις & Όροι: Προσθέστε γρήγορο πλακίδιο (Widget) στην αρχική οθόνη και διαβάστε τους Όρους Χρήσης & την Πολιτική Απορρήτου."
                     )
+                ),
+                TabGuideSection(
+                    id = "finsay_pro",
+                    title = "Finsay Pro (Κόστος & Προνόμια)",
+                    subtitle = "Όλες οι έξυπνες λειτουργίες χωρίς περιορισμούς",
+                    locationBadge = "Συνδρομή / Εφάπαξ",
+                    icon = Icons.Default.Star,
+                    accentColor = Color(0xFFD97706),
+                    capabilities = listOf(
+                        "Τι είναι το Finsay Pro; Είναι η αναβαθμισμένη έκδοση του Finsay που καταργεί τα όρια της δωρεάν έκδοσης και ξεκλειδώνει όλους τους έξυπνους αυτοματισμούς.",
+                        "Κόστος & Πακέτα: Μηνιαία 2,99€/μήνα • Ετήσια 29€/έτος (Δημοφιλές — εξοικονόμηση άνω του 19%) • Lifetime 49€ (εφάπαξ πληρωμή για πάντα).",
+                        "Απεριόριστες Κατηγορίες Εξόδων (η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων).",
+                        "Απεριόριστη Φωνητική Καταχώρηση (η δωρεάν έκδοση περιλαμβάνει 15 φωνητικές καταχωρήσεις τον μήνα).",
+                        "Σάρωση Αποδείξεων με Κάμερα, Συλλογή (OCR) & QR ΑΑΔΕ.",
+                        "Αυτόματος Αναγνώστης Τραπεζικών Ειδοποιήσεων (παγκόσμιες τράπεζες & Google Pay) για έξοδα και έσοδα.",
+                        "Πολλαπλά ανεξάρτητα Εξοδολόγια με επιλογή νομίσματος και κοινοποίηση σε μέλη.",
+                        "Απεριόριστοι Στόχοι Αποταμίευσης (δωρεάν: 1) & Απεριόριστες Υπενθυμίσεις / Πάγιες Εντολές (δωρεάν: 2).",
+                        "Εξαγωγή αναλυτικών οικονομικών αναφορών σε PDF & Excel (CSV)."
+                    )
                 )
             )
         }
@@ -423,12 +464,12 @@ internal object GuideContentData {
                 SmartFeatureItem(
                     id = "bank_auto",
                     title = "Bank & Google Pay Auto-Catcher",
-                    summary = "Optionally reads payment notifications from Greek banks and Google Pay to prepare expenses automatically.",
+                    summary = "Optionally reads payment and deposit notifications from Greek and international banks/wallets (Google Pay, Revolut, Wise, PayPal, etc.) to prepare expenses and incomes automatically.",
                     highlights = listOf(
-                        "Scoped strictly to the active expense book so notifications never leak into other books.",
-                        "Nothing is saved silently — tap Confirm to review and save, or Dismiss."
+                        "Automatically distinguishes expenses from incoming credits/deposits while filtering out spam, promos, and OTP alerts.",
+                        "Scoped strictly to the active expense book — nothing is saved silently until you confirm."
                     ),
-                    tipText = "Enable or disable anytime under Menu → Settings.",
+                    tipText = "Enable or disable anytime under Menu → Settings (Finsay Pro feature).",
                     icon = Icons.Default.NotificationsNone,
                     accentColor = Color(0xFF0284C7)
                 ),
@@ -498,13 +539,13 @@ internal object GuideContentData {
                 ),
                 SmartFeatureItem(
                     id = "bank_auto",
-                    title = "Αυτόματος Εντοπισμός Τραπεζικών Πληρωμών",
-                    summary = "Εντοπίζει ειδοποιήσεις πληρωμών από ελληνικές τράπεζες και Google Pay και τις ετοιμάζει για καταχώρηση με 1 πάτημα.",
+                    title = "Αυτόματος Εντοπισμός Τραπεζικών Συναλλαγών",
+                    summary = "Εντοπίζει ειδοποιήσεις πληρωμών και καταθέσεων από ελληνικές και διεθνείς τράπεζες ή ψηφιακά πορτοφόλια (Google Pay, Revolut, Wise, PayPal κ.ά.) και τις ετοιμάζει για καταχώρηση με 1 πάτημα.",
                     highlights = listOf(
-                        "Εμφανίζονται αποκλειστικά στο ενεργό εξοδολόγιο στο οποίο ελήφθησαν.",
-                        "Τίποτα δεν αποθηκεύεται χωρίς την έγκρισή σας — επιλέγετε Επιβεβαίωση ή Απόρριψη."
+                        "Ξεχωρίζει αυτόματα τα Έξοδα από τα Έσοδα (πιστώσεις/καταθέσεις) και αγνοεί προσφορές, διαφημίσεις και κωδικούς OTP.",
+                        "Τίποτα δεν αποθηκεύεται χωρίς την έγκρισή σας — επιλέγετε Καταχώρηση ή Αγνόηση."
                     ),
-                    tipText = "Ενεργοποιείται ή απενεργοποιείται ανά πάσα στιγμή από Μενού → Ρυθμίσεις.",
+                    tipText = "Ενεργοποιείται ή απενεργοποιείται ανά πάσα στιγμή από Μενού → Ρυθμίσεις (δυνατότητα Finsay Pro).",
                     icon = Icons.Default.NotificationsNone,
                     accentColor = Color(0xFF0284C7)
                 ),

@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.components.AppLockScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.EmailVerificationScreen
+import com.example.ui.screens.LegalConsentGateScreen
 import com.example.ui.screens.MainScreen
 import com.example.ui.theme.Emerald700
 import com.example.ui.theme.MyApplicationTheme
@@ -69,13 +70,9 @@ class MainActivity : FragmentActivity() {
                         viewModel.onPurchasePending()
                     }
                 },
-                onSubscriptionActivated = { isActivated ->
+                onActivePurchasesUpdated = { purchases, isFreshPurchase ->
                     runOnUiThread {
-                        if (isActivated) {
-                            viewModel.unlockPro()
-                        } else {
-                            viewModel.revokePro()
-                        }
+                        viewModel.onPlayPurchasesUpdated(purchases, isFreshPurchase)
                     }
                 }
             )
@@ -125,7 +122,11 @@ class MainActivity : FragmentActivity() {
                             onLaunchBilling = { act, planId ->
                                 try {
                                     if (::billingManager.isInitialized) {
-                                        billingManager.launchPurchaseFlow(act, planId)
+                                        billingManager.launchPurchaseFlow(
+                                            activity = act,
+                                            productId = planId,
+                                            obfuscatedAccountId = viewModel.currentUser.value?.uid
+                                        )
                                     } else {
                                         false
                                     }
@@ -218,11 +219,26 @@ class MainActivity : FragmentActivity() {
             val bankTxId = intent.getStringExtra("EXTRA_BANK_TX_ID")
             if (!bankTxId.isNullOrBlank()) {
                 Log.d("MainActivity", "User opened app from bank transaction notification: $bankTxId")
+                com.example.util.BankNotificationHolder.reloadFromPrefs(this)
+                viewModel.enqueueNotificationDeepLink(OikoNomosViewModel.NotificationDeepLink.BankTransaction(bankTxId))
+                intent.removeExtra("EXTRA_BANK_TX_ID")
             }
 
             val billReminderId = intent.getLongExtra(com.example.reminder.BillReminderManager.EXTRA_REMINDER_ID, 0L)
             if (billReminderId > 0L) {
                 viewModel.triggerReminderById(billReminderId)
+                viewModel.enqueueNotificationDeepLink(OikoNomosViewModel.NotificationDeepLink.BillReminder(billReminderId))
+                intent.removeExtra(com.example.reminder.BillReminderManager.EXTRA_REMINDER_ID)
+            }
+
+            if (intent.getBooleanExtra(com.example.reminder.DailyReminderManager.EXTRA_DAILY_REMINDER_TAP, false)) {
+                viewModel.enqueueNotificationDeepLink(OikoNomosViewModel.NotificationDeepLink.DailyReminder)
+                intent.removeExtra(com.example.reminder.DailyReminderManager.EXTRA_DAILY_REMINDER_TAP)
+            }
+
+            if (intent.getBooleanExtra(com.example.util.HouseholdActivityNotificationManager.EXTRA_OPEN_HOUSEHOLD_ACTIVITY, false)) {
+                viewModel.enqueueNotificationDeepLink(OikoNomosViewModel.NotificationDeepLink.HouseholdActivity())
+                intent.removeExtra(com.example.util.HouseholdActivityNotificationManager.EXTRA_OPEN_HOUSEHOLD_ACTIVITY)
             }
         } catch (t: Throwable) {
             Log.w("MainActivity", "Error parsing intent: ${t.message}")
@@ -234,6 +250,7 @@ private enum class RootScreen {
     LOADING,
     AUTH,
     EMAIL_VERIFICATION,
+    LEGAL_CONSENT,
     MAIN
 }
 
@@ -245,11 +262,15 @@ fun AppRootNavigator(
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val isUserVerified by viewModel.isUserVerifiedState.collectAsStateWithLifecycle()
     val isAuthInitialized by viewModel.isAuthInitialized.collectAsStateWithLifecycle()
+    val hasAcceptedCurrentLegal by viewModel.hasAcceptedCurrentLegal.collectAsStateWithLifecycle()
+    val isLegalStatusResolved by viewModel.isLegalStatusResolved.collectAsStateWithLifecycle()
 
     val currentScreen = when {
         !isAuthInitialized -> RootScreen.LOADING
         currentUser == null -> RootScreen.AUTH
         !isUserVerified -> RootScreen.EMAIL_VERIFICATION
+        !isLegalStatusResolved -> RootScreen.LOADING
+        !hasAcceptedCurrentLegal -> RootScreen.LEGAL_CONSENT
         else -> RootScreen.MAIN
     }
 
@@ -275,6 +296,9 @@ fun AppRootNavigator(
                         viewModel = viewModel
                     )
                 } ?: AuthScreen(viewModel = viewModel)
+            }
+            RootScreen.LEGAL_CONSENT -> {
+                LegalConsentGateScreen(viewModel = viewModel)
             }
             RootScreen.MAIN -> {
                 MainScreen(

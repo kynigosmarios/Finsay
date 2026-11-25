@@ -127,67 +127,314 @@ class ExpenseRepository(
         }
     }
 
-    suspend fun seedStandardCategories() {
-        val existing = expenseDao.getAllCategoriesList()
+    suspend fun seedStandardCategories(
+        maxTotalExpenseCategories: Int? = null,
+        isEnglish: Boolean = false
+    ) {
+        val existing = expenseDao.getAllCategoriesList().filter { !it.isIncomeCategory }
         val maxSort = existing.maxOfOrNull { it.sortOrder } ?: -1
-        val standardCategories = listOf(
-            ExpenseCategory(
-                id = 0L,
-                name = "Σούπερ μάρκετ",
-                iconKey = "cart",
-                monthlyBudget = 400.0,
-                colorHex = 0xFF059669,
-                voiceKeywords = "σούπερ μάρκετ, σουπερμάρκετ, σκλαβενίτης, βασιλόπουλος, lidl, μάρκετ, τρόφιμα, ψώνια, μανάβικο, κρεοπωλείο",
-                sortOrder = maxSort + 1
-            ),
-            ExpenseCategory(
-                id = 0L,
-                name = "Φαγητό & Καφές",
-                iconKey = "food",
-                monthlyBudget = 150.0,
-                colorHex = 0xFFEF4444,
-                voiceKeywords = "φαγητό, καφές, καφέδες, ντελίβερι, σουβλάκια, πίτσα, delivery, efood, wolt, ταβέρνα, εστιατόριο",
-                sortOrder = maxSort + 2
-            ),
-            ExpenseCategory(
-                id = 0L,
-                name = "Λογαριασμοί & Σπίτι",
-                iconKey = "house",
-                monthlyBudget = 300.0,
-                colorHex = 0xFF0D9488,
-                voiceKeywords = "ενοίκιο, ρεύμα, δεη, αέριο, κοινόχρηστα, ίντερνετ, νερό, λογαριασμός",
-                sortOrder = maxSort + 3
-            ),
-            ExpenseCategory(
-                id = 0L,
-                name = "Μετακινήσεις & Καύσιμα",
-                iconKey = "gas_station",
-                monthlyBudget = 120.0,
-                colorHex = 0xFFEA580C,
-                voiceKeywords = "βενζίνη, καύσιμα, βενζινάδικο, διόδια, πάρκινγκ, λεωφορείο, μετρό, ταξί",
-                sortOrder = maxSort + 4
-            ),
-            ExpenseCategory(
-                id = 0L,
-                name = "Υγεία & Φαρμακείο",
-                iconKey = "medical",
-                monthlyBudget = 80.0,
-                colorHex = 0xFFEC4899,
-                voiceKeywords = "γιατρός, φαρμακείο, φάρμακα, εξετάσεις, οδοντίατρος, υγεία",
-                sortOrder = maxSort + 5
-            ),
-            ExpenseCategory(
-                id = 0L,
-                name = "Διασκέδαση & Ψυχαγωγία",
-                iconKey = "entertainment",
-                monthlyBudget = 100.0,
-                colorHex = 0xFF8B5CF6,
-                voiceKeywords = "διασκέδαση, σινεμά, θέατρο, ποτό, συναυλία, έξοδος, netflix",
-                sortOrder = maxSort + 6
+        val standardCategories = if (isEnglish) {
+            listOf(
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Supermarket",
+                    iconKey = "cart",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF059669,
+                    voiceKeywords = "supermarket, groceries, grocery, market, lidl, shopping, σούπερ μάρκετ, μάρκετ, ψώνια",
+                    sortOrder = maxSort + 1,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Food & Coffee",
+                    iconKey = "food",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFEF4444,
+                    voiceKeywords = "food, coffee, cafe, delivery, restaurant, pizza, lunch, dinner, φαγητό, καφές, εστιατόριο",
+                    sortOrder = maxSort + 2,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Bills & Home",
+                    iconKey = "house",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF0D9488,
+                    voiceKeywords = "bill, bills, electricity, water, rent, internet, phone, home, utilities, λογαριασμός, ρεύμα, ενοίκιο",
+                    sortOrder = maxSort + 3,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Transport & Fuel",
+                    iconKey = "gas_station",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFEA580C,
+                    voiceKeywords = "fuel, gas, petrol, tolls, parking, bus, metro, taxi, uber, transport, βενζίνη, καύσιμα, ταξί",
+                    sortOrder = maxSort + 4,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Health & Pharmacy",
+                    iconKey = "medical",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFEC4899,
+                    voiceKeywords = "doctor, pharmacy, medicine, health, hospital, dentist, γιατρός, φαρμακείο, φάρμακα",
+                    sortOrder = maxSort + 5,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Entertainment",
+                    iconKey = "entertainment",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF8B5CF6,
+                    voiceKeywords = "entertainment, cinema, movie, drinks, bar, concert, netflix, διασκέδαση, σινεμά, ποτό",
+                    sortOrder = maxSort + 6,
+                    categoryType = "EXPENSE"
+                )
             )
-        )
-        val toAdd = standardCategories.filter { std ->
+        } else {
+            listOf(
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Σούπερ μάρκετ",
+                    iconKey = "cart",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF059669,
+                    voiceKeywords = "σούπερ μάρκετ, σουπερμάρκετ, σκλαβενίτης, βασιλόπουλος, lidl, μάρκετ, τρόφιμα, ψώνια, μανάβικο, κρεοπωλείο, supermarket, groceries",
+                    sortOrder = maxSort + 1,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Φαγητό & Καφές",
+                    iconKey = "food",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFEF4444,
+                    voiceKeywords = "φαγητό, καφές, καφέδες, ντελίβερι, σουβλάκια, πίτσα, delivery, efood, wolt, ταβέρνα, εστιατόριο, food, coffee",
+                    sortOrder = maxSort + 2,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Λογαριασμοί & Σπίτι",
+                    iconKey = "house",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF0D9488,
+                    voiceKeywords = "ενοίκιο, ρεύμα, δεη, αέριο, κοινόχρηστα, ίντερνετ, νερό, λογαριασμός, bills, rent, utilities",
+                    sortOrder = maxSort + 3,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Μετακινήσεις & Καύσιμα",
+                    iconKey = "gas_station",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFEA580C,
+                    voiceKeywords = "βενζίνη, καύσιμα, βενζινάδικο, διόδια, πάρκινγκ, λεωφορείο, μετρό, ταξί, fuel, gas, transport",
+                    sortOrder = maxSort + 4,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Υγεία & Φαρμακείο",
+                    iconKey = "medical",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFEC4899,
+                    voiceKeywords = "γιατρός, φαρμακείο, φάρμακα, εξετάσεις, οδοντίατρος, υγεία, health, pharmacy, doctor",
+                    sortOrder = maxSort + 5,
+                    categoryType = "EXPENSE"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Διασκέδαση & Ψυχαγωγία",
+                    iconKey = "entertainment",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF8B5CF6,
+                    voiceKeywords = "διασκέδαση, σινεμά, θέατρο, ποτό, συναυλία, έξοδος, netflix, entertainment, cinema",
+                    sortOrder = maxSort + 6,
+                    categoryType = "EXPENSE"
+                )
+            )
+        }
+        val missing = standardCategories.filter { std ->
             existing.none { it.name.trim().equals(std.name.trim(), ignoreCase = true) }
+        }
+        val toAdd = if (maxTotalExpenseCategories != null) {
+            val allowedNew = (maxTotalExpenseCategories - existing.size).coerceAtLeast(0)
+            missing.take(allowedNew)
+        } else {
+            missing
+        }
+        if (toAdd.isNotEmpty()) {
+            expenseDao.insertCategories(toAdd)
+        }
+    }
+
+    suspend fun seedStandardIncomeCategories(
+        maxTotalIncomeCategories: Int? = null,
+        isEnglish: Boolean = false
+    ) {
+        val existing = expenseDao.getAllCategoriesList().filter { it.isIncomeCategory }
+        val maxSort = existing.maxOfOrNull { it.sortOrder } ?: -1
+        val standardIncomeCategories = if (isEnglish) {
+            listOf(
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Salary",
+                    iconKey = "work",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF059669,
+                    voiceKeywords = "salary, paycheck, wages, payroll, μισθός, μισθοδοσία",
+                    sortOrder = maxSort + 1,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Rent",
+                    iconKey = "house",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF0D9488,
+                    voiceKeywords = "rent, rental, lease, ενοίκιο, μίσθωμα",
+                    sortOrder = maxSort + 2,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Business / Freelance",
+                    iconKey = "tech",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF0284C7,
+                    voiceKeywords = "business, freelance, invoice, client, project, επιχείρηση, τιμολόγιο",
+                    sortOrder = maxSort + 3,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Subsidy / Allowance",
+                    iconKey = "loan",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF8B5CF6,
+                    voiceKeywords = "subsidy, allowance, grant, refund, benefit, επιδότηση, επίδομα",
+                    sortOrder = maxSort + 4,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Bonus / Gift",
+                    iconKey = "gift",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFD97706,
+                    voiceKeywords = "bonus, gift, reward, tip, μπόνους, δώρο",
+                    sortOrder = maxSort + 5,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Investments",
+                    iconKey = "savings",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF10B981,
+                    voiceKeywords = "investments, dividend, interest, stocks, crypto, επενδύσεις, μέρισμα",
+                    sortOrder = maxSort + 6,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Other",
+                    iconKey = "other",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF475569,
+                    voiceKeywords = "other, misc, income, άλλο, διάφορα, έσοδο",
+                    sortOrder = maxSort + 7,
+                    categoryType = "INCOME"
+                )
+            )
+        } else {
+            listOf(
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Μισθός",
+                    iconKey = "work",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF059669,
+                    voiceKeywords = "μισθός, μισθοδοσία, salary, paycheck",
+                    sortOrder = maxSort + 1,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Ενοίκιο",
+                    iconKey = "house",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF0D9488,
+                    voiceKeywords = "ενοίκιο, μίσθωμα, rent",
+                    sortOrder = maxSort + 2,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Επιχείρηση / Freelance",
+                    iconKey = "tech",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF0284C7,
+                    voiceKeywords = "επιχείρηση, freelance, τιμολόγιο, πελάτης, έργο, business",
+                    sortOrder = maxSort + 3,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Επιδότηση",
+                    iconKey = "loan",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF8B5CF6,
+                    voiceKeywords = "επιδότηση, επίδομα, επιστροφή, subsidy, allowance",
+                    sortOrder = maxSort + 4,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Bonus / Δώρο",
+                    iconKey = "gift",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFFD97706,
+                    voiceKeywords = "bonus, μπόνους, δώρο, πάσχα, χριστούγεννα, gift",
+                    sortOrder = maxSort + 5,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Επενδύσεις",
+                    iconKey = "savings",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF10B981,
+                    voiceKeywords = "επενδύσεις, μέρισμα, τόκοι, μετοχές, investments",
+                    sortOrder = maxSort + 6,
+                    categoryType = "INCOME"
+                ),
+                ExpenseCategory(
+                    id = 0L,
+                    name = "Άλλο",
+                    iconKey = "other",
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF475569,
+                    voiceKeywords = "άλλο, διάφορα, έσοδο, other",
+                    sortOrder = maxSort + 7,
+                    categoryType = "INCOME"
+                )
+            )
+        }
+        val missing = standardIncomeCategories.filter { std ->
+            existing.none { it.name.trim().equals(std.name.trim(), ignoreCase = true) }
+        }
+        val toAdd = if (maxTotalIncomeCategories != null) {
+            val allowedNew = (maxTotalIncomeCategories - existing.size).coerceAtLeast(0)
+            missing.take(allowedNew)
+        } else {
+            missing
         }
         if (toAdd.isNotEmpty()) {
             expenseDao.insertCategories(toAdd)

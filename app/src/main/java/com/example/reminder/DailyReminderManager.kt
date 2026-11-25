@@ -24,6 +24,7 @@ object DailyReminderManager {
     const val NOTIFICATION_ID = 1001
     const val PREFS_NAME = "oikonomos_reminder_prefs"
     const val REQUEST_CODE_ALARM = 2001
+    const val EXTRA_DAILY_REMINDER_TAP = "EXTRA_DAILY_REMINDER_TAP"
     private const val TAG = "DailyReminderManager"
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -163,14 +164,15 @@ object DailyReminderManager {
             }
 
             val tapIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_DAILY_REMINDER_TAP, true)
             }
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             } else {
                 PendingIntent.FLAG_UPDATE_CURRENT
             }
-            val tapPendingIntent = PendingIntent.getActivity(context, 0, tapIntent, flags)
+            val tapPendingIntent = PendingIntent.getActivity(context, NOTIFICATION_ID, tapIntent, flags)
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_infinity)

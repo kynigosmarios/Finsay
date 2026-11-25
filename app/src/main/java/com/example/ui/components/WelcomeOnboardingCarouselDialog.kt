@@ -1,9 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,14 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.PieChart
-import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.PieChart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -38,24 +35,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.R
+import com.example.ui.theme.Emerald500
 import com.example.ui.theme.Emerald700
+import com.example.ui.theme.ModernFontFamily
 
 /**
- * Streamlined single-screen first-launch welcome & privacy consent dialog.
- * Replaces the multi-slide carousel + separate GDPR popup so new users can
- * start logging their first expense in seconds, while permissions (mic, camera,
- * notifications, bank push) are requested strictly just-in-time.
+ * Clean, lightweight welcome dialog shown on first entry into Finsay.
+ * Warmly greets the user and highlights the core key features at a glance.
  */
 @Composable
 fun WelcomeOnboardingCarouselDialog(
@@ -65,6 +60,8 @@ fun WelcomeOnboardingCarouselDialog(
     onOpenLegalDocument: ((String) -> Unit)? = null
 ) {
     val isEn = appLanguage.equals("EN", ignoreCase = true)
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val brandAccent = if (isDark) Emerald500 else Emerald700
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -73,172 +70,144 @@ fun WelcomeOnboardingCarouselDialog(
         SmoothDialogContent {
             Card(
                 modifier = Modifier
-                    .fillMaxWidth(0.92f)
-                    .widthIn(max = 440.dp)
+                    .fillMaxWidth(0.90f)
+                    .widthIn(max = 420.dp)
                     .testTag("welcome_onboarding_carousel_dialog"),
-                shape = RoundedCornerShape(26.dp),
+                shape = RoundedCornerShape(28.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.45f else 0.5f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
             ) {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0.0f to brandAccent.copy(alpha = if (isDark) 0.18f else 0.10f),
+                                    0.38f to Color.Transparent,
+                                    1.0f to Color.Transparent
+                                )
+                            )
+                        )
                 ) {
-                    // Compact Branded Emerald Header
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(Color(0xFF047857), Color(0xFF10B981))
-                                )
-                            )
-                            .padding(horizontal = 22.dp, vertical = 22.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Box(
-                                modifier = Modifier
-                                    .size(58.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Color.White.copy(alpha = 0.18f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Image(
-                                    painter = painterResource(id = R.drawable.finsay_logo),
-                                    contentDescription = "Finsay",
-                                    modifier = Modifier.size(38.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = if (isEn) "Welcome to Finsay" else "Καλώς ήρθατε στο Finsay",
-                                color = Color.White,
-                                fontSize = 21.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (isEn)
-                                    "Track expenses in seconds — solo or with family"
-                                else
-                                    "Καταγράψτε έξοδα σε δευτερόλεπτα — μόνοι ή με την οικογένεια",
-                                color = Color.White.copy(alpha = 0.9f),
-                                fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
-                                lineHeight = 18.sp
-                            )
-                        }
-                    }
-
-                    // 3 Concise Feature Highlights
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 18.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp, vertical = 26.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        WelcomeFeatureRow(
-                            icon = Icons.Default.Mic,
-                            title = if (isEn) "Voice, Receipt Scan & Quick Entry" else "Φωνή, Σάρωση Απόδειξης & Γρήγορη Καταχώρηση",
-                            subtitle = if (isEn)
-                                "Tap the green + button anytime to log an expense or income."
-                            else
-                                "Πατήστε το πράσινο + ανά πάσα στιγμή για άμεση καταχώρηση."
-                        )
-                        WelcomeFeatureRow(
-                            icon = Icons.Default.AccountBalanceWallet,
-                            title = if (isEn) "Shared Households & Fair Split" else "Κοινά Εξοδολόγια & Δίκαιος Επιμερισμός",
-                            subtitle = if (isEn)
-                                "Sync in real time with family, partners or roommates."
-                            else
-                                "Συγχρονισμός σε πραγματικό χρόνο με οικογένεια, σύντροφο ή συγκάτοικους."
-                        )
-                        WelcomeFeatureRow(
-                            icon = Icons.Default.PieChart,
-                            title = if (isEn) "Clear Analytics & Smart Budgets" else "Καθαρά Γραφήματα & Έξυπνοι Προϋπολογισμοί",
-                            subtitle = if (isEn)
-                                "Permissions (mic, camera, notifications) are only asked when you use them."
-                            else
-                                "Άδειες (μικρόφωνο, κάμερα, ειδοποιήσεις) ζητούνται μόνο όταν τις χρειαστείτε."
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // Compact Inline GDPR / Privacy Notice
+                        // Crisp branded emblem on clean surface badge
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth()
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                1.dp,
+                                brandAccent.copy(alpha = if (isDark) 0.30f else 0.18f)
+                            ),
+                            shadowElevation = 2.dp,
+                            modifier = Modifier.size(64.dp)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Shield,
-                                    contentDescription = null,
-                                    tint = Emerald700,
-                                    modifier = Modifier
-                                        .padding(top = 2.dp)
-                                        .size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = if (isEn)
-                                            "Your data is encrypted and private (GDPR). By continuing you agree to our Privacy Policy & Terms."
-                                        else
-                                            "Τα δεδομένα σας προστατεύονται με κρυπτογράφηση (GDPR). Συνεχίζοντας αποδέχεστε την Πολιτική Απορρήτου & τους Όρους Χρήσης.",
-                                        fontSize = 11.5.sp,
-                                        lineHeight = 16.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    if (onOpenLegalDocument != null) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            Text(
-                                                text = if (isEn) "Privacy Policy" else "Πολιτική Απορρήτου",
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Emerald700,
-                                                textDecoration = TextDecoration.Underline,
-                                                modifier = Modifier.clickable { onOpenLegalDocument("privacy") }
-                                            )
-                                            Text(
-                                                text = if (isEn) "Terms of Service" else "Όροι Χρήσης",
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Emerald700,
-                                                textDecoration = TextDecoration.Underline,
-                                                modifier = Modifier.clickable { onOpenLegalDocument("terms") }
-                                            )
-                                        }
-                                    }
-                                }
+                            Box(contentAlignment = Alignment.Center) {
+                                OikoNomosLogo(size = 38.dp)
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text(
+                            text = if (isEn) "Welcome to Finsay!" else "Καλώς ήρθατε στο Finsay!",
+                            fontFamily = ModernFontFamily,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-0.4).sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = if (isEn)
+                                "Everything you need to manage your finances effortlessly."
+                            else
+                                "Όλα τα οικονομικά σας, απλά και οργανωμένα.",
+                            fontSize = 13.5.sp,
+                            lineHeight = 19.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        // 4 Concise, scannable key features
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(15.dp)
+                        ) {
+                            WelcomeFeatureItem(
+                                icon = Icons.Rounded.Mic,
+                                accentColor = brandAccent,
+                                title = if (isEn) "Log in seconds" else "Άμεση καταχώρηση",
+                                subtitle = if (isEn)
+                                    "By voice, receipt scan, or quick entry."
+                                else
+                                    "Με φωνή, σάρωση απόδειξης ή ένα πάτημα."
+                            )
+                            WelcomeFeatureItem(
+                                icon = Icons.Rounded.Groups,
+                                accentColor = brandAccent,
+                                title = if (isEn) "Shared expense books" else "Κοινά εξοδολόγια",
+                                subtitle = if (isEn)
+                                    "Track & split expenses with family or friends."
+                                else
+                                    "Μοιραστείτε έξοδα με οικογένεια ή παρέα."
+                            )
+                            WelcomeFeatureItem(
+                                icon = Icons.Rounded.PieChart,
+                                accentColor = brandAccent,
+                                title = if (isEn) "Charts & budgets" else "Γραφήματα & όρια",
+                                subtitle = if (isEn)
+                                    "Clear spending insights and monthly limits."
+                                else
+                                    "Καθαρή εικόνα εξόδων και μηνιαία budget."
+                            )
+                            WelcomeFeatureItem(
+                                icon = Icons.Rounded.NotificationsActive,
+                                accentColor = brandAccent,
+                                title = if (isEn) "Reminders & goals" else "Υπενθυμίσεις & στόχοι",
+                                subtitle = if (isEn)
+                                    "Stay on top of bills and savings goals."
+                                else
+                                    "Πάγιοι λογαριασμοί και στόχοι αποταμίευσης."
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(26.dp))
 
                         Button(
                             onClick = onDismiss,
-                            colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
-                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Emerald700,
+                                contentColor = Color.White
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 0.dp,
+                                pressedElevation = 0.dp
+                            ),
+                            shape = RoundedCornerShape(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .height(52.dp)
                                 .testTag("welcome_get_started_btn")
                         ) {
                             Text(
                                 text = if (isEn) "Get Started" else "Ξεκινήστε",
-                                color = Color.White,
-                                fontSize = 15.sp,
+                                fontSize = 15.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -250,42 +219,43 @@ fun WelcomeOnboardingCarouselDialog(
 }
 
 @Composable
-private fun WelcomeFeatureRow(
+private fun WelcomeFeatureItem(
     icon: ImageVector,
+    accentColor: Color,
     title: String,
     subtitle: String
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(Emerald700.copy(alpha = 0.12f)),
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(accentColor.copy(alpha = 0.11f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = Emerald700,
-                modifier = Modifier.size(19.dp)
+                tint = accentColor,
+                modifier = Modifier.size(20.dp)
             )
         }
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 14.5.sp,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(1.dp))
             Text(
                 text = subtitle,
-                fontSize = 12.sp,
-                lineHeight = 16.5.sp,
+                fontSize = 12.5.sp,
+                lineHeight = 17.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

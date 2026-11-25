@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +49,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -76,12 +80,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
@@ -89,6 +99,8 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import com.example.R
+import com.example.ui.components.LegalConstants
+import com.example.ui.components.LegalDocumentsDialog
 import com.example.ui.components.OikoNomosLogo
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
@@ -535,7 +547,7 @@ fun AuthScreen(
                                     Icon(
                                         painter = painterResource(id = R.drawable.ic_google_logo),
                                         contentDescription = "Google",
-                                        tint = Color.Unspecified,
+                                        tint = Emerald700,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
@@ -689,7 +701,7 @@ fun AuthScreen(
                                 readOnly = true,
                                 interactionSource = birthDateInteractionSource,
                                 label = { Text(if (lang == Localization.Language.ENGLISH) "Date of Birth *" else "Ημερομηνία Γέννησης *") },
-                                placeholder = { Text("ΗΗ/ΜΜ/ΕΕΕΕ") },
+                                placeholder = { Text(if (lang == Localization.Language.ENGLISH) "DD/MM/YYYY" else "ΗΗ/ΜΜ/ΕΕΕΕ") },
                                 leadingIcon = {
                                     Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Emerald700)
                                 },
@@ -1112,8 +1124,8 @@ fun AuthScreen(
                             onValueChange = { input ->
                                 dayText = input.filter { ch -> ch.isDigit() }.take(2)
                             },
-                            label = { Text("Ημέρα") },
-                            placeholder = { Text("ΗΗ") },
+                            label = { Text(if (lang == Localization.Language.ENGLISH) "Day" else "Ημέρα") },
+                            placeholder = { Text(if (lang == Localization.Language.ENGLISH) "DD" else "ΗΗ") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(12.dp),
@@ -1126,8 +1138,8 @@ fun AuthScreen(
                             onValueChange = { input ->
                                 monthText = input.filter { ch -> ch.isDigit() }.take(2)
                             },
-                            label = { Text("Μήνας") },
-                            placeholder = { Text("ΜΜ") },
+                            label = { Text(if (lang == Localization.Language.ENGLISH) "Month" else "Μήνας") },
+                            placeholder = { Text(if (lang == Localization.Language.ENGLISH) "MM" else "ΜΜ") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(12.dp),
@@ -1140,8 +1152,8 @@ fun AuthScreen(
                             onValueChange = { input ->
                                 yearText = input.filter { ch -> ch.isDigit() }.take(4)
                             },
-                            label = { Text("Έτος") },
-                            placeholder = { Text("ΕΕΕΕ") },
+                            label = { Text(if (lang == Localization.Language.ENGLISH) "Year" else "Έτος") },
+                            placeholder = { Text(if (lang == Localization.Language.ENGLISH) "YYYY" else "ΕΕΕΕ") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(12.dp),

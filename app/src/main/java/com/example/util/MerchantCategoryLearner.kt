@@ -128,4 +128,8 @@ object MerchantCategoryLearner {
             categoryName = matched.name
         )
     }
+
+    fun clearAll(context: Context) {
+        getPrefs(context).edit().clear().apply()
+    }
 }

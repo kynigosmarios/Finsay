@@ -83,6 +83,7 @@ import java.util.Locale
 @Composable
 fun CategoryDialog(
     categoryToEdit: ExpenseCategory?,
+    isIncomeCategory: Boolean = categoryToEdit?.isIncomeCategory == true,
     appLanguage: String = "EL",
     onDismiss: () -> Unit,
     onSave: (
@@ -96,14 +97,17 @@ fun CategoryDialog(
     ) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
+    val effectiveIsIncome = categoryToEdit?.isIncomeCategory ?: isIncomeCategory
 
     var name by remember(categoryToEdit) { mutableStateOf(categoryToEdit?.name ?: "") }
     var budgetText by remember(categoryToEdit) {
         mutableStateOf(
-            categoryToEdit?.let { String.format(Locale.US, "%.0f", it.monthlyBudget) } ?: "100"
+            categoryToEdit?.let { String.format(Locale.US, "%.0f", it.monthlyBudget) } ?: "0"
         )
     }
-    var selectedIconKey by remember(categoryToEdit) { mutableStateOf(categoryToEdit?.iconKey ?: "cart") }
+    var selectedIconKey by remember(categoryToEdit, effectiveIsIncome) {
+        mutableStateOf(categoryToEdit?.iconKey ?: if (effectiveIsIncome) "work" else "cart")
+    }
     var selectedColorHex by remember(categoryToEdit) {
         mutableLongStateOf(categoryToEdit?.colorHex ?: 0xFF059669L)
     }
@@ -186,8 +190,17 @@ fun CategoryDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val headerTitle = if (effectiveIsIncome) {
+                        if (categoryToEdit == null) {
+                            if (lang == Localization.Language.ENGLISH) "New Income Category" else "Νέα Κατηγορία Εσόδου"
+                        } else {
+                            if (lang == Localization.Language.ENGLISH) "Edit Income Category" else "Επεξεργασία Κατηγορίας Εσόδου"
+                        }
+                    } else {
+                        if (categoryToEdit == null) Localization.addCategory(lang) else Localization.editCategoryTitle(lang)
+                    }
                     Text(
-                        text = if (categoryToEdit == null) Localization.addCategory(lang) else Localization.editCategoryTitle(lang),
+                        text = headerTitle,
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(selectedColorHex)
@@ -271,7 +284,13 @@ fun CategoryDialog(
 
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = name.ifBlank { if (lang == Localization.Language.ENGLISH) "Sample Expense" else "Παράδειγμα Εξόδου" },
+                                            text = name.ifBlank {
+                                                if (effectiveIsIncome) {
+                                                    if (lang == Localization.Language.ENGLISH) "Sample Income" else "Παράδειγμα Εσόδου"
+                                                } else {
+                                                    if (lang == Localization.Language.ENGLISH) "Sample Expense" else "Παράδειγμα Εξόδου"
+                                                }
+                                            },
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = previewFontColor,
@@ -291,10 +310,10 @@ fun CategoryDialog(
 
                                     val currencySymbol = com.example.util.LocalCurrencySymbol.current
                                     Text(
-                                        text = "35.50 $currencySymbol",
+                                        text = if (effectiveIsIncome) "+350.00 $currencySymbol" else "35.50 $currencySymbol",
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = previewFontColor
+                                        color = if (effectiveIsIncome) Emerald700 else previewFontColor
                                     )
                                 }
                             }
@@ -317,22 +336,24 @@ fun CategoryDialog(
                         singleLine = true
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    if (!effectiveIsIncome) {
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    // Monthly Budget
-                    OutlinedTextField(
-                        value = budgetText,
-                        onValueChange = {
-                            budgetText = it.replace(',', '.')
-                            errorText = null
-                        },
-                        label = { Text(Localization.monthlyBudgetLimitLabel(lang)) },
-                        leadingIcon = { Icon(Icons.Default.Euro, contentDescription = null, tint = Emerald700) },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true
-                    )
+                        // Monthly Budget (Expense Categories only)
+                        OutlinedTextField(
+                            value = budgetText,
+                            onValueChange = {
+                                budgetText = it.replace(',', '.')
+                                errorText = null
+                            },
+                            label = { Text(Localization.monthlyBudgetLimitLabel(lang)) },
+                            leadingIcon = { Icon(Icons.Default.Euro, contentDescription = null, tint = Emerald700) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -570,7 +591,7 @@ fun CategoryDialog(
 
                     Button(
                         onClick = {
-                            val parsedBudget = budgetText.toDoubleOrNull()
+                            val parsedBudget = if (effectiveIsIncome) 0.0 else budgetText.toDoubleOrNull()
                             if (name.isBlank()) {
                                 errorText = if (lang == Localization.Language.ENGLISH) "Please enter category name" else "Συμπληρώστε όνομα κατηγορίας"
                                 return@Button

@@ -314,8 +314,10 @@ class FinsayImprovementsTest {
         assertFalse(RecurringScheduleHelper.isReminderDueAtExactTime(monthly, timeAt(2026, Calendar.APRIL, 15, 10, 29)))
         // Scheduled day (April 15) at 10:30 -> DUE
         assertTrue(RecurringScheduleHelper.isReminderDueAtExactTime(monthly, timeAt(2026, Calendar.APRIL, 15, 10, 30)))
-        // Scheduled day (April 15) at 14:00 -> DUE
-        assertTrue(RecurringScheduleHelper.isReminderDueAtExactTime(monthly, timeAt(2026, Calendar.APRIL, 15, 14, 0)))
+        // Scheduled day (April 15) at 10:33 (within 5-min exact window) -> DUE
+        assertTrue(RecurringScheduleHelper.isReminderDueAtExactTime(monthly, timeAt(2026, Calendar.APRIL, 15, 10, 33)))
+        // Scheduled day (April 15) at 14:00 (hours later, e.g. after logout/login or reinstall) -> NOT due
+        assertFalse(RecurringScheduleHelper.isReminderDueAtExactTime(monthly, timeAt(2026, Calendar.APRIL, 15, 14, 0)))
         // Next day (April 16) at 14:00 -> NOT due (prevents showing on household switch on another day)
         assertFalse(RecurringScheduleHelper.isReminderDueAtExactTime(monthly, timeAt(2026, Calendar.APRIL, 16, 14, 0)))
         // Day before (April 14) at 14:00 -> NOT due

@@ -119,6 +119,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     internal val _isProUser = MutableStateFlow(false)
     val isProUser: StateFlow<Boolean> = _isProUser.asStateFlow()
 
+    internal var activePlayPurchases: List<com.example.billing.BillingManager.PlayPurchaseEntitlement> = emptyList()
+
     internal val _currentHousehold = MutableStateFlow<Household?>(null)
     val currentHousehold = _currentHousehold.asStateFlow()
 
@@ -248,6 +250,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     internal val _allCategories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
     val allCategories: StateFlow<List<ExpenseCategory>> = _allCategories.asStateFlow()
 
+    internal val _incomeCategories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
+    val incomeCategories: StateFlow<List<ExpenseCategory>> = _incomeCategories.asStateFlow()
+
     internal val _deletedCategories = MutableStateFlow<List<ExpenseCategory>>(emptyList())
     val deletedCategories: StateFlow<List<ExpenseCategory>> = _deletedCategories.asStateFlow()
 
@@ -322,6 +327,18 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     )
     val notificationConsentCompleted = _notificationConsentCompleted.asStateFlow()
 
+    internal val _hasAcceptedCurrentLegal = MutableStateFlow(
+        auth.currentUser?.uid?.let { uid ->
+            prefs.getString("legal_accepted_version_$uid", "") == com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION
+        } ?: false
+    )
+    val hasAcceptedCurrentLegal: StateFlow<Boolean> = _hasAcceptedCurrentLegal.asStateFlow()
+
+    internal val _isLegalStatusResolved = MutableStateFlow(
+        auth.currentUser == null || _hasAcceptedCurrentLegal.value
+    )
+    val isLegalStatusResolved: StateFlow<Boolean> = _isLegalStatusResolved.asStateFlow()
+
     // Filters
     private data class ExpenseFilterCriteria(
         val memberId: Long?,
@@ -391,6 +408,22 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     internal val _editingCategory = MutableStateFlow<ExpenseCategory?>(null)
     val editingCategory = _editingCategory.asStateFlow()
 
+    internal val _editingCategoryType = MutableStateFlow("EXPENSE")
+    val editingCategoryType = _editingCategoryType.asStateFlow()
+
+    sealed class NotificationDeepLink {
+        data class BankTransaction(val txId: String) : NotificationDeepLink()
+        data class BillReminder(val reminderId: Long) : NotificationDeepLink()
+        object DailyReminder : NotificationDeepLink()
+        data class HouseholdActivity(val householdId: String = "") : NotificationDeepLink()
+    }
+
+    internal val _pendingNotificationDeepLink = MutableStateFlow<NotificationDeepLink?>(null)
+    val pendingNotificationDeepLink: StateFlow<NotificationDeepLink?> = _pendingNotificationDeepLink.asStateFlow()
+
+    internal val _requestedTabIndex = MutableStateFlow<Int?>(null)
+    val requestedTabIndex: StateFlow<Int?> = _requestedTabIndex.asStateFlow()
+
     internal val _showSettingsDialog = MutableStateFlow(false)
     val showSettingsDialog = _showSettingsDialog.asStateFlow()
 
@@ -401,9 +434,11 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     val uiStyle = _uiStyle.asStateFlow()
 
     internal val _appLanguage = MutableStateFlow(
-        if (prefs.getBoolean("user_explicitly_set_language_v2", false))
-            (prefs.getString("app_language", "EN") ?: "EN")
-        else "EN"
+        if (auth.currentUser != null) {
+            prefs.getString("app_language", "EN") ?: "EN"
+        } else {
+            "EN"
+        }
     )
     val appLanguage = _appLanguage.asStateFlow()
 
@@ -450,6 +485,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     internal val _legalDocumentsInitialTab = MutableStateFlow<String?>(null)
     val legalDocumentsInitialTab = _legalDocumentsInitialTab.asStateFlow()
+
+    internal val _showFinsayProPage = MutableStateFlow(false)
+    val showFinsayProPage = _showFinsayProPage.asStateFlow()
 
     internal val _premiumPaywallReason = MutableStateFlow<String?>(null)
     val premiumPaywallReason = _premiumPaywallReason.asStateFlow()
@@ -644,9 +682,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         try {
-            val hasExplicitLanguage = prefs.getBoolean("user_explicitly_set_language_v2", false)
-            val savedLang = if (hasExplicitLanguage) (prefs.getString("app_language", "EN") ?: "EN") else "EN"
-            auth.setLanguageCode(if (savedLang == "EN") "en" else "el")
+            auth.setLanguageCode(if (_appLanguage.value == "EN") "en" else "el")
         } catch (t: Throwable) {
             Log.w("OikoNomosVM", "auth.setLanguageCode warning: ${t.message}")
         }
@@ -693,7 +729,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                     if (cachedProfile != null && (cachedProfile.uid == existingUser.uid || cachedProfile.email.equals(existingUser.email, ignoreCase = true))) {
                         _userProfile.value = cachedProfile
                     }
-                    syncBankCatcherProEntitlement()
+                    recomputeProEntitlement()
                     val prewarmHid = getOrEnsureHouseholdId(existingUser)
                     if (prewarmHid.isNotBlank()) {
                         viewModelScope.launch(coroutineExceptionHandler) {
@@ -749,8 +785,19 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                         prefs.edit().putString("cached_active_uid", user.uid).apply()
                     }
                     _currentUser.value = user
+                    recomputeProEntitlement()
                     val uidChanged = lastObservedUid != currentUid
                     lastObservedUid = currentUid
+                    val acceptedLocally = prefs.getString("legal_accepted_version_${user.uid}", "") ==
+                        com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION ||
+                        _userProfile.value?.takeIf { it.uid == user.uid }?.acceptedLegalVersion ==
+                        com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION
+                    _hasAcceptedCurrentLegal.value = acceptedLocally
+                    if (acceptedLocally) {
+                        _isLegalStatusResolved.value = true
+                    } else if (uidChanged || isUserSwitch) {
+                        _isLegalStatusResolved.value = false
+                    }
                     if (verified) {
                         syncDelegate.seedInitialHouseholdPlaceholderOnAuth(user)
                         if (uidChanged || isUserSwitch || _userProfile.value == null) {
@@ -760,6 +807,11 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 } else {
                     _currentUser.value = null
                     _isUserVerifiedState.value = false
+                    _hasAcceptedCurrentLegal.value = false
+                    _isLegalStatusResolved.value = true
+                    _isProUser.value = false
+                    _appLanguage.value = "EN"
+                    try { auth.setLanguageCode("en") } catch (_: Throwable) {}
                     _userProfile.value = null
                     _currentHousehold.value = null
                     _userHouseholds.value = emptyList()
@@ -954,13 +1006,45 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun resendVerificationEmail(onSuccess: () -> Unit, onError: (String) -> Unit) = authDelegate.resendVerificationEmail(onSuccess, onError)
     fun sendPasswordResetEmail(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) = authDelegate.sendPasswordResetEmail(email, onSuccess, onError)
     fun signInWithEmail(email: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) = authDelegate.signInWithEmail(email, pass, onSuccess, onError)
-    fun signUpWithEmail(firstName: String, lastName: String, birthDate: String, phoneNumber: String, occupation: String, city: String, email: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) =
-        authDelegate.signUpWithEmail(firstName, lastName, birthDate, phoneNumber, occupation, city, email, pass, onSuccess, onError)
-    fun signInWithGoogleToken(idToken: String, isSignUpMode: Boolean = false, onSuccess: () -> Unit, onError: (String) -> Unit) =
-        authDelegate.signInWithGoogleToken(idToken, isSignUpMode, onSuccess, onError)
+    fun signUpWithEmail(
+        firstName: String,
+        lastName: String,
+        birthDate: String,
+        phoneNumber: String,
+        occupation: String,
+        city: String,
+        email: String,
+        pass: String,
+        acceptedLegalVersion: String = "",
+        acceptedLegalAt: Long = 0L,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) = authDelegate.signUpWithEmail(
+        firstName, lastName, birthDate, phoneNumber, occupation, city, email, pass,
+        acceptedLegalVersion, acceptedLegalAt, onSuccess, onError
+    )
+    fun signInWithGoogleToken(
+        idToken: String,
+        isSignUpMode: Boolean = false,
+        acceptedLegalVersion: String = "",
+        acceptedLegalAt: Long = 0L,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) = authDelegate.signInWithGoogleToken(idToken, isSignUpMode, acceptedLegalVersion, acceptedLegalAt, onSuccess, onError)
+    fun acceptCurrentLegalTerms() = authDelegate.acceptCurrentLegalTerms()
     fun signOutUser() = authDelegate.signOutUser()
     fun factoryResetAndSignOut() = authDelegate.factoryResetAndSignOut()
     fun deleteCurrentUserAccount() = authDelegate.deleteCurrentUserAccount()
+    fun deleteCurrentUserAccountWithPassword(
+        password: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) = authDelegate.deleteCurrentUserAccountWithPassword(password, onSuccess, onError)
+    fun deleteCurrentUserAccountWithGoogleToken(
+        idToken: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) = authDelegate.deleteCurrentUserAccountWithGoogleToken(idToken, onSuccess, onError)
     fun updateUserDisplayName(newName: String) = authDelegate.updateUserDisplayName(newName)
     fun updateUserFullProfile(firstName: String, lastName: String, birthDate: String, phoneNumber: String, occupation: String, city: String, onSuccess: () -> Unit = {}, onError: (String) -> Unit = {}) =
         authDelegate.updateUserFullProfile(firstName, lastName, birthDate, phoneNumber, occupation, city, onSuccess, onError)
@@ -1065,7 +1149,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun getDeletedMemberIds(householdId: String): Set<String> = structureDelegate.getDeletedMemberIds(householdId)
     fun getDeletedCategoryIds(householdId: String): Set<String> = structureDelegate.getDeletedCategoryIds(householdId)
     fun loadDeletedItems(householdId: String) = structureDelegate.loadDeletedItems(householdId)
-    fun seedStandardCategories() = structureDelegate.seedStandardCategories()
+    fun seedStandardCategories(categoryType: String = "EXPENSE") = structureDelegate.seedStandardCategories(categoryType)
     fun openMemberDialog(member: FamilyMember? = null) = structureDelegate.openMemberDialog(member)
     fun dismissMemberDialog() { _editingMember.value = null; _showMemberDialog.value = false }
     fun saveMember(id: Long = 0, name: String, role: String, avatarColorHex: Long, voiceKeywords: String, linkedUserUid: String = "") =
@@ -1075,10 +1159,19 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun softDeleteMember(member: FamilyMember) = structureDelegate.softDeleteMember(member)
     fun restoreMember(member: FamilyMember) = structureDelegate.restoreMember(member)
     fun permanentDeleteMember(member: FamilyMember) = structureDelegate.permanentDeleteMember(member)
-    fun openCategoryDialog(category: ExpenseCategory? = null) = structureDelegate.openCategoryDialog(category)
+    fun openCategoryDialog(category: ExpenseCategory? = null, categoryType: String = category?.categoryType ?: "EXPENSE") =
+        structureDelegate.openCategoryDialog(category, categoryType)
     fun dismissCategoryDialog() { _editingCategory.value = null; _showCategoryDialog.value = false }
-    fun saveCategory(id: Long, name: String, iconKey: String, monthlyBudget: Double, colorHex: Long, voiceKeywords: String, fontColorHex: Long = 0L) =
-        structureDelegate.saveCategory(id, name, iconKey, monthlyBudget, colorHex, voiceKeywords, fontColorHex)
+    fun saveCategory(
+        id: Long,
+        name: String,
+        iconKey: String,
+        monthlyBudget: Double,
+        colorHex: Long,
+        voiceKeywords: String,
+        fontColorHex: Long = 0L,
+        categoryType: String = _editingCategoryType.value
+    ) = structureDelegate.saveCategory(id, name, iconKey, monthlyBudget, colorHex, voiceKeywords, fontColorHex, categoryType)
     fun deleteCategory(category: ExpenseCategory) = softDeleteCategory(category)
     fun softDeleteCategory(category: ExpenseCategory) = structureDelegate.softDeleteCategory(category)
     fun restoreCategory(category: ExpenseCategory) = structureDelegate.restoreCategory(category)
@@ -1090,6 +1183,20 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun clearCurrentExodologioExpenses() = structureDelegate.clearCurrentExodologioExpenses()
     fun clearCurrentHouseholdAllData() = structureDelegate.clearCurrentHouseholdAllData()
 
+    // Notification Deep-Linking
+    fun enqueueNotificationDeepLink(link: NotificationDeepLink) {
+        _pendingNotificationDeepLink.value = link
+    }
+    fun clearPendingNotificationDeepLink() {
+        _pendingNotificationDeepLink.value = null
+    }
+    fun requestTabNavigation(tabIndex: Int) {
+        _requestedTabIndex.value = tabIndex
+    }
+    fun consumeRequestedTabIndex() {
+        _requestedTabIndex.value = null
+    }
+
     // Simple UI State & Preferences Helpers
     fun openBurgerMenu() { _showBurgerMenu.value = true }
     fun dismissBurgerMenu() { _showBurgerMenu.value = false }
@@ -1099,11 +1206,17 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         _showRemindersManagerDialog.value = false
         _showSavingsGoalsManagerDialog.value = false
         _showSettingsDialog.value = false
+        _showFinsayProPage.value = false
         _legalDocumentsInitialTab.value = null
         if (_showOnboardingCarousel.value) {
             dismissOnboardingCarousel()
         }
     }
+    fun openFinsayProPage() {
+        dismissAllSubPages()
+        _showFinsayProPage.value = true
+    }
+    fun dismissFinsayProPage() { _showFinsayProPage.value = false }
     fun openLegalDocumentsPage(initialTab: String) {
         dismissAllSubPages()
         _legalDocumentsInitialTab.value = initialTab
@@ -1125,6 +1238,12 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun activateProFromBilling() = structureDelegate.activateProFromBilling()
     fun unlockPro() = structureDelegate.unlockPro()
     fun revokePro() = structureDelegate.revokePro()
+    fun onPlayPurchasesUpdated(
+        purchases: List<com.example.billing.BillingManager.PlayPurchaseEntitlement>,
+        isFreshPurchase: Boolean
+    ) = structureDelegate.onPlayPurchasesUpdated(purchases, isFreshPurchase)
+    internal fun recomputeProEntitlement(allowWelcomeSnackbar: Boolean = false) =
+        structureDelegate.recomputeProEntitlement(allowWelcomeSnackbar)
     fun onPurchasePending() = structureDelegate.onPurchasePending()
     fun openExportReportDialog() {
         if (!isCurrentUserPro()) {
@@ -1163,14 +1282,54 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun toggleBankAutoCatcher(enabled: Boolean) = structureDelegate.toggleBankAutoCatcher(enabled)
 
     companion object {
-        val STANDARD_DEFAULT_CATEGORIES: List<ExpenseCategory> = listOf(
-            ExpenseCategory(1L, "Σούπερ μάρκετ", "cart", 0.0, 4278556265L, "σούπερ μάρκετ, σουπερμάρκετ, lidl, σκλαβενίτης, βασιλόπουλος, μάρκετ, ψώνια", 0, 0L),
-            ExpenseCategory(2L, "Φαγητό & Καφές", "food", 0.0, 4278556265L, "φαγητό, καφές, delivery, σουβλάκια, πίτσα, εστιατόριο", 1, 0L),
-            ExpenseCategory(3L, "Λογαριασμοί & Σπίτι", "house", 0.0, 4279080072L, "λογαριασμός, ρεύμα, νερό, ενοίκιο, κοινόχρηστα, ιντερνετ, τηλέφωνο", 2, 0L),
-            ExpenseCategory(4L, "Μετακινήσεις & Καύσιμα", "gas_station", 0.0, 4293548044L, "βενζίνη, καύσιμα, διόδια, πάρκινγκ, λεωφορείο, μετρό, ταξί", 3, 0L),
-            ExpenseCategory(5L, "Υγεία & Φαρμακείο", "medical", 0.0, 4293675161L, "γιατρός, φαρμακείο, φάρμακα, εξετάσεις", 4, 0L),
-            ExpenseCategory(6L, "Διασκέδαση & Ψυχαγωγία", "entertainment", 0.0, 4287323382L, "διασκέδαση, έξοδος, ποτό, σινεμά", 5, 0L),
-            ExpenseCategory(7L, "Άλλο", "other", 0.0, 4283124564L, "άλλο, διάφορα", 6, 0L)
-        )
+        const val FREE_MAX_EXPENSE_CATEGORIES = 5
+        const val FREE_MAX_INCOME_CATEGORIES = 5
+
+        fun getStandardDefaultCategories(isEnglish: Boolean): List<ExpenseCategory> = if (isEnglish) {
+            listOf(
+                ExpenseCategory(1L, "Supermarket", "cart", 0.0, 4278556265L, "supermarket, groceries, grocery, market, lidl, shopping, σούπερ μάρκετ, μάρκετ, ψώνια", 0, 0L, "EXPENSE"),
+                ExpenseCategory(2L, "Food & Coffee", "food", 0.0, 4293870660L, "food, coffee, cafe, delivery, restaurant, pizza, lunch, dinner, φαγητό, καφές, εστιατόριο", 1, 0L, "EXPENSE"),
+                ExpenseCategory(3L, "Bills & Home", "house", 0.0, 4279080072L, "bill, bills, electricity, water, rent, internet, phone, home, utilities, λογαριασμός, ρεύμα, ενοίκιο", 2, 0L, "EXPENSE"),
+                ExpenseCategory(4L, "Transport & Fuel", "gas_station", 0.0, 4293548044L, "fuel, gas, petrol, tolls, parking, bus, metro, taxi, uber, transport, βενζίνη, καύσιμα, ταξί", 3, 0L, "EXPENSE"),
+                ExpenseCategory(5L, "Health & Pharmacy", "medical", 0.0, 4293675161L, "doctor, pharmacy, medicine, health, hospital, dentist, γιατρός, φαρμακείο, φάρμακα", 4, 0L, "EXPENSE"),
+                ExpenseCategory(6L, "Entertainment", "entertainment", 0.0, 4287323382L, "entertainment, cinema, movie, drinks, bar, concert, netflix, διασκέδαση, σινεμά, ποτό", 5, 0L, "EXPENSE"),
+                ExpenseCategory(7L, "Other", "other", 0.0, 4283124564L, "other, misc, miscellaneous, άλλο, διάφορα", 6, 0L, "EXPENSE")
+            )
+        } else {
+            listOf(
+                ExpenseCategory(1L, "Σούπερ μάρκετ", "cart", 0.0, 4278556265L, "σούπερ μάρκετ, σουπερμάρκετ, lidl, σκλαβενίτης, βασιλόπουλος, μάρκετ, ψώνια, supermarket, groceries", 0, 0L, "EXPENSE"),
+                ExpenseCategory(2L, "Φαγητό & Καφές", "food", 0.0, 4293870660L, "φαγητό, καφές, delivery, σουβλάκια, πίτσα, εστιατόριο, food, coffee, restaurant", 1, 0L, "EXPENSE"),
+                ExpenseCategory(3L, "Λογαριασμοί & Σπίτι", "house", 0.0, 4279080072L, "λογαριασμός, ρεύμα, νερό, ενοίκιο, κοινόχρηστα, ιντερνετ, τηλέφωνο, bills, rent, utilities", 2, 0L, "EXPENSE"),
+                ExpenseCategory(4L, "Μετακινήσεις & Καύσιμα", "gas_station", 0.0, 4293548044L, "βενζίνη, καύσιμα, διόδια, πάρκινγκ, λεωφορείο, μετρό, ταξί, fuel, gas, transport", 3, 0L, "EXPENSE"),
+                ExpenseCategory(5L, "Υγεία & Φαρμακείο", "medical", 0.0, 4293675161L, "γιατρός, φαρμακείο, φάρμακα, εξετάσεις, health, pharmacy, doctor", 4, 0L, "EXPENSE"),
+                ExpenseCategory(6L, "Διασκέδαση & Ψυχαγωγία", "entertainment", 0.0, 4287323382L, "διασκέδαση, έξοδος, ποτό, σινεμά, entertainment, cinema, bar", 5, 0L, "EXPENSE"),
+                ExpenseCategory(7L, "Άλλο", "other", 0.0, 4283124564L, "άλλο, διάφορα, other", 6, 0L, "EXPENSE")
+            )
+        }
+
+        fun getStandardDefaultIncomeCategories(isEnglish: Boolean): List<ExpenseCategory> = if (isEnglish) {
+            listOf(
+                ExpenseCategory(101L, "Salary", "work", 0.0, 0xFF059669L, "salary, paycheck, wages, payroll, μισθός, μισθοδοσία", 0, 0L, "INCOME"),
+                ExpenseCategory(102L, "Rent", "house", 0.0, 0xFF0D9488L, "rent, rental, lease, ενοίκιο, μίσθωμα", 1, 0L, "INCOME"),
+                ExpenseCategory(103L, "Business / Freelance", "tech", 0.0, 0xFF0284C7L, "business, freelance, invoice, client, project, επιχείρηση, τιμολόγιο", 2, 0L, "INCOME"),
+                ExpenseCategory(104L, "Subsidy / Allowance", "loan", 0.0, 0xFF8B5CF6L, "subsidy, allowance, grant, refund, benefit, επιδότηση, επίδομα", 3, 0L, "INCOME"),
+                ExpenseCategory(105L, "Bonus / Gift", "gift", 0.0, 0xFFD97706L, "bonus, gift, reward, tip, μπόνους, δώρο", 4, 0L, "INCOME"),
+                ExpenseCategory(106L, "Investments", "savings", 0.0, 0xFF10B981L, "investments, dividend, interest, stocks, crypto, επενδύσεις, μέρισμα", 5, 0L, "INCOME"),
+                ExpenseCategory(107L, "Other", "other", 0.0, 0xFF475569L, "other, misc, income, άλλο, διάφορα, έσοδο", 6, 0L, "INCOME")
+            )
+        } else {
+            listOf(
+                ExpenseCategory(101L, "Μισθός", "work", 0.0, 0xFF059669L, "μισθός, μισθοδοσία, salary, paycheck", 0, 0L, "INCOME"),
+                ExpenseCategory(102L, "Ενοίκιο", "house", 0.0, 0xFF0D9488L, "ενοίκιο, μίσθωμα, rent", 1, 0L, "INCOME"),
+                ExpenseCategory(103L, "Επιχείρηση / Freelance", "tech", 0.0, 0xFF0284C7L, "επιχείρηση, freelance, τιμολόγιο, πελάτης, business", 2, 0L, "INCOME"),
+                ExpenseCategory(104L, "Επιδότηση", "loan", 0.0, 0xFF8B5CF6L, "επιδότηση, επίδομα, επιστροφή, subsidy, allowance", 3, 0L, "INCOME"),
+                ExpenseCategory(105L, "Bonus / Δώρο", "gift", 0.0, 0xFFD97706L, "bonus, μπόνους, δώρο, πάσχα, χριστούγεννα, gift", 4, 0L, "INCOME"),
+                ExpenseCategory(106L, "Επενδύσεις", "savings", 0.0, 0xFF10B981L, "επενδύσεις, μέρισμα, τόκοι, μετοχές, investments", 5, 0L, "INCOME"),
+                ExpenseCategory(107L, "Άλλο", "other", 0.0, 0xFF475569L, "άλλο, διάφορα, έσοδο, other", 6, 0L, "INCOME")
+            )
+        }
+
+        val STANDARD_DEFAULT_CATEGORIES: List<ExpenseCategory> = getStandardDefaultCategories(isEnglish = false)
+        val STANDARD_DEFAULT_INCOME_CATEGORIES: List<ExpenseCategory> = getStandardDefaultIncomeCategories(isEnglish = false)
     }
 }

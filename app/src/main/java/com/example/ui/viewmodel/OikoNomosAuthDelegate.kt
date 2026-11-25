@@ -7,10 +7,17 @@ import androidx.credentials.CredentialManager
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.UserProfile
 import com.example.data.safety.DataSafetyGuard
+import com.example.ui.components.LegalConstants
+import com.example.util.AppLockManager
+import com.example.util.BankNotificationHolder
+import com.example.util.BankNotificationSystemManager
 import com.example.util.Localization
+import com.example.util.MerchantCategoryLearner
 import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthRecentLoginRequiredException
 import com.google.firebase.auth.FirebaseUser
@@ -63,8 +70,7 @@ internal class OikoNomosAuthDelegate(
     }
 
     fun isUserVerified(user: FirebaseUser?): Boolean {
-        if (user == null) return false
-        return user.isEmailVerified
+        return user?.isEmailVerified == true
     }
 
     fun checkEmailVerification(onResult: (Boolean) -> Unit) {
@@ -190,9 +196,14 @@ internal class OikoNomosAuthDelegate(
                 try { rawUser.reload().await() } catch (_: Exception) {}
                 val user = vm.auth.currentUser ?: rawUser
                 val verified = isUserVerified(user)
+                val localLegal = vm.prefs.getString("legal_accepted_version_${user.uid}", "") == LegalConstants.CURRENT_LEGAL_VERSION
                 vm.prefs.edit().putString("cached_active_uid", user.uid).apply()
+                vm._hasAcceptedCurrentLegal.value = localLegal
+                vm._isLegalStatusResolved.value = localLegal
                 vm._currentUser.value = user
                 vm._isUserVerifiedState.value = verified
+                vm._isProUser.value = false
+                vm.recomputeProEntitlement()
                 vm._isAuthLoading.value = false
                 if (verified) {
                     vm.showSnackbar(if (isEn) "Signed in successfully!" else "Συνδεθήκατε επιτυχώς!")
@@ -241,6 +252,8 @@ internal class OikoNomosAuthDelegate(
         city: String,
         email: String,
         pass: String,
+        acceptedLegalVersion: String = "",
+        acceptedLegalAt: Long = 0L,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
@@ -270,6 +283,10 @@ internal class OikoNomosAuthDelegate(
             onError(if (isEn) "Password must be at least 6 characters" else "Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες")
             return
         }
+        val hasFreshConsent = acceptedLegalVersion == LegalConstants.CURRENT_LEGAL_VERSION
+        val effectiveAcceptedAt = if (hasFreshConsent) {
+            if (acceptedLegalAt > 0L) acceptedLegalAt else System.currentTimeMillis()
+        } else 0L
         vm._isAuthLoading.value = true
         vm.suppressAuthStateListener = true
         val fullName = "${firstName.trim()} ${lastName.trim()}"
@@ -298,6 +315,8 @@ internal class OikoNomosAuthDelegate(
                     requiresEmailVerification = true,
                     emailVerifiedConfirmed = false,
                     appLanguage = vm._appLanguage.value,
+                    acceptedLegalVersion = if (hasFreshConsent) acceptedLegalVersion else "",
+                    acceptedLegalAt = effectiveAcceptedAt,
                     createdAt = Timestamp.now()
                 )
                 try {
@@ -317,9 +336,23 @@ internal class OikoNomosAuthDelegate(
                 }
 
                 val verified = isUserVerified(user)
-                vm.prefs.edit().putString("cached_active_uid", user.uid).apply()
+                val editor = vm.prefs.edit()
+                    .putString("cached_active_uid", user.uid)
+                    .putString("app_language", vm._appLanguage.value)
+                if (hasFreshConsent) {
+                    editor
+                        .putString("legal_accepted_version_${user.uid}", acceptedLegalVersion)
+                        .putLong("legal_accepted_at_${user.uid}", effectiveAcceptedAt)
+                        .putBoolean("gdpr_privacy_consent_accepted", true)
+                        .putBoolean("gdpr_privacy_consent_accepted_${user.uid}", true)
+                }
+                editor.apply()
+                vm._hasAcceptedCurrentLegal.value = hasFreshConsent
+                vm._isLegalStatusResolved.value = true
+                vm._isProUser.value = false
                 vm._currentUser.value = user
                 vm._isUserVerifiedState.value = verified
+                vm.recomputeProEntitlement()
                 vm._isAuthLoading.value = false
                 if (!verified) {
                     vm.showSnackbar(
@@ -354,10 +387,17 @@ internal class OikoNomosAuthDelegate(
     fun signInWithGoogleToken(
         idToken: String,
         isSignUpMode: Boolean = false,
+        acceptedLegalVersion: String = "",
+        acceptedLegalAt: Long = 0L,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
         val isEn = vm._appLanguage.value == "EN"
+        val hasFreshConsent = acceptedLegalVersion == LegalConstants.CURRENT_LEGAL_VERSION
+        val effectiveAcceptedAt = if (hasFreshConsent) {
+            if (acceptedLegalAt > 0L) acceptedLegalAt else System.currentTimeMillis()
+        } else 0L
+
         vm._isAuthLoading.value = true
         vm.suppressAuthStateListener = true
         val credential = GoogleAuthProvider.getCredential(idToken, null)
@@ -380,7 +420,7 @@ internal class OikoNomosAuthDelegate(
                     val newProfile = UserProfile(
                         uid = user.uid,
                         email = user.email.orEmpty().trim(),
-                        displayName = displayName.ifBlank { "Χρήστης Finsay" },
+                        displayName = displayName.ifBlank { if (isEn) "Finsay User" else "Χρήστης Finsay" },
                         firstName = parts.firstOrNull().orEmpty(),
                         lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
                         photoUrl = user.photoUrl?.toString().orEmpty(),
@@ -388,6 +428,8 @@ internal class OikoNomosAuthDelegate(
                         requiresEmailVerification = !googleVerified,
                         emailVerifiedConfirmed = googleVerified,
                         appLanguage = vm._appLanguage.value,
+                        acceptedLegalVersion = if (hasFreshConsent) acceptedLegalVersion else "",
+                        acceptedLegalAt = effectiveAcceptedAt,
                         createdAt = Timestamp.now()
                     )
                     try {
@@ -396,10 +438,19 @@ internal class OikoNomosAuthDelegate(
                     } catch (e: Exception) {
                         Log.w("OikoNomosVM", "savePendingUserProfile Google warning: ${e.message}")
                     }
-                    vm.prefs.edit()
+                    val editor = vm.prefs.edit()
                         .putString("cached_active_uid", user.uid)
+                        .putString("app_language", vm._appLanguage.value)
                         .remove("pending_google_verification_${user.uid}")
-                        .apply()
+                    if (hasFreshConsent) {
+                        editor.putString("legal_accepted_version_${user.uid}", acceptedLegalVersion)
+                        editor.putLong("legal_accepted_at_${user.uid}", effectiveAcceptedAt)
+                        editor.putBoolean("gdpr_privacy_consent_accepted", true)
+                        editor.putBoolean("gdpr_privacy_consent_accepted_${user.uid}", true)
+                    }
+                    editor.apply()
+                    vm._hasAcceptedCurrentLegal.value = hasFreshConsent
+                    vm._isLegalStatusResolved.value = true
                     if (!googleVerified) {
                         try {
                             vm.auth.setLanguageCode(if (isEn) "en" else "el")
@@ -409,8 +460,10 @@ internal class OikoNomosAuthDelegate(
                         }
                     }
                     vm._userProfile.value = newProfile
+                    vm._isProUser.value = false
                     vm._currentUser.value = user
                     vm._isUserVerifiedState.value = googleVerified
+                    vm.recomputeProEntitlement()
                     vm._isAuthLoading.value = false
                     if (googleVerified) {
                         val welcomeMsg = if (isSignUpMode) {
@@ -428,12 +481,50 @@ internal class OikoNomosAuthDelegate(
                     }
                     onSuccess()
                 } else {
-                    vm.prefs.edit()
+                    val existingAccepted = existingProfile.acceptedLegalVersion == LegalConstants.CURRENT_LEGAL_VERSION
+                    val localAccepted = vm.prefs.getString("legal_accepted_version_${user.uid}", "") == LegalConstants.CURRENT_LEGAL_VERSION
+                    val finalAccepted = hasFreshConsent || existingAccepted || localAccepted
+                    val finalAcceptedAt = when {
+                        hasFreshConsent -> effectiveAcceptedAt
+                        existingAccepted && existingProfile.acceptedLegalAt > 0L -> existingProfile.acceptedLegalAt
+                        localAccepted -> vm.prefs.getLong("legal_accepted_at_${user.uid}", System.currentTimeMillis())
+                        else -> 0L
+                    }
+                    if (hasFreshConsent && !existingAccepted) {
+                        try {
+                            vm.firestoreSyncRepo.recordLegalAcceptance(user.uid, acceptedLegalVersion, effectiveAcceptedAt)
+                        } catch (e: Exception) {
+                            Log.w("OikoNomosVM", "recordLegalAcceptance Google warning: ${e.message}")
+                        }
+                    }
+                    val editor = vm.prefs.edit()
                         .putString("cached_active_uid", user.uid)
                         .remove("pending_google_verification_${user.uid}")
-                        .apply()
+                    if (finalAccepted) {
+                        editor.putString("legal_accepted_version_${user.uid}", LegalConstants.CURRENT_LEGAL_VERSION)
+                        editor.putLong("legal_accepted_at_${user.uid}", finalAcceptedAt)
+                    }
+                    editor.apply()
+                    vm._hasAcceptedCurrentLegal.value = finalAccepted
+                    vm._isLegalStatusResolved.value = true
+
+                    val resolvedProfile = if (finalAccepted) {
+                        existingProfile.copy(
+                            acceptedLegalVersion = LegalConstants.CURRENT_LEGAL_VERSION,
+                            acceptedLegalAt = finalAcceptedAt
+                        )
+                    } else existingProfile
+
+                    if (resolvedProfile.appLanguage.isNotBlank()) {
+                        vm._appLanguage.value = resolvedProfile.appLanguage
+                        vm.prefs.edit().putString("app_language", resolvedProfile.appLanguage).apply()
+                        try {
+                            vm.auth.setLanguageCode(if (resolvedProfile.appLanguage == "EN") "en" else "el")
+                        } catch (_: Throwable) {}
+                    }
+
                     if (!googleVerified) {
-                        vm._userProfile.value = existingProfile
+                        vm._userProfile.value = resolvedProfile
                         vm._currentUser.value = user
                         vm._isUserVerifiedState.value = false
                         vm._isAuthLoading.value = false
@@ -446,9 +537,11 @@ internal class OikoNomosAuthDelegate(
                         if (existingProfile.requiresEmailVerification && !existingProfile.emailVerifiedConfirmed) {
                             try { vm.firestoreSyncRepo.markEmailVerifiedConfirmed(user.uid) } catch (_: Exception) {}
                         }
-                        vm._userProfile.value = existingProfile.copy(requiresEmailVerification = false, emailVerifiedConfirmed = true)
+                        vm._userProfile.value = resolvedProfile.copy(requiresEmailVerification = false, emailVerifiedConfirmed = true)
+                        vm._isProUser.value = false
                         vm._currentUser.value = user
                         vm._isUserVerifiedState.value = true
+                        vm.recomputeProEntitlement()
                         vm._isAuthLoading.value = false
                         vm.showSnackbar(if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!")
                         vm.loadUserProfileAndHousehold(user)
@@ -461,6 +554,36 @@ internal class OikoNomosAuthDelegate(
                 onError(exc.localizedMessage ?: (if (isEn) "Google sign-in error" else "Σφάλμα σύνδεσης Google"))
             } finally {
                 vm.suppressAuthStateListener = false
+            }
+        }
+    }
+
+    fun acceptCurrentLegalTerms() {
+        val uid = vm.auth.currentUser?.uid ?: vm._currentUser.value?.uid ?: return
+        val now = System.currentTimeMillis()
+        val version = LegalConstants.CURRENT_LEGAL_VERSION
+        vm.prefs.edit()
+            .putString("legal_accepted_version_$uid", version)
+            .putLong("legal_accepted_at_$uid", now)
+            .putBoolean("gdpr_privacy_consent_accepted", true)
+            .putBoolean("gdpr_privacy_consent_accepted_$uid", true)
+            .apply()
+        val updated = vm._userProfile.value?.copy(
+            acceptedLegalVersion = version,
+            acceptedLegalAt = now
+        )
+        if (updated != null) {
+            vm._userProfile.value = updated
+            saveUserProfileToPrefs(updated)
+        }
+        vm._hasAcceptedCurrentLegal.value = true
+        vm._isLegalStatusResolved.value = true
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            try {
+                vm.firestoreSyncRepo.recordLegalAcceptance(uid, version, now)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("OikoNomosVM", "recordLegalAcceptance background sync warning: ${e.message}")
             }
         }
     }
@@ -478,8 +601,14 @@ internal class OikoNomosAuthDelegate(
                 }
             }
         }
+        val signOutMsg = if (vm._appLanguage.value == "EN") "Signed out successfully" else "Αποσυνδεθήκατε επιτυχώς"
         vm._currentUser.value = null
         vm._isUserVerifiedState.value = false
+        vm._hasAcceptedCurrentLegal.value = false
+        vm._isLegalStatusResolved.value = true
+        vm._isProUser.value = false
+        vm._appLanguage.value = "EN"
+        try { vm.auth.setLanguageCode("en") } catch (_: Throwable) {}
         vm._userProfile.value = null
         vm._currentHousehold.value = null
         vm._userHouseholds.value = emptyList()
@@ -497,11 +626,18 @@ internal class OikoNomosAuthDelegate(
         vm.undoCountdownJob?.cancel()
         vm._householdActivities.value = emptyList()
         clearUserProfileFromPrefs()
-        vm.prefs.edit()
+        val editor = vm.prefs.edit()
             .remove("last_household_id")
             .remove("cached_active_uid")
             .remove("has_entered_any_expense")
-            .apply()
+            .remove("app_language")
+            .remove("user_explicitly_set_language_v2")
+        if (!prevUid.isNullOrBlank()) {
+            editor
+                .remove("legal_accepted_version_$prevUid")
+                .remove("legal_accepted_at_$prevUid")
+        }
+        editor.apply()
         vm.cancelAllSyncJobs()
         vm.lastObservedHouseholdId = null
         vm.lastHouseholdExpenses = emptyList()
@@ -522,6 +658,7 @@ internal class OikoNomosAuthDelegate(
         vm._allIncomes.value = emptyList()
         vm._allMembers.value = emptyList()
         vm._allCategories.value = emptyList()
+        vm._incomeCategories.value = emptyList()
         vm._allSavingsGoals.value = emptyList()
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             try { vm.repository.clearAllData() } catch (e: Exception) {
@@ -529,7 +666,7 @@ internal class OikoNomosAuthDelegate(
             }
         }
         if (prevUid != null) Log.d("OikoNomosVM", "Signed out user $prevUid")
-        vm.showSnackbar(if (vm._appLanguage.value == "EN") "Signed out successfully" else "Αποσυνδεθήκατε επιτυχώς")
+        vm.showSnackbar(signOutMsg)
     }
 
     fun factoryResetAndSignOut() {
@@ -543,6 +680,11 @@ internal class OikoNomosAuthDelegate(
         }
         vm._currentUser.value = null
         vm._isUserVerifiedState.value = false
+        vm._hasAcceptedCurrentLegal.value = false
+        vm._isLegalStatusResolved.value = true
+        vm._isProUser.value = false
+        vm._appLanguage.value = "EN"
+        try { vm.auth.setLanguageCode("en") } catch (_: Throwable) {}
         vm._userProfile.value = null
         vm._currentHousehold.value = null
         vm._userHouseholds.value = emptyList()
@@ -560,6 +702,10 @@ internal class OikoNomosAuthDelegate(
         vm.undoCountdownJob?.cancel()
         vm._householdActivities.value = emptyList()
         vm.prefs.edit().clear().apply()
+        AppLockManager.clearAll(vm.getApplication())
+        MerchantCategoryLearner.clearAll(vm.getApplication())
+        BankNotificationHolder.wipeLocalStore(vm.getApplication())
+        BankNotificationSystemManager.setAutoCatcherEnabled(vm.getApplication(), false)
         vm.cancelAllSyncJobs()
         vm.lastObservedHouseholdId = null
         vm.lastHouseholdExpenses = emptyList()
@@ -580,67 +726,182 @@ internal class OikoNomosAuthDelegate(
         vm._allIncomes.value = emptyList()
         vm._allMembers.value = emptyList()
         vm._allCategories.value = emptyList()
+        vm._incomeCategories.value = emptyList()
         vm._allSavingsGoals.value = emptyList()
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             if (DataSafetyGuard.validateDestructiveOperation(DataSafetyGuard.DestructionReason.EXPLICIT_FACTORY_RESET)) {
                 vm.repository.clearAllData()
             }
-            vm.showSnackbar("Η εφαρμογή επανήλθε σε αρχική καθαρή κατάσταση")
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN") "App reset to clean initial state"
+                else "Η εφαρμογή επανήλθε σε αρχική καθαρή κατάσταση"
+            )
+        }
+    }
+
+    private suspend fun performPostReauthAccountDeletion(user: FirebaseUser, uid: String) {
+        val hIds = vm._userHouseholds.value.map { it.id }
+        vm.firestoreSyncRepo.deleteUserEntireData(uid, hIds)
+        user.delete().await()
+        withContext(NonCancellable) {
+            try {
+                CredentialManager.create(vm.getApplication()).clearCredentialState(ClearCredentialStateRequest())
+            } catch (_: Exception) {}
+        }
+        vm.repository.clearAllData()
+        clearUserProfileFromPrefs()
+        vm.prefs.edit().clear().apply()
+        AppLockManager.clearAll(vm.getApplication())
+        MerchantCategoryLearner.clearAll(vm.getApplication())
+        BankNotificationHolder.wipeLocalStore(vm.getApplication())
+        BankNotificationSystemManager.setAutoCatcherEnabled(vm.getApplication(), false)
+        val deleteSuccessMsg = if (vm._appLanguage.value == "EN") {
+            "Your account and personal data have been completely deleted"
+        } else {
+            "Ο λογαριασμός και όλα τα δεδομένα σας διαγράφηκαν επιτυχώς"
+        }
+        vm.cancelAllSyncJobs()
+        vm._currentUser.value = null
+        vm._isUserVerifiedState.value = false
+        vm._hasAcceptedCurrentLegal.value = false
+        vm._isLegalStatusResolved.value = true
+        vm._isProUser.value = false
+        vm._appLanguage.value = "EN"
+        try { vm.auth.setLanguageCode("en") } catch (_: Throwable) {}
+        vm._userProfile.value = null
+        vm._currentHousehold.value = null
+        vm._userHouseholds.value = emptyList()
+        vm._showWelcomeCarousel.value = false
+        vm.syncBankCatcherProEntitlement()
+        vm._allExpenses.value = emptyList()
+        vm._allIncomes.value = emptyList()
+        vm._allMembers.value = emptyList()
+        vm._allCategories.value = emptyList()
+        vm._incomeCategories.value = emptyList()
+        vm._allSavingsGoals.value = emptyList()
+        vm._householdActivities.value = emptyList()
+        vm.lastHouseholdSavingsGoals = emptyList()
+        vm.lastUserSavingsGoals = emptyList()
+        vm.savingsGoalCloudIdByLocalId.clear()
+        vm.pendingLocalSavingsGoals.clear()
+        vm.pendingDeletedSavingsGoals.clear()
+        vm.inFlightCreateGoalKeys.clear()
+        vm.dismissAllSubPages()
+        vm.showSnackbar(deleteSuccessMsg)
+    }
+
+    fun deleteCurrentUserAccountWithPassword(
+        password: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val isEn = vm._appLanguage.value == "EN"
+        val user = vm.auth.currentUser ?: vm._currentUser.value
+        val uid = user?.uid
+        val email = user?.email?.trim().orEmpty()
+        if (user == null || uid.isNullOrBlank() || email.isBlank()) {
+            onError(if (isEn) "No active user session found" else "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης")
+            return
+        }
+        if (password.isBlank()) {
+            onError(if (isEn) "Please enter your password to confirm deletion." else "Παρακαλούμε πληκτρολογήστε τον κωδικό σας για επιβεβαίωση.")
+            return
+        }
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            try {
+                // Step 1: Strictly verify password via Firebase re-authentication BEFORE deleting any data
+                val credential = EmailAuthProvider.getCredential(email, password)
+                user.reauthenticate(credential).await()
+                // Step 2: Only after re-authentication succeeds, wipe Firestore + delete Auth account + local data
+                performPostReauthAccountDeletion(user, uid)
+                onSuccess()
+            } catch (e: FirebaseAuthInvalidCredentialsException) {
+                onError(
+                    if (isEn) "Incorrect password. Please try again."
+                    else "Λάθος κωδικός πρόσβασης. Παρακαλούμε δοκιμάστε ξανά."
+                )
+            } catch (e: FirebaseTooManyRequestsException) {
+                onError(
+                    if (isEn) "Too many failed attempts. Please wait a moment and try again."
+                    else "Πάρα πολλές αποτυχημένες προσπάθειες. Περιμένετε λίγο και δοκιμάστε ξανά."
+                )
+            } catch (e: FirebaseAuthRecentLoginRequiredException) {
+                onError(
+                    if (isEn) "Please sign out, sign in again, and retry account deletion."
+                    else "Παρακαλούμε αποσυνδεθείτε, συνδεθείτε ξανά και επαναλάβετε τη διαγραφή."
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                val code = (e as? FirebaseAuthException)?.errorCode.orEmpty()
+                val msg = when {
+                    code == "ERROR_WRONG_PASSWORD" || code == "ERROR_INVALID_CREDENTIAL" ->
+                        if (isEn) "Incorrect password. Please try again."
+                        else "Λάθος κωδικός πρόσβασης. Παρακαλούμε δοκιμάστε ξανά."
+                    else ->
+                        if (isEn) "Account deletion failed: ${e.localizedMessage ?: "unknown error"}"
+                        else "Σφάλμα διαγραφής: ${e.localizedMessage ?: "άγνωστο σφάλμα"}"
+                }
+                onError(msg)
+            }
+        }
+    }
+
+    fun deleteCurrentUserAccountWithGoogleToken(
+        idToken: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val isEn = vm._appLanguage.value == "EN"
+        val user = vm.auth.currentUser ?: vm._currentUser.value
+        val uid = user?.uid
+        if (user == null || uid.isNullOrBlank()) {
+            onError(if (isEn) "No active user session found" else "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης")
+            return
+        }
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            try {
+                // Step 1: Strictly re-authenticate with fresh Google credential BEFORE deleting any data
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
+                user.reauthenticate(credential).await()
+                // Step 2: Only after re-authentication succeeds, wipe Firestore + delete Auth account + local data
+                performPostReauthAccountDeletion(user, uid)
+                onSuccess()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                val msg = if (isEn) {
+                    "Google verification failed: ${e.localizedMessage ?: "please try again"}"
+                } else {
+                    "Η επαλήθευση Google απέτυχε: ${e.localizedMessage ?: "δοκιμάστε ξανά"}"
+                }
+                onError(msg)
+            }
         }
     }
 
     fun deleteCurrentUserAccount() {
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            val isEn = vm._appLanguage.value == "EN"
             val user = vm.auth.currentUser ?: vm._currentUser.value
             val uid = user?.uid
             if (user == null || uid.isNullOrBlank()) {
-                vm.showSnackbar(if (vm._appLanguage.value == "EN") "No active user session found" else "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης")
+                vm.showSnackbar(if (isEn) "No active user session found" else "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης")
                 return@launch
             }
             try {
-                val hIds = vm._userHouseholds.value.map { it.id }
-                vm.firestoreSyncRepo.deleteUserEntireData(uid, hIds)
-                user.delete().await()
-                withContext(NonCancellable) {
-                    try {
-                        CredentialManager.create(vm.getApplication()).clearCredentialState(ClearCredentialStateRequest())
-                    } catch (_: Exception) {}
-                }
-                vm.repository.clearAllData()
-                clearUserProfileFromPrefs()
-                vm.prefs.edit().clear().apply()
-                vm.cancelAllSyncJobs()
-                vm._currentUser.value = null
-                vm._isUserVerifiedState.value = false
-                vm._userProfile.value = null
-                vm._currentHousehold.value = null
-                vm._userHouseholds.value = emptyList()
-                vm._showWelcomeCarousel.value = false
-                vm.syncBankCatcherProEntitlement()
-                vm._allExpenses.value = emptyList()
-                vm._allIncomes.value = emptyList()
-                vm._allMembers.value = emptyList()
-                vm._allCategories.value = emptyList()
-                vm._allSavingsGoals.value = emptyList()
-                vm._householdActivities.value = emptyList()
-                vm.lastHouseholdSavingsGoals = emptyList()
-                vm.lastUserSavingsGoals = emptyList()
-                vm.savingsGoalCloudIdByLocalId.clear()
-                vm.pendingLocalSavingsGoals.clear()
-                vm.pendingDeletedSavingsGoals.clear()
-                vm.inFlightCreateGoalKeys.clear()
-                vm.dismissAllSubPages()
-                vm.showSnackbar(if (vm._appLanguage.value == "EN") "Your account and personal data have been completely deleted" else "Ο λογαριασμός και όλα τα δεδομένα σας διαγράφηκαν επιτυχώς")
+                performPostReauthAccountDeletion(user, uid)
             } catch (e: FirebaseAuthRecentLoginRequiredException) {
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN")
+                    if (isEn)
                         "For your security, please sign out, sign in again, and retry Account Deletion."
                     else
                         "Για λόγους ασφαλείας, παρακαλούμε αποσυνδεθείτε, συνδεθείτε ξανά και πατήστε πάλι Διαγραφή Λογαριασμού."
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar("Σφάλμα διαγραφής: ${e.localizedMessage ?: e.message}")
+                vm.showSnackbar(
+                    if (isEn) "Deletion error: ${e.localizedMessage ?: e.message}"
+                    else "Σφάλμα διαγραφής: ${e.localizedMessage ?: e.message}"
+                )
             }
         }
     }
@@ -650,13 +911,20 @@ internal class OikoNomosAuthDelegate(
         val trimmed = newName.trim()
         if (trimmed.isBlank()) return
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            val isEn = vm._appLanguage.value == "EN"
             try {
                 vm.firestoreSyncRepo.updateUserProfileName(user.uid, trimmed)
                 vm._userProfile.value = vm._userProfile.value?.copy(displayName = trimmed)
-                vm.showSnackbar("Το όνομά σας ενημερώθηκε σε «$trimmed»")
+                vm.showSnackbar(
+                    if (isEn) "Your name was updated to \"$trimmed\""
+                    else "Το όνομά σας ενημερώθηκε σε «$trimmed»"
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar("Σφάλμα ενημέρωσης: ${e.localizedMessage}")
+                vm.showSnackbar(
+                    if (isEn) "Update error: ${e.localizedMessage ?: e.message}"
+                    else "Σφάλμα ενημέρωσης: ${e.localizedMessage ?: e.message}"
+                )
             }
         }
     }
@@ -671,8 +939,9 @@ internal class OikoNomosAuthDelegate(
         onSuccess: () -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
+        val isEnNow = vm._appLanguage.value == "EN"
         val user = vm.auth.currentUser ?: vm._currentUser.value ?: run {
-            onError("Δεν βρέθηκε συνδεδεμένος χρήστης")
+            onError(if (isEnNow) "No signed-in user found" else "Δεν βρέθηκε συνδεδεμένος χρήστης")
             return
         }
         val cleanFirst = firstName.trim()
@@ -685,7 +954,9 @@ internal class OikoNomosAuthDelegate(
                 if (parts.size > 1) parts.drop(1).joinToString(" ") else ""
             }
         }
-        val fullName = "$resolvedFirst $resolvedLast".trim().ifBlank { user.displayName?.ifBlank { null } ?: "Χρήστης Finsay" }
+        val fullName = "$resolvedFirst $resolvedLast".trim().ifBlank {
+            user.displayName?.ifBlank { null } ?: if (isEnNow) "Finsay User" else "Χρήστης Finsay"
+        }
         val optimisticProfile = current.copy(
             displayName = fullName,
             firstName = resolvedFirst,
@@ -741,7 +1012,11 @@ internal class OikoNomosAuthDelegate(
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar("Τα στοιχεία αποθηκεύτηκαν τοπικά")
+                val isEn = vm._appLanguage.value == "EN"
+                vm.showSnackbar(
+                    if (isEn) "Profile saved locally"
+                    else "Τα στοιχεία αποθηκεύτηκαν τοπικά"
+                )
                 onSuccess()
             }
         }
@@ -750,13 +1025,20 @@ internal class OikoNomosAuthDelegate(
     fun updateUserProfilePhoto(photoUrl: String) {
         val user = vm._currentUser.value ?: return
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            val isEn = vm._appLanguage.value == "EN"
             try {
                 vm.firestoreSyncRepo.updateUserProfilePhoto(user.uid, photoUrl)
                 vm._userProfile.value = vm._userProfile.value?.copy(photoUrl = photoUrl)
-                vm.showSnackbar("Η εικόνα προφίλ ενημερώθηκε επιτυχώς")
+                vm.showSnackbar(
+                    if (isEn) "Profile photo updated successfully"
+                    else "Η εικόνα προφίλ ενημερώθηκε επιτυχώς"
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar("Αποτυχία ενημέρωσης εικόνας προφίλ")
+                vm.showSnackbar(
+                    if (isEn) "Failed to update profile photo"
+                    else "Αποτυχία ενημέρωσης εικόνας προφίλ"
+                )
             }
         }
     }
@@ -812,6 +1094,8 @@ internal class OikoNomosAuthDelegate(
                 .putInt("cached_user_reminder_hour", profile.reminderHour)
                 .putInt("cached_user_reminder_minute", profile.reminderMinute)
                 .putBoolean("cached_user_notification_consent_completed", profile.notificationConsentCompleted)
+                .putString("cached_user_legal_version", profile.acceptedLegalVersion)
+                .putLong("cached_user_legal_at", profile.acceptedLegalAt)
                 .apply()
         } catch (t: Throwable) {
             Log.w("OikoNomosVM", "Failed to cache user profile to prefs: ${t.message}")
@@ -838,12 +1122,14 @@ internal class OikoNomosAuthDelegate(
                 isPremium = vm.prefs.getBoolean("cached_user_is_premium", false),
                 householdId = vm.prefs.getString("cached_user_household_id", "").orEmpty(),
                 householdIds = cachedHouseholdIds,
-                appLanguage = vm.prefs.getString("cached_user_app_language", "EL").orEmpty(),
+                appLanguage = vm.prefs.getString("cached_user_app_language", "EN").orEmpty(),
                 themeMode = vm.prefs.getString("cached_user_theme_mode", "SYSTEM").orEmpty(),
                 reminderEnabled = vm.prefs.getBoolean("cached_user_reminder_enabled", false),
                 reminderHour = vm.prefs.getInt("cached_user_reminder_hour", 21).coerceIn(0, 23),
                 reminderMinute = vm.prefs.getInt("cached_user_reminder_minute", 30).coerceIn(0, 59),
-                notificationConsentCompleted = vm.prefs.getBoolean("cached_user_notification_consent_completed", false)
+                notificationConsentCompleted = vm.prefs.getBoolean("cached_user_notification_consent_completed", false),
+                acceptedLegalVersion = vm.prefs.getString("cached_user_legal_version", "").orEmpty(),
+                acceptedLegalAt = vm.prefs.getLong("cached_user_legal_at", 0L)
             )
         } catch (_: Throwable) {
             null
@@ -872,6 +1158,8 @@ internal class OikoNomosAuthDelegate(
                 .remove("cached_user_reminder_hour")
                 .remove("cached_user_reminder_minute")
                 .remove("cached_user_notification_consent_completed")
+                .remove("cached_user_legal_version")
+                .remove("cached_user_legal_at")
                 .apply()
         } catch (_: Throwable) {}
     }

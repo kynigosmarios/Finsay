@@ -69,32 +69,97 @@ import java.util.Locale
 @Composable
 fun CategoriesScreen(
     categories: List<ExpenseCategory>,
+    incomeCategories: List<ExpenseCategory> = emptyList(),
     appLanguage: String,
     canManage: Boolean = true,
+    isPro: Boolean = false,
     deletedCategories: List<ExpenseCategory> = emptyList(),
-    onAddCategory: () -> Unit,
+    onAddCategory: (String) -> Unit,
     onEditCategory: (ExpenseCategory) -> Unit,
     onDeleteCategory: (ExpenseCategory) -> Unit,
     onRestoreCategory: (ExpenseCategory) -> Unit = {},
     onPermanentDeleteCategory: (ExpenseCategory) -> Unit = {},
     onMoveCategoryUp: (ExpenseCategory) -> Unit,
     onMoveCategoryDown: (ExpenseCategory) -> Unit,
-    onSeedStandardCategories: () -> Unit,
+    onSeedStandardCategories: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
     val isGreek = lang != Localization.Language.ENGLISH
     val currencySymbol = LocalCurrencySymbol.current
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    var selectedCategoryType by remember { mutableStateOf("EXPENSE") }
     var categoryToDelete by remember { mutableStateOf<ExpenseCategory?>(null) }
     var showDeletedCategoriesDialog by remember { mutableStateOf(false) }
     var categoryToPermanentlyDelete by remember { mutableStateOf<ExpenseCategory?>(null) }
+
+    val isIncomeTab = selectedCategoryType == "INCOME"
+    val displayedCategories = if (isIncomeTab) incomeCategories else categories
+    val displayedDeletedCategories = remember(deletedCategories, isIncomeTab) {
+        deletedCategories.filter { it.isIncomeCategory == isIncomeTab }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        // Expense / Income Category Type Switcher
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (!isIncomeTab) Emerald700 else Color.Transparent,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { selectedCategoryType = "EXPENSE" }
+                        .testTag("categories_tab_expense")
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = if (isGreek) "Έξοδα" else "Expenses",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (!isIncomeTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isIncomeTab) Emerald700 else Color.Transparent,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { selectedCategoryType = "INCOME" }
+                        .testTag("categories_tab_income")
+                ) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                        Text(
+                            text = if (isGreek) "Έσοδα" else "Income",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isIncomeTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
         // Categories Header Card
         Surface(
             modifier = Modifier
@@ -112,17 +177,35 @@ fun CategoriesScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = if (isGreek) "Κατηγορίες εξόδων" else "Expense Categories",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (isIncomeTab) {
+                            if (isGreek) "Κατηγορίες εσόδων" else "Income Categories"
+                        } else {
+                            if (isGreek) "Κατηγορίες εξόδων" else "Expense Categories"
+                        },
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (!isPro) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isGreek) {
+                                "${displayedCategories.size}/5 στη δωρεάν έκδοση • Pro για απεριόριστες"
+                            } else {
+                                "${displayedCategories.size}/5 in Free plan • Pro for unlimited"
+                            },
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
                 if (canManage) {
+                    Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = onAddCategory,
+                        onClick = { onAddCategory(selectedCategoryType) },
                         modifier = Modifier
                             .height(38.dp)
                             .testTag("add_category_button"),
@@ -151,7 +234,7 @@ fun CategoriesScreen(
             }
         }
 
-        if (categories.isEmpty()) {
+        if (displayedCategories.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -191,7 +274,7 @@ fun CategoriesScreen(
 
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(
-                                onClick = onAddCategory,
+                                onClick = { onAddCategory(selectedCategoryType) },
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Emerald700),
                                 modifier = Modifier
@@ -208,7 +291,7 @@ fun CategoriesScreen(
                             }
 
                             Button(
-                                onClick = onSeedStandardCategories,
+                                onClick = { onSeedStandardCategories(selectedCategoryType) },
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                                 modifier = Modifier
@@ -244,7 +327,7 @@ fun CategoriesScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isGreek) "Διαγραμμένες Κατηγορίες (${deletedCategories.size})" else "Deleted Categories (${deletedCategories.size})",
+                                text = if (isGreek) "Διαγραμμένες Κατηγορίες (${displayedDeletedCategories.size})" else "Deleted Categories (${displayedDeletedCategories.size})",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -265,8 +348,8 @@ fun CategoriesScreen(
                 }
 
                 itemsIndexed(
-                    items = categories,
-                    key = { _, c -> if (c.id > 0) "cat_${c.id}" else "cat_tmp_${c.name}" },
+                    items = displayedCategories,
+                    key = { _, c -> if (c.id > 0) "cat_${c.categoryType}_${c.id}" else "cat_tmp_${c.categoryType}_${c.name}" },
                     contentType = { _, _ -> "category_card" }
                 ) { index, category ->
                     val color = if (category.colorHex != 0L) Color(category.colorHex) else Emerald700
@@ -324,7 +407,7 @@ fun CategoriesScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    if (category.monthlyBudget > 0.0) {
+                                    if (!category.isIncomeCategory && category.monthlyBudget > 0.0) {
                                         Spacer(modifier = Modifier.height(2.dp))
                                         val budgetColor = if (isDark) Color(0xFF34D399) else Emerald700
                                         Surface(
@@ -351,7 +434,7 @@ fun CategoriesScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
-                                    if (categories.size > 1) {
+                                    if (displayedCategories.size > 1) {
                                         Box(
                                             modifier = Modifier
                                                 .size(28.dp)
@@ -377,10 +460,10 @@ fun CategoriesScreen(
                                                 .size(28.dp)
                                                 .clip(CircleShape)
                                                 .background(
-                                                    if (index < categories.size - 1) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                                    if (index < displayedCategories.size - 1) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
                                                     else Color.Transparent
                                                 )
-                                                .clickable(enabled = index < categories.size - 1) { onMoveCategoryDown(category) }
+                                                .clickable(enabled = index < displayedCategories.size - 1) { onMoveCategoryDown(category) }
                                                 .testTag("move_down_cat_${category.id}"),
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -388,7 +471,7 @@ fun CategoriesScreen(
                                                 imageVector = Icons.Default.ArrowDownward,
                                                 contentDescription = "Move Down",
                                                 modifier = Modifier.size(14.dp),
-                                                tint = if (index < categories.size - 1) MaterialTheme.colorScheme.onSurfaceVariant else Color.Transparent
+                                                tint = if (index < displayedCategories.size - 1) MaterialTheme.colorScheme.onSurfaceVariant else Color.Transparent
                                             )
                                         }
                                     }
@@ -453,7 +536,7 @@ fun CategoriesScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isGreek) "Διαγραμμένες Κατηγορίες (${deletedCategories.size})" else "Deleted Categories (${deletedCategories.size})",
+                                text = if (isGreek) "Διαγραμμένες Κατηγορίες (${displayedDeletedCategories.size})" else "Deleted Categories (${displayedDeletedCategories.size})",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -558,7 +641,7 @@ fun CategoriesScreen(
                         )
                     }
 
-                    if (deletedCategories.isEmpty()) {
+                    if (displayedDeletedCategories.isEmpty()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -575,10 +658,10 @@ fun CategoriesScreen(
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height((deletedCategories.size * 65).coerceAtMost(300).dp),
+                                .height((displayedDeletedCategories.size * 65).coerceAtMost(300).dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            itemsIndexed(deletedCategories, key = { _, c -> "del_cat_${c.id}_${c.name}" }) { _, cat ->
+                            itemsIndexed(displayedDeletedCategories, key = { _, c -> "del_cat_${c.categoryType}_${c.id}_${c.name}" }) { _, cat ->
                                 val catColor = Color(cat.colorHex)
                                 val iconVector = CategoryIconHelper.getIcon(cat.iconKey)
 
@@ -619,7 +702,7 @@ fun CategoriesScreen(
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onSurface
                                                 )
-                                                if (cat.monthlyBudget > 0.0) {
+                                                if (!cat.isIncomeCategory && cat.monthlyBudget > 0.0) {
                                                     Text(
                                                         text = "🎯 ${String.format(Locale.US, "%.2f", cat.monthlyBudget)} $currencySymbol",
                                                         fontSize = 10.5.sp,

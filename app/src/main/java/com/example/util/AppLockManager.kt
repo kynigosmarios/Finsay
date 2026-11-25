@@ -5,6 +5,8 @@ import android.os.SystemClock
 import androidx.biometric.BiometricManager
 import java.security.MessageDigest
 import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 object AppLockManager {
     private const val PREFS_NAME = "finsay_app_lock_prefs"
@@ -12,6 +14,9 @@ object AppLockManager {
     private const val KEY_BIOMETRIC_ENABLED = "app_lock_biometric_enabled"
     private const val KEY_PIN_HASH = "app_lock_pin_hash"
     private const val KEY_PIN_SALT = "app_lock_pin_salt"
+    private const val PBKDF2_PREFIX = "pbkdf2_v1$"
+    private const val PBKDF2_ITERATIONS = 100_000
+    private const val PBKDF2_KEY_LENGTH_BITS = 256
 
     // 5-second grace period so camera, photo picker, share sheet, or permission dialogs
     // do not immediately re-lock the user when returning to Finsay.
@@ -56,7 +61,7 @@ object AppLockManager {
 
     fun enableWithPin(context: Context, pin: String, useBiometrics: Boolean = canUseBiometrics(context)) {
         val salt = generateSalt()
-        val hash = sha256Hex("$salt:$pin")
+        val hash = pbkdf2Hash(pin, salt)
         prefs(context).edit()
             .putString(KEY_PIN_SALT, salt)
             .putString(KEY_PIN_HASH, hash)
@@ -69,7 +74,7 @@ object AppLockManager {
 
     fun updatePin(context: Context, newPin: String) {
         val salt = generateSalt()
-        val hash = sha256Hex("$salt:$newPin")
+        val hash = pbkdf2Hash(newPin, salt)
         prefs(context).edit()
             .putString(KEY_PIN_SALT, salt)
             .putString(KEY_PIN_HASH, hash)
@@ -84,15 +89,34 @@ object AppLockManager {
         lastBackgroundElapsedMs = 0L
     }
 
+    fun clearAll(context: Context) {
+        prefs(context).edit().clear().apply()
+        unlockedThisSession = true
+        lastBackgroundElapsedMs = 0L
+    }
+
     fun verifyPin(context: Context, candidatePin: String): Boolean {
         val p = prefs(context)
         val salt = p.getString(KEY_PIN_SALT, null) ?: return false
         val expectedHash = p.getString(KEY_PIN_HASH, null) ?: return false
-        val actualHash = sha256Hex("$salt:$candidatePin")
-        return MessageDigest.isEqual(
-            expectedHash.toByteArray(Charsets.UTF_8),
-            actualHash.toByteArray(Charsets.UTF_8)
-        )
+        return if (expectedHash.startsWith(PBKDF2_PREFIX)) {
+            val actualHash = pbkdf2Hash(candidatePin, salt)
+            MessageDigest.isEqual(
+                expectedHash.toByteArray(Charsets.UTF_8),
+                actualHash.toByteArray(Charsets.UTF_8)
+            )
+        } else {
+            // Backwards compatibility for legacy SHA-256 hashes; transparently upgrade on valid unlock
+            val legacyActual = legacySha256Hex("$salt:$candidatePin")
+            val matched = MessageDigest.isEqual(
+                expectedHash.toByteArray(Charsets.UTF_8),
+                legacyActual.toByteArray(Charsets.UTF_8)
+            )
+            if (matched) {
+                updatePin(context, candidatePin)
+            }
+            matched
+        }
     }
 
     fun markUnlocked() {
@@ -128,7 +152,19 @@ object AppLockManager {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    private fun sha256Hex(input: String): String {
+    private fun pbkdf2Hash(pin: String, saltHex: String): String {
+        val saltBytes = saltHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val spec = PBEKeySpec(pin.toCharArray(), saltBytes, PBKDF2_ITERATIONS, PBKDF2_KEY_LENGTH_BITS)
+        return try {
+            val skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val derived = skf.generateSecret(spec).encoded
+            PBKDF2_PREFIX + derived.joinToString("") { "%02x".format(it) }
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
+    private fun legacySha256Hex(input: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }
     }

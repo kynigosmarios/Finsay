@@ -18,6 +18,7 @@ import com.example.R
  * Respects POST_NOTIFICATIONS runtime permission on Android 13+ (API 33+).
  */
 object HouseholdActivityNotificationManager {
+    const val EXTRA_OPEN_HOUSEHOLD_ACTIVITY = "EXTRA_OPEN_HOUSEHOLD_ACTIVITY"
     private const val CHANNEL_ID = "finsay_shared_activity_channel"
     private const val TAG = "HouseholdActivityNotif"
 
@@ -61,6 +62,7 @@ object HouseholdActivityNotificationManager {
             createChannel(context, isGreek)
             val tapIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_OPEN_HOUSEHOLD_ACTIVITY, true)
             }
             val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

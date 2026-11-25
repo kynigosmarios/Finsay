@@ -21,7 +21,7 @@ import com.example.data.entity.SavingsGoal
         SavingsGoal::class,
         Income::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -42,6 +42,12 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE family_members ADD COLUMN linkedUserUid TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE recurring_expenses ADD COLUMN anchorMonth INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_14_15 = object : androidx.room.migration.Migration(14, 15) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE expense_categories ADD COLUMN categoryType TEXT NOT NULL DEFAULT 'EXPENSE'")
             }
         }
 
@@ -71,7 +77,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "finsay_database"
                 )
-                    .addMigrations(MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                     .fallbackToDestructiveMigration()
                     .build()
 

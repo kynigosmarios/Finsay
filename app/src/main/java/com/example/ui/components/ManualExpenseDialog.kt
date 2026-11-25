@@ -62,6 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -562,8 +563,12 @@ fun ManualExpenseDialog(
 
                     OutlinedTextField(
                         value = title,
-                        onValueChange = {
-                            title = it
+                        onValueChange = { rawInput ->
+                            title = if (title.isEmpty() && rawInput.isNotEmpty() && rawInput[0].isLowerCase()) {
+                                rawInput.replaceFirstChar { ch -> ch.titlecase(Locale.getDefault()) }
+                            } else {
+                                rawInput
+                            }
                             titleError = null
                             errorText = null
                         },
@@ -577,6 +582,7 @@ fun ManualExpenseDialog(
                             .fillMaxWidth()
                             .testTag("expense_title_input"),
                         shape = RoundedCornerShape(14.dp),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Emerald700)
                     )

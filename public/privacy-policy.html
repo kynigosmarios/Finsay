@@ -9,7 +9,7 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.65;
             color: #1e293b;
-            max-width: 820px;
+            max-width: 860px;
             margin: 0 auto;
             padding: 24px;
             background-color: #f8fafc;
@@ -59,8 +59,10 @@
         }
         .lang-btn.active { background: #047857; color: #ffffff; }
         h1 { color: #047857; font-size: 26px; margin-bottom: 8px; }
-        h2 { color: #0f172a; font-size: 18px; margin-top: 24px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+        h2 { color: #0f172a; font-size: 18px; margin-top: 26px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
         p, li { font-size: 14.5px; color: #334155; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 6px; }
         a { color: #047857; }
         .badge {
             display: inline-block;
@@ -71,6 +73,14 @@
             font-size: 12px;
             font-weight: 600;
             margin-bottom: 12px;
+        }
+        .callout {
+            background: #f0fdf4;
+            border-left: 4px solid #047857;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 14px 0;
+            font-size: 14px;
         }
         .footer {
             margin-top: 32px;
@@ -101,85 +111,137 @@
         </div>
 
         <div data-lang="el">
-            <span class="badge">GDPR &amp; Νόμος 4624/2019 • Google Play Policy Compliant</span>
             <h1>Πολιτική Απορρήτου (Privacy Policy)</h1>
             <p><strong>Τελευταία ενημέρωση:</strong> Νοέμβριος 2026</p>
 
-            <h2>1. Εισαγωγή</h2>
-            <p>Η παρούσα Πολιτική Απορρήτου περιγράφει πώς η εφαρμογή <strong>Finsay</strong> (<code>finsayapp.com</code>) συλλέγει, χρησιμοποιεί, αποθηκεύει και προστατεύει τα προσωπικά και οικονομικά δεδομένα των χρηστών της, σε πλήρη συμμόρφωση με τον Γενικό Κανονισμό Προστασίας Δεδομένων της Ευρωπαϊκής Ένωσης (ΕΕ 2016/679 - GDPR), τον ελληνικό Νόμο 4624/2019 και τις πολιτικές του Google Play.</p>
+            <h2>1. Πεδίο Εφαρμογής &amp; Υπεύθυνος Επεξεργασίας</h2>
+            <p>Η παρούσα Πολιτική Απορρήτου περιγράφει τον τρόπο με τον οποίο η εφαρμογή <strong>Finsay</strong> (<code>finsayapp.com</code>, πακέτο Android <code>com.kynigos.oikonomos</code>) συλλέγει, χρησιμοποιεί, αποθηκεύει και προστατεύει τα προσωπικά και οικονομικά δεδομένα των χρηστών της. Η πολιτική είναι σχεδιασμένη σε πλήρη συμμόρφωση με τον Γενικό Κανονισμό Προστασίας Δεδομένων της Ευρωπαϊκής Ένωσης (<strong>GDPR 2016/679</strong>), τον ελληνικό <strong>Νόμο 4624/2019</strong>, το <strong>UK GDPR</strong>, την εφαρμοστέα νομοθεσία ιδιωτικότητας των ΗΠΑ (συμπεριλαμβανομένων των <strong>CCPA/CPRA</strong> Καλιφόρνιας, VCDPA, CPA, CTDPA και TDPSA) και τις Πολιτικές Προγραμματιστών του Google Play. Επικοινωνία Υπεύθυνου Επεξεργασίας: <code>support@finsayapp.com</code>.</p>
 
-            <h2>2. Δεδομένα που Συλλέγουμε</h2>
+            <h2>2. Κατηγορίες Δεδομένων &amp; Απομόνωση Ιδιωτικού Προφίλ</h2>
             <ul>
-                <li><strong>Στοιχεία Λογαριασμού:</strong> Όνομα, διεύθυνση ηλεκτρονικού ταχυδρομείου (email) και εικόνα προφίλ που παρέχονται μέσω Google Sign-In ή Firebase Authentication.</li>
-                <li><strong>Δεδομένα Προϋπολογισμού &amp; Εξόδων:</strong> Χρηματικά ποσά, περιγραφές/τίτλοι εξόδων, κατηγορίες, ημερομηνίες, τρόποι πληρωμής, πάγιες υπενθυμίσεις, στόχοι αποταμίευσης και επιμερισμός μελών που εισάγονται εθελοντικά από τον χρήστη.</li>
-                <li><strong>Μέλη Οικογένειας / Ομάδας:</strong> Ονόματα και ρόλοι μελών για τις ανάγκες κοινής παρακολούθησης του εξοδολογίου.</li>
-                <li><strong>Προαιρετικές Άδειες Συσκευής &amp; Επεξεργασία Αποδείξεων:</strong>
-                    <ul>
-                        <li><em>Κάμερα (CAMERA):</em> Χρησιμοποιείται αποκλειστικά όταν επιλέγετε σάρωση QR κωδικών ή φωτογράφιση απόδειξης. Οι εικόνες αποδείξεων επεξεργάζονται μόνο για την εξαγωγή ποσού/καταστήματος/ημερομηνίας και δεν χρησιμοποιούνται για διαφημίσεις.</li>
-                        <li><em>Μικρόφωνο (RECORD_AUDIO):</em> Χρησιμοποιείται μόνο όταν πατάτε το κουμπί φωνητικής καταγραφής για μετατροπή ομιλίας σε έξοδο.</li>
-                        <li><em>Πρόσβαση Ειδοποιήσεων (Προαιρετικά):</em> Εφόσον την ενεργοποιήσετε ρητά, η εφαρμογή διαβάζει τοπικά στη συσκευή ειδοποιήσεις πληρωμών (π.χ. τραπεζικές κάρτες ή Google Wallet) για να σας προτείνει άμεση καταχώρηση εξόδου, χωρίς αποστολή του περιεχομένου σε διαφημιστικά δίκτυα.</li>
-                        <li><em>Ειδοποιήσεις &amp; Υπενθυμίσεις:</em> Τοπικά alarms για καθημερινές ή πάγιες υπενθυμίσεις λογαριασμών.</li>
-                    </ul>
-                </li>
-                <li><strong>Προτιμήσεις Χρήσης:</strong> Επιλογή γλώσσας (Ελληνικά/Αγγλικά), θέμα εμφάνισης και ρυθμίσεις υπενθυμίσεων.</li>
+                <li><strong>Στοιχεία Λογαριασμού &amp; Ταυτοποίησης:</strong> Όνομα, διεύθυνση email, μοναδικό αναγνωριστικό χρήστη (UID) και φωτογραφία προφίλ μέσω Google Sign-In (Android Credential Manager) ή Email/Κωδικού μέσω Firebase Authentication.</li>
+                <li><strong>Ευαίσθητα Στοιχεία Προφίλ (Αποκλειστικά Ιδιωτικά):</strong> Προαιρετικά στοιχεία όπως τηλέφωνο, ημερομηνία γέννησης, επάγγελμα και πόλη αποθηκεύονται απομονωμένα σε ιδιωτικό υπο-έγγραφο (<code>/users/{uid}/private/profile</code>) προσβάσιμο αποκλειστικά από τον ίδιο τον ταυτοποιημένο χρήστη. Δεν εκτίθενται ποτέ σε άλλους χρήστες κατά την αναζήτηση διαμοιρασμού εξοδολογίου.</li>
+                <li><strong>Οικονομικές Εγγραφές &amp; Προϋπολογισμός:</strong> Ποσά, τίτλοι/περιγραφές, κατηγορίες, ημερομηνίες, τρόποι πληρωμής, νόμισμα εξοδολογίου, έσοδα, μηνιαία όρια, πάγιοι λογαριασμοί, στόχοι αποταμίευσης και επιμερισμοί/εκκαθαρίσεις μελών που εισάγετε εθελοντικά.</li>
+                <li><strong>Κοινά Εξοδολόγια &amp; Ιστορικό Δραστηριότητας:</strong> Ψευδώνυμα μελών, ρόλοι (Δημιουργός, Συντάκτης, Καταχωρητής) και ιστορικό ενεργειών ορατό αποκλειστικά στα εξουσιοδοτημένα μέλη του εκάστοτε εξοδολογίου.</li>
+                <li><strong>Προτιμήσεις Συσκευής:</strong> Επιλογή γλώσσας (ΕΛ/EN), θέμα εμφάνισης, ρυθμίσεις υπενθυμίσεων και τοπική μνήμη κατηγορίας εμπόρων.</li>
             </ul>
 
-            <h2>3. Σκοπός και Νομική Βάση Επεξεργασίας</h2>
+            <h2>3. Ανάγνωση Τραπεζικών Ειδοποιήσεων Push (Προαιρετική, 100% Τοπικά)</h2>
+            <div class="callout">
+                <strong>Σημαντική Γνωστοποίηση (Prominent Disclosure):</strong> Η λειτουργία αυτόματης ανίχνευσης τραπεζικών ειδοποιήσεων (Android <code>NotificationListenerService</code>) είναι απενεργοποιημένη από προεπιλογή και λειτουργεί <strong>100% τοπικά στη συσκευή σας</strong>.
+            </div>
             <ul>
-                <li><strong>Εκτέλεση Σύμβασης (Άρθρο 6(1)(β) GDPR):</strong> Παροχή καταγραφής εξόδων, στατιστικών και συγχρονισμού μεταξύ συσκευών του ίδιου εξοδολογίου.</li>
-                <li><strong>Συγκατάθεση (Άρθρο 6(1)(α) GDPR):</strong> Φωνητική αναγνώριση, σάρωση αποδείξεων, προαιρετική ανίχνευση ειδοποιήσεων πληρωμών και αποστολή υπενθυμίσεων.</li>
-                <li><strong>Έννομο Συμφέρον (Άρθρο 6(1)(στ) GDPR):</strong> Ασφάλεια συστημάτων, αποτροπή κατάχρησης (Firebase App Check) και τεχνική αξιοπιστία.</li>
+                <li><strong>Αυστηρά Προαιρετική (Opt-In):</strong> Ενεργοποιείται μόνο εφόσον αποδεχθείτε την εμφανή γνωστοποίηση εντός εφαρμογής και παραχωρήσετε ρητά άδεια Πρόσβασης Ειδοποιήσεων στις Ρυθμίσεις Android.</li>
+                <li><strong>Αυστηρό Φιλτράρισμα &amp; Τοπική Ανάλυση:</strong> Το Finsay επεξεργάζεται μόνο ειδοποιήσεις από αναγνωρισμένες τραπεζικές εφαρμογές και ψηφιακά πορτοφόλια (αγνοεί προσωπικά μηνύματα, chats, email και κωδικούς OTP/2FA). Η εξαγωγή εμπόρου και ποσού εκτελείται αποκλειστικά στη μνήμη της συσκευής.</li>
+                <li><strong>Μηδενική Μετάδοση &amp; Ρητή Επιβεβαίωση:</strong> Το ακατέργαστο κείμενο των ειδοποιήσεων <strong>ΔΕΝ αποστέλλεται ποτέ</strong> σε διακομιστές του Finsay ούτε σε τρίτους. Δημιουργείται μόνο τοπικό προσχέδιο· ένα έξοδο αποθηκεύεται και συγχρονίζεται στο cloud μόνο αν πατήσετε ρητά Αποθήκευση/Επιβεβαίωση.</li>
+                <li><strong>Καμία Πρόσβαση σε e-Banking / PSD2:</strong> Το Finsay δεν συλλέγει ποτέ κωδικούς e-Banking, PIN, αριθμούς καρτών ή διαπιστευτήρια Open Banking/PSD2.</li>
+                <li><strong>Ανάκληση:</strong> Μπορείτε να την απενεργοποιήσετε ανά πάσα στιγμή από τις Ρυθμίσεις Εφαρμογής ή τις Ρυθμίσεις Android.</li>
             </ul>
 
-            <h2>4. Ασφάλεια, Συνδρομές &amp; Μηδενική Κοινοποίηση σε Τρίτους</h2>
-            <p>Τα δεδομένα σας αποθηκεύονται τοπικά στη συσκευή και συγχρονίζονται σε κρυπτογραφημένες βάσεις Google Cloud / Firebase Firestore με κανόνες ασφαλείας μηδενικής εμπιστοσύνης (Zero-Trust Security Rules). Οι συνδρομές Finsay Pro διεκπεραιώνονται αποκλειστικά μέσω Google Play Billing (δεν αποθηκεύουμε στοιχεία καρτών). <strong>Δεν περιλαμβάνουμε διαφημίσεις και δεν πουλάμε, δεν ενοικιάζουμε και δεν κοινοποιούμε τα δεδομένα σας σε τρίτους.</strong></p>
+            <h2>4. Κάμερα, Σάρωση Αποδείξεων (OCR), QR ΑΑΔΕ &amp; Φωνητική Καταχώρηση</h2>
+            <ul>
+                <li><strong>Κάμερα (CAMERA) &amp; Android Photo Picker:</strong> Χρησιμοποιούνται μόνο όταν επιλέγετε σάρωση απόδειξης ή QR. Η αναγνώριση κειμένου (OCR) και QR εκτελείται τοπικά στη συσκευή μέσω Google ML Kit· οι φωτογραφίες αποδείξεων δεν ανεβαίνουν σε servers του Finsay.</li>
+                <li><strong>Επαλήθευση QR ΑΑΔΕ / Παρόχων Ηλεκτρονικής Τιμολόγησης:</strong> Όταν σαρώνετε ελληνικό φορολογικό QR, η εφαρμογή ενδέχεται να πραγματοποιήσει απευθείας κλήση ανάγνωσης (HTTPS) αυστηρά σε εγκεκριμένα domains (όπως <code>aade.gr</code> και πιστοποιημένους παρόχους ηλεκτρονικής τιμολόγησης) αποκλειστικά για ανάκτηση επωνυμίας εμπόρου, ΑΦΜ, ημερομηνίας και συνολικού ποσού.</li>
+                <li><strong>Φωνητική Καταχώρηση (RECORD_AUDIO):</strong> Χρησιμοποιείται μόνο όταν πατάτε το κουμπί μικροφώνου. Βασίζεται στην ενσωματωμένη υπηρεσία <code>SpeechRecognizer</code> του Android (υπό τους όρους της συσκευής/Google) και το κείμενο αναλύεται τοπικά σε προσχέδιο. Το Finsay <strong>ΔΕΝ ηχογραφεί, ΔΕΝ αποθηκεύει και ΔΕΝ αποστέλλει αρχεία ήχου</strong>.</li>
+            </ul>
 
-            <h2>5. Δικαιώματα Χρήστη &amp; Διαγραφή Λογαριασμού (GDPR)</h2>
-            <p>Έχετε δικαίωμα πρόσβασης, διόρθωσης, φορητότητας (εξαγωγή σε Excel/CSV/PDF) και <strong>πλήρους οριστικής διαγραφής του λογαριασμού και των δεδομένων σας</strong> απευθείας από την εφαρμογή (<em>Μενού (☰) → Το Προφίλ μου → Διαγραφή Λογαριασμού</em>) ή μέσω της σελίδας <a href="/delete-account.html">Διαγραφή Λογαριασμού</a>.</p>
+            <h2>5. Βιομετρικό Κλείδωμα, Τοπική Μνήμη Εμπόρων &amp; Λειτουργίες Συσκευής</h2>
+            <ul>
+                <li><strong>Προαιρετικό Κλείδωμα (Δακτυλικό Αποτύπωμα / PIN):</strong> Η βιομετρική ταυτοποίηση εκτελείται αποκλειστικά από το ασφαλές υλικό/λογισμικό του Android (<code>BiometricPrompt</code>). Το Finsay <strong>ΔΕΝ έχει πρόσβαση, ΔΕΝ συλλέγει και ΔΕΝ αποθηκεύει ποτέ βιομετρικά δεδομένα ή αποτυπώματα</strong> (πλήρης συμμόρφωση με GDPR Άρθρο 9 και νόμους ΗΠΑ όπως Illinois BIPA / Texas CUBI). Ο προαιρετικός 4-ψήφιος κωδικός PIN αποθηκεύεται αποκλειστικά τοπικά ως salted SHA-256 hash.</li>
+                <li><strong>Έξυπνη Μνήμη Κατηγορίας Εμπόρων:</strong> Οι προτιμήσεις κατηγορίας ανά έμπορο/ΑΦΜ αποθηκεύονται μόνο τοπικά στη συσκευή (<code>SharedPreferences</code>).</li>
+                <li><strong>Υπενθυμίσεις, Widget, Quick Tile &amp; App Shortcuts:</strong> Οι άδειες τοπικών ειδοποιήσεων (<code>POST_NOTIFICATIONS</code>, <code>RECEIVE_BOOT_COMPLETED</code>, <code>WAKE_LOCK</code>, <code>VIBRATE</code>) χρησιμοποιούνται αποκλειστικά για τις υπενθυμίσεις σας και τις ειδοποιήσεις τοπικών προσχεδίων.</li>
+            </ul>
 
-            <h2>6. Επικοινωνία</h2>
-            <p>Για οποιαδήποτε ερώτηση σχετικά με τα προσωπικά σας δεδομένα ή για υποστήριξη, επικοινωνήστε στο: <code>support@finsayapp.com</code>.</p>
+            <h2>6. Νομικές Βάσεις (GDPR / UK GDPR), Μηδενικές Διαφημίσεις &amp; Μη Πώληση Δεδομένων</h2>
+            <ul>
+                <li><strong>Εκτέλεση Σύμβασης (Άρθρο 6(1)(β) GDPR):</strong> Καταγραφή εξόδων/εσόδων, πολλαπλά νομίσματα, γραφήματα, συγχρονισμός cloud, κοινά εξοδολόγια και εξαγωγές.</li>
+                <li><strong>Συγκατάθεση (Άρθρο 6(1)(α) GDPR):</strong> Υποχρεωτική αποδοχή Όρων Χρήσης &amp; Πολιτικής Απορρήτου (με καταγραφή έκδοσης και ημερομηνίας στο ιδιωτικό σας προφίλ), καθώς και προαιρετική ανάγνωση τραπεζικών ειδοποιήσεων, κάμερα/OCR, φωνητική καταχώρηση και υπενθυμίσεις (ανακαλείται οποτεδήποτε).</li>
+                <li><strong>Έννομο Συμφέρον (Άρθρο 6(1)(στ) GDPR):</strong> Ασφάλεια υποδομής, αποτροπή μη εξουσιοδοτημένης πρόσβασης (Firebase Authentication &amp; κανόνες Zero-Trust) και τεχνική αξιοπιστία.</li>
+                <li><strong>Μηδενικές Διαφημίσεις &amp; Καμία Πώληση/Κοινοποίηση:</strong> Το Finsay δεν προβάλλει διαφημίσεις, <strong>ΔΕΝ πωλεί, ΔΕΝ ενοικιάζει και ΔΕΝ διαβιβάζει δεδομένα</strong> σε διαφημιστικά δίκτυα ή data brokers, ούτε αποστέλλει τα οικονομικά σας σε εξωτερικές cloud υπηρεσίες AI/LLM.</li>
+            </ul>
+
+            <h2>7. Υποδομή Cloud, Ασφάλεια &amp; Διεθνείς Διαβιβάσεις</h2>
+            <p>Τα δεδομένα cloud φιλοξενούνται σε Google Cloud / Firebase Firestore με κρυπτογράφηση TLS κατά τη μεταφορά, AES κατά την αποθήκευση, ταυτοποίηση Firebase Authentication και κανόνες Zero-Trust. Εφόσον η υποδομή Google Cloud / Firebase λειτουργεί παγκοσμίως (ΕΕ &amp; ΗΠΑ), τυχόν διαβιβάσεις εκτός ΕΟΧ/ΗΒ καλύπτονται από Τυποποιημένες Συμβατικές Ρήτρες της ΕΕ (SCCs), το UK International Data Transfer Addendum και την πιστοποίηση της Google LLC στο EU-US / UK-US Data Privacy Framework. Οι συνδρομές Finsay Pro διεκπεραιώνονται αποκλειστικά μέσω Google Play Billing (δεν αποθηκεύουμε στοιχεία καρτών). Ενδέχεται να χρησιμοποιούνται διακριτικά τα επίσημα APIs Google Play In-App Review και In-App Updates.</p>
+
+            <h2>8. Χρόνος Διατήρησης, Εξαγωγές &amp; Οριστική Διαγραφή Λογαριασμού</h2>
+            <p>Διατηρούμε τα δεδομένα μόνο όσο ο λογαριασμός σας είναι ενεργός ή μέχρι να διαγράψετε εγγραφές ή τον λογαριασμό σας. Μπορείτε οποτεδήποτε να εξάγετε έξοδα, έσοδα, ισολογισμό και εκκαθάριση μελών τοπικά σε <strong>Excel (.xls), PDF (.pdf) ή CSV (.csv)</strong>. Μπορείτε επίσης να διαγράψετε άμεσα και οριστικά τον λογαριασμό σας, το ιδιωτικό προφίλ και όλα τα δεδομένα σας από την εφαρμογή (<em>Μενού (☰) → Το Προφίλ μου → Διαγραφή Λογαριασμού</em>) ή μέσω της σελίδας <a href="/delete-account.html">Διαγραφή Λογαριασμού</a>. Τυχόν τεχνικά αντίγραφα ασφαλείας εκκαθαρίζονται εντός 30 ημερών.</p>
+
+            <h2>9. Τα Δικαιώματά σας (Ελλάδα, ΕΕ/ΕΟΧ, ΗΒ &amp; ΗΠΑ)</h2>
+            <ul>
+                <li><strong>Ελλάδα, ΕΕ/ΕΟΧ &amp; ΗΒ (GDPR / Ν. 4624/2019 / UK GDPR):</strong> Δικαίωμα πρόσβασης, διόρθωσης, διαγραφής, περιορισμού επεξεργασίας, φορητότητας, εναντίωσης, ανάκλησης συγκατάθεσης και καταγγελίας σε εποπτική αρχή — συμπεριλαμβανομένης της Αρχής Προστασίας Δεδομένων Προσωπικού Χαρακτήρα (ΑΠΔΠΧ, <a href="https://www.dpa.gr" target="_blank" rel="noopener">www.dpa.gr</a>) ή του UK ICO.</li>
+                <li><strong>Ηνωμένες Πολιτείες (CCPA/CPRA Καλιφόρνιας &amp; Πολιτειακοί Νόμοι ΗΠΑ — VA, CO, CT, UT, TX κ.ά.):</strong> Οι κάτοικοι ΗΠΑ έχουν δικαίωμα γνώσης/πρόσβασης, διαγραφής, διόρθωσης, φορητότητας και μη διάκρισης. <strong>Το Finsay ΔΕΝ «πωλεί» («sell») και ΔΕΝ «κοινοποιεί» («share») προσωπικά δεδομένα για στοχευμένη διαφήμιση.</strong> Ευαίσθητα προσωπικά δεδομένα χρησιμοποιούνται μόνο για τις ζητούμενες λειτουργίες της εφαρμογής.</li>
+                <li><strong>Υποβολή Αιτημάτων:</strong> Χρησιμοποιήστε τις ενσωματωμένες λειτουργίες της εφαρμογής ή στείλτε email στο <code>support@finsayapp.com</code> (απάντηση εντός 30 ημερών ή της νόμιμης προθεσμίας).</li>
+            </ul>
+
+            <h2>10. Προστασία Ανηλίκων (COPPA &amp; GDPR Άρθρο 8) &amp; Ενημερώσεις</h2>
+            <p>Το Finsay δεν απευθύνεται σε παιδιά κάτω των 13 ετών (ΗΠΑ - COPPA) ή κάτω των 16 ετών (ή του ισχύοντος ορίου ψηφιακής συναίνεσης στην ΕΕ/ΕΟΧ/ΗΒ βάσει GDPR Άρθρου 8). Δεν συλλέγουμε εν γνώσει μας δεδομένα ανηλίκων· εάν πιστεύετε ότι ανήλικος υπέβαλε στοιχεία, επικοινωνήστε στο <code>support@finsayapp.com</code> για άμεση διαγραφή. Ενδέχεται να ενημερώνουμε την παρούσα Πολιτική με σχετική γνωστοποίηση εντός εφαρμογής ή στο <code>finsayapp.com</code>.</p>
         </div>
 
         <div data-lang="en">
-            <span class="badge">GDPR &amp; Greek Law 4624/2019 • Google Play Policy Compliant</span>
             <h1>Privacy Policy</h1>
             <p><strong>Last Updated:</strong> November 2026</p>
 
-            <h2>1. Introduction</h2>
-            <p>This Privacy Policy explains how <strong>Finsay</strong> (<code>finsayapp.com</code>) collects, uses, stores, and protects your personal and financial tracking data in compliance with the EU General Data Protection Regulation (GDPR 2016/679), Greek Law 4624/2019, and Google Play Developer Policies.</p>
+            <h2>1. Scope &amp; Data Controller</h2>
+            <p>This Privacy Policy explains how <strong>Finsay</strong> (<code>finsayapp.com</code>, Android package <code>com.kynigos.oikonomos</code>) collects, uses, processes, stores, and protects your personal and financial tracking data. It is designed to comply with the EU General Data Protection Regulation (<strong>GDPR 2016/679</strong>), Greek <strong>Law 4624/2019</strong>, the <strong>UK GDPR</strong>, applicable United States privacy laws (including California's <strong>CCPA/CPRA</strong>, Virginia VCDPA, Colorado CPA, Connecticut CTDPA, and Texas TDPSA), and Google Play Developer Program Policies. Data Controller contact: <code>support@finsayapp.com</code>.</p>
 
-            <h2>2. Data We Collect</h2>
+            <h2>2. Categories of Data Collected &amp; Private Profile Isolation</h2>
             <ul>
-                <li><strong>Account Information:</strong> Name, email address, and profile photo provided via Google Sign-In or Firebase Authentication.</li>
-                <li><strong>Expenses &amp; Budget Records:</strong> Amounts, titles/descriptions, categories, dates, payment methods, recurring bill reminders, savings goals, and household member splits voluntarily entered by you.</li>
-                <li><strong>Shared Household Members:</strong> Member nicknames and roles for shared household budgeting.</li>
-                <li><strong>Optional Device Permissions &amp; Receipt Processing:</strong>
-                    <ul>
-                        <li><em>Camera (CAMERA):</em> Used solely when you initiate QR code or receipt scanning to extract amount, merchant, and date.</li>
-                        <li><em>Microphone (RECORD_AUDIO):</em> Used only when you press the voice-input button for speech-to-expense entry.</li>
-                        <li><em>Notification Access (Optional):</em> Only if explicitly enabled by you, Finsay parses payment notifications locally on-device (e.g., bank card or Google Wallet alerts) to suggest an expense draft. Notification contents are never sold or shared for advertising.</li>
-                        <li><em>Notifications &amp; Reminders:</em> Used strictly to deliver user-configured bill and daily reminders.</li>
-                    </ul>
-                </li>
-                <li><strong>App Preferences:</strong> Selected language (EL/EN), theme preference, and reminder settings.</li>
+                <li><strong>Account &amp; Authentication Data:</strong> Name, email address, unique user identifier (UID), and profile photo obtained via Google Sign-In (Android Credential Manager) or Email/Password through Firebase Authentication.</li>
+                <li><strong>Private Profile Details (Strictly Owner-Only):</strong> Optional fields such as phone number, date of birth, occupation, and city are isolated in a private sub-document (<code>/users/{uid}/private/profile</code>) readable and writable exclusively by your authenticated account—never exposed to other users during ledger-sharing lookups.</li>
+                <li><strong>Financial &amp; Budget Records:</strong> Amounts, titles/descriptions, categories, dates, payment sources, selected ledger currency, incomes, monthly budgets, recurring bills, savings goals, and member split/settle-up entries voluntarily entered by you.</li>
+                <li><strong>Shared Household Data &amp; Activity Logs:</strong> Member nicknames, roles (Creator, Editor, Registar), shared ledger links, and an activity log of ledger edits visible only to authorized members of that ledger.</li>
+                <li><strong>Preferences &amp; Local Settings:</strong> Language (EL/EN), theme mode, reminder schedules, and local merchant-to-category memory.</li>
             </ul>
 
-            <h2>3. Purpose &amp; Legal Basis</h2>
+            <h2>3. Bank &amp; Digital Wallet Push Notification Reader (Optional, 100% On-Device)</h2>
+            <div class="callout">
+                <strong>Prominent Disclosure:</strong> The optional Bank Notification Auto-Catcher (Android <code>NotificationListenerService</code>) is disabled by default and operates <strong>100% locally on your device</strong>.
+            </div>
             <ul>
-                <li><strong>Performance of Contract (Art. 6(1)(b) GDPR):</strong> Providing core budgeting, analytics, and multi-device household synchronization.</li>
-                <li><strong>Consent (Art. 6(1)(a) GDPR):</strong> Optional voice recognition, receipt scanning, local notification parsing, and reminders.</li>
-                <li><strong>Legitimate Interests (Art. 6(1)(f) GDPR):</strong> Protecting platform security and preventing abuse (Firebase App Check).</li>
+                <li><strong>Strictly Opt-In:</strong> Activated ONLY after you review our in-app Prominent Disclosure and manually grant Notification Access in Android System Settings.</li>
+                <li><strong>Strict Filtering &amp; On-Device Parsing:</strong> Finsay filters solely for recognized banking and digital wallet packages (ignoring personal messages, chats, emails, and OTP/2FA codes). Merchant name and transaction amount are extracted 100% locally in device memory.</li>
+                <li><strong>Zero Transmission &amp; Explicit Confirmation:</strong> Raw notification text is <strong>NEVER uploaded</strong> to Finsay servers, logged externally, or shared with third parties. Detected alerts create a local draft only; an expense is saved and synced to the cloud only if you actively tap Save/Confirm.</li>
+                <li><strong>No Bank Credentials / No Open Banking:</strong> Finsay never requests or stores banking logins, passwords, PINs, card numbers, or PSD2/Open Banking API tokens.</li>
+                <li><strong>Revocation:</strong> You may disable this feature anytime in App Settings or Android System Settings.</li>
             </ul>
 
-            <h2>4. Data Security, Billing &amp; Zero Third-Party Selling</h2>
-            <p>Data is stored locally on your device and synced via encrypted Google Cloud / Firebase Firestore databases protected by strict Zero-Trust security rules. Optional Finsay Pro purchases are handled exclusively by Google Play Billing; we never collect or store payment card numbers. <strong>Finsay contains no ads and NEVER sells, rents, or shares your personal or financial data with data brokers or advertisers.</strong></p>
+            <h2>4. Camera, Receipt OCR, AADE / e-Invoicing QR Lookup &amp; Voice Entry</h2>
+            <ul>
+                <li><strong>Camera (CAMERA) &amp; Android Photo Picker:</strong> Used solely when you choose to scan a receipt or QR code. OCR text recognition and barcode decoding run locally on-device via Google ML Kit; receipt images are not uploaded to Finsay servers.</li>
+                <li><strong>Greek AADE / e-Invoicing QR Verification:</strong> When scanning a Greek tax/e-invoicing QR code, the app may perform a direct, read-only HTTPS lookup strictly to allowlisted official tax/e-invoicing domains (such as <code>aade.gr</code> and certified Greek e-invoicing providers) solely to retrieve merchant name, VAT/AFM, date, and gross total.</li>
+                <li><strong>Voice Expense Entry (RECORD_AUDIO):</strong> Used only when you press the microphone button. Speech-to-text relies on Android's native <code>SpeechRecognizer</code> service (governed by your device/Google speech service terms), and resulting text is parsed locally into a draft expense. Finsay <strong>does NOT record, save, or upload audio files</strong>.</li>
+            </ul>
 
-            <h2>5. Your GDPR Rights &amp; Account Deletion</h2>
-            <p>You may access, edit, export (CSV/Excel/PDF), and <strong>permanently delete your account and data</strong> directly in the app (<em>Menu (☰) → My Profile → Delete Account</em>) or by following the steps on our <a href="/delete-account.html">Account Deletion page</a>.</p>
+            <h2>5. Biometric App Lock, Local Merchant Memory &amp; Device Features</h2>
+            <ul>
+                <li><strong>Optional Biometric &amp; PIN App Lock:</strong> Fingerprint/Face Unlock uses Android <code>BiometricPrompt</code> handled exclusively by your device's secure OS hardware. Finsay <strong>NEVER accesses, collects, stores, or transmits biometric identifiers or templates</strong> (compliant with GDPR Art. 9 and US state biometric laws such as Illinois BIPA / Texas CUBI). Any optional 4-digit PIN is stored strictly on-device as a salted SHA-256 hash.</li>
+                <li><strong>Smart Merchant Category Memory:</strong> Category preferences per merchant/VAT ID are stored strictly locally on-device (<code>SharedPreferences</code>).</li>
+                <li><strong>Reminders, Widgets, Quick Tile &amp; App Shortcuts:</strong> Local notification permissions (<code>POST_NOTIFICATIONS</code>, <code>RECEIVE_BOOT_COMPLETED</code>, <code>WAKE_LOCK</code>, <code>VIBRATE</code>) deliver only your configured reminders and local draft alerts.</li>
+            </ul>
 
-            <h2>6. Contact</h2>
-            <p>For privacy inquiries, GDPR requests, or support, contact us at: <code>support@finsayapp.com</code>.</p>
+            <h2>6. Legal Bases (GDPR / UK GDPR), Zero Ads &amp; No Data Selling</h2>
+            <ul>
+                <li><strong>Performance of Contract (Art. 6(1)(b) GDPR):</strong> Core budgeting, multi-currency tracking, analytics, cloud sync, shared ledgers, and data exports.</li>
+                <li><strong>Consent (Art. 6(1)(a) GDPR):</strong> Mandatory acceptance of our Terms &amp; Privacy Policy (version and timestamp recorded in your private owner-only profile), plus optional bank notification parsing, camera/OCR, microphone voice input, and reminder notifications (withdrawable anytime).</li>
+                <li><strong>Legitimate Interests (Art. 6(1)(f) GDPR):</strong> Platform security, unauthorized-access prevention (Firebase Authentication &amp; Zero-Trust Security Rules), and service reliability.</li>
+                <li><strong>Zero Ads, No Data Brokers &amp; No Third-Party AI Uploads:</strong> Finsay displays no ads, <strong>NEVER sells, rents, or shares personal data</strong> for cross-context behavioral advertising, and does not transmit your financial records to third-party cloud AI/LLM APIs.</li>
+            </ul>
+
+            <h2>7. Cloud Infrastructure, Security &amp; International Transfers</h2>
+            <p>Cloud data is hosted on Google Cloud / Firebase Firestore with TLS encryption in transit, AES encryption at rest, Firebase Authentication, and Zero-Trust Security Rules restricting reads/writes to authorized ledger members. Because Google Cloud / Firebase operates global infrastructure (including EU and US servers), any transfers outside the EEA or UK are safeguarded by EU Standard Contractual Clauses (SCCs), the UK International Data Transfer Addendum, and Google LLC's certification under the EU-US / UK-US Data Privacy Framework. Optional Finsay Pro purchases are processed exclusively by Google Play Billing (we never see or store card numbers). Native Google Play In-App Review and In-App Update APIs may operate discreetly under Google's Privacy Policy.</p>
+
+            <h2>8. Data Retention, Exports &amp; Permanent Account Deletion</h2>
+            <p>We retain your data only for as long as your account remains active or until you delete entries or your entire account. You may export expenses, incomes, balances, and member settle-up summaries locally to <strong>Excel (.xls), PDF (.pdf), or CSV (.csv)</strong> anytime. You can permanently delete your account, private profile, owned ledgers, and cloud/local data directly in the app (<em>Menu (☰) → My Profile → Delete Account</em>) or via our <a href="/delete-account.html">Account Deletion page</a>. Residual cloud backups are purged within standard infrastructure cycles (up to 30 days).</p>
+
+            <h2>9. Your Privacy Rights (Greece, EU/EEA, UK &amp; United States)</h2>
+            <ul>
+                <li><strong>Greece, EU/EEA &amp; UK (GDPR / Law 4624/2019 / UK GDPR):</strong> You have the right to access, rectify, erase, restrict processing, data portability, object, withdraw consent anytime, and lodge a complaint with a supervisory authority—including the Hellenic Data Protection Authority (HDPA, <a href="https://www.dpa.gr" target="_blank" rel="noopener">www.dpa.gr</a>) or the UK ICO.</li>
+                <li><strong>United States (California CCPA/CPRA &amp; US State Privacy Laws — VA, CO, CT, UT, TX, etc.):</strong> US residents have the right to know/access personal information collected, request deletion, request correction of inaccurate data, obtain a portable copy, and receive non-discriminatory treatment when exercising privacy rights. <strong>Finsay DOES NOT "sell" personal information and DOES NOT "share" personal information for cross-context behavioral advertising.</strong> Sensitive personal information is used strictly as necessary to provide requested app features.</li>
+                <li><strong>Exercising Your Rights:</strong> Use in-app tools or email <code>support@finsayapp.com</code>; we verify and respond within 30 days (or the statutory period under applicable law).</li>
+            </ul>
+
+            <h2>10. Children's Privacy (COPPA &amp; GDPR Art. 8) &amp; Updates</h2>
+            <p>Finsay is not directed to children under 13 years of age (US COPPA) or under 16 years of age (or the applicable digital consent age in your EU/EEA/UK country under GDPR Art. 8). We do not knowingly collect data from children; contact <code>support@finsayapp.com</code> for immediate deletion if you believe a child provided data. We may update this Privacy Policy to reflect new features or legal requirements, with notice in-app or on <code>finsayapp.com</code>.</p>
         </div>
     </div>
     <div class="footer">
@@ -192,6 +254,10 @@
             document.getElementById('btn-en').classList.toggle('active', l === 'en');
             document.documentElement.lang = l;
         }
+        (function() {
+            var p = new URLSearchParams(window.location.search);
+            if (p.get('lang') === 'en') setLang('en');
+        })();
     </script>
 </body>
 </html>

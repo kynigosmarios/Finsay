@@ -747,6 +747,8 @@ fun PremiumPaywallDialog(
                 }
 
                 val paywallSubtitle = when (reason) {
+                    "category_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition allows up to 5 expense categories" else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    "income_category_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition allows up to 5 income categories" else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
                     "voice_limit" -> if (lang == Localization.Language.ENGLISH) "Monthly limit of 15 free voice entries reached" else "Συμπληρώσατε το μηνιαίο όριο των 15 φωνητικών καταχωρήσεων"
                     "savings_goal_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition supports up to 1 Savings Goal" else "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
                     "recurring_expense_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition supports up to 2 Recurring Expenses" else "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
@@ -919,6 +921,9 @@ fun PremiumPaywallDialog(
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
+                        BenefitRowItem(
+                            title = if (lang == Localization.Language.ENGLISH) "Unlimited Expense & Income Categories (Free: up to 5 each)" else "Απεριόριστες Κατηγορίες Εξόδων & Εσόδων (Δωρεάν: έως 5)"
+                        )
                         BenefitRowItem(
                             title = if (lang == Localization.Language.ENGLISH) "Unlimited Voice Entries" else "Απεριόριστη Φωνητική Καταχώρηση"
                         )

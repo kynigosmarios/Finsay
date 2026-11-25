@@ -89,7 +89,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import com.example.ui.components.FinsayProShowcasePage
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -181,6 +183,7 @@ private enum class InAppSubPage {
     REMINDERS,
     GOALS,
     SETTINGS,
+    FINSAY_PRO,
     GUIDE,
     LEGAL
 }
@@ -207,6 +210,7 @@ fun MainScreen(
     val members by viewModel.allMembers.collectAsStateWithLifecycle()
     val deletedMembers by viewModel.deletedMembers.collectAsStateWithLifecycle()
     val categories by viewModel.allCategories.collectAsStateWithLifecycle()
+    val incomeCategories by viewModel.incomeCategories.collectAsStateWithLifecycle()
     val deletedCategories by viewModel.deletedCategories.collectAsStateWithLifecycle()
     val selectedMemberFilter by viewModel.selectedMemberFilter.collectAsStateWithLifecycle()
     val selectedCategoryFilter by viewModel.selectedCategoryFilter.collectAsStateWithLifecycle()
@@ -234,6 +238,9 @@ fun MainScreen(
 
     val showCategoryDialog by viewModel.showCategoryDialog.collectAsStateWithLifecycle()
     val editingCategory by viewModel.editingCategory.collectAsStateWithLifecycle()
+    val editingCategoryType by viewModel.editingCategoryType.collectAsStateWithLifecycle()
+    val pendingNotificationDeepLink by viewModel.pendingNotificationDeepLink.collectAsStateWithLifecycle()
+    val requestedTabIndex by viewModel.requestedTabIndex.collectAsStateWithLifecycle()
 
     val showSettingsDialog by viewModel.showSettingsDialog.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -291,6 +298,7 @@ fun MainScreen(
     val notificationConsentCompleted by viewModel.notificationConsentCompleted.collectAsStateWithLifecycle()
     val bankAutoCatcherEnabled by viewModel.bankAutoCatcherEnabled.collectAsStateWithLifecycle()
     val legalDocumentsInitialTab by viewModel.legalDocumentsInitialTab.collectAsStateWithLifecycle()
+    val showFinsayProPage by viewModel.showFinsayProPage.collectAsStateWithLifecycle()
     val isUserPro by viewModel.isProUser.collectAsStateWithLifecycle()
     val pendingInAppReviewPrompt by viewModel.pendingInAppReviewPrompt.collectAsStateWithLifecycle()
 
@@ -301,6 +309,7 @@ fun MainScreen(
         canManage && showRemindersManagerDialog -> InAppSubPage.REMINDERS
         showSavingsGoalsManagerDialog -> InAppSubPage.GOALS
         showSettingsDialog -> InAppSubPage.SETTINGS
+        showFinsayProPage -> InAppSubPage.FINSAY_PRO
         showOnboardingCarousel -> InAppSubPage.GUIDE
         else -> null
     }
@@ -333,7 +342,69 @@ fun MainScreen(
         }
     }
 
-    // Speech Recognition Helper
+    // Programmatic tab switch (e.g. from notification deep-links)
+    LaunchedEffect(requestedTabIndex) {
+        requestedTabIndex?.let { tabIdx ->
+            currentTab = tabIdx.coerceIn(0, 3)
+            viewModel.consumeRequestedTabIndex()
+        }
+    }
+
+    // Universal notification tap deep-linking: opens the exact dialog/screen for every Finsay notification
+    LaunchedEffect(pendingNotificationDeepLink, recurringExpenses.size, pendingBankTransactions.size) {
+        val link = pendingNotificationDeepLink ?: return@LaunchedEffect
+        when (link) {
+            is OikoNomosViewModel.NotificationDeepLink.BankTransaction -> {
+                com.example.util.BankNotificationHolder.reloadFromPrefs(context)
+                val allHeld = com.example.util.BankNotificationHolder.pendingTransactions.value
+                val targetTx = allHeld.find { it.id == link.txId }
+                    ?: pendingBankTransactions.find { it.id == link.txId }
+                    ?: pendingBankTransactions.firstOrNull()
+                viewModel.dismissAllSubPages()
+                currentTab = 0
+                if (targetTx != null) {
+                    viewModel.confirmBankTransaction(targetTx)
+                }
+                viewModel.clearPendingNotificationDeepLink()
+            }
+            is OikoNomosViewModel.NotificationDeepLink.BillReminder -> {
+                val matching = recurringExpenses.find { it.id == link.reminderId }
+                if (matching != null) {
+                    viewModel.dismissAllSubPages()
+                    currentTab = 0
+                    viewModel.logExpenseFromReminder(matching)
+                    viewModel.clearPendingNotificationDeepLink()
+                } else {
+                    // On cold start, wait briefly for Room/Firestore recurring list to load before falling back
+                    kotlinx.coroutines.delay(900L)
+                    val retryMatch = viewModel.allRecurringExpenses.value.find { it.id == link.reminderId }
+                    viewModel.dismissAllSubPages()
+                    currentTab = 0
+                    if (retryMatch != null) {
+                        viewModel.logExpenseFromReminder(retryMatch)
+                    } else if (canManage) {
+                        viewModel.openRemindersManagerDialog()
+                    }
+                    viewModel.clearPendingNotificationDeepLink()
+                }
+            }
+            is OikoNomosViewModel.NotificationDeepLink.DailyReminder -> {
+                viewModel.dismissAllSubPages()
+                currentTab = 0
+                viewModel.openQuickActionChooser()
+                viewModel.clearPendingNotificationDeepLink()
+            }
+            is OikoNomosViewModel.NotificationDeepLink.HouseholdActivity -> {
+                viewModel.dismissAllSubPages()
+                currentTab = 0
+                viewModel.openActivityDialog()
+                viewModel.clearPendingNotificationDeepLink()
+            }
+        }
+    }
+
+    // Speech Recognition Helper (dynamically aligned with selected app language)
+    val latestAppLanguage by rememberUpdatedState(appLanguage)
     val speechHelper = remember {
         SpeechRecognitionHelper(
             context = context,
@@ -349,7 +420,8 @@ fun MainScreen(
             },
             onRmsChanged = { rms ->
                 viewModel.setMicSoundLevel(rms)
-            }
+            },
+            languageProvider = { latestAppLanguage }
         )
     }
 
@@ -372,14 +444,20 @@ fun MainScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
+        val isEnNow = latestAppLanguage.equals("EN", ignoreCase = true)
         if (isGranted) {
             try {
                 speechHelper.startListening()
             } catch (t: Throwable) {
-                viewModel.showSnackbar("Σφάλμα εκκίνησης μικροφώνου")
+                viewModel.showSnackbar(
+                    if (isEnNow) "Microphone start error" else "Σφάλμα εκκίνησης μικροφώνου"
+                )
             }
         } else {
-            viewModel.showSnackbar("Απαιτείται άδεια μικροφώνου για φωνητική καταχώρηση. Μπορείτε να χρησιμοποιήσετε τα έτοιμα παραδείγματα!")
+            viewModel.showSnackbar(
+                if (isEnNow) "Microphone permission is required for voice entry. You can also use the quick examples!"
+                else "Απαιτείται άδεια μικροφώνου για φωνητική καταχώρηση. Μπορείτε να χρησιμοποιήσετε τα έτοιμα παραδείγματα!"
+            )
         }
     }
 
@@ -400,7 +478,11 @@ fun MainScreen(
                 }
             }
         } catch (t: Throwable) {
-            viewModel.showSnackbar("Σφάλμα μικροφώνου: ${t.localizedMessage ?: "μη διαθέσιμο"}")
+            val isEnNow = latestAppLanguage.equals("EN", ignoreCase = true)
+            viewModel.showSnackbar(
+                if (isEnNow) "Microphone error: ${t.localizedMessage ?: "unavailable"}"
+                else "Σφάλμα μικροφώνου: ${t.localizedMessage ?: "μη διαθέσιμο"}"
+            )
         }
     }
 
@@ -840,17 +922,19 @@ fun MainScreen(
                     )
                     3 -> CategoriesScreen(
                         categories = categories,
+                        incomeCategories = incomeCategories,
                         appLanguage = appLanguage,
                         canManage = canManage,
+                        isPro = isUserPro,
                         deletedCategories = deletedCategories,
-                        onAddCategory = { viewModel.openCategoryDialog() },
-                        onEditCategory = { viewModel.openCategoryDialog(it) },
+                        onAddCategory = { type -> viewModel.openCategoryDialog(null, type) },
+                        onEditCategory = { viewModel.openCategoryDialog(it, it.categoryType) },
                         onDeleteCategory = { viewModel.deleteCategory(it) },
                         onRestoreCategory = { viewModel.restoreCategory(it) },
                         onPermanentDeleteCategory = { viewModel.permanentDeleteCategory(it) },
                         onMoveCategoryUp = { viewModel.moveCategoryUp(it) },
                         onMoveCategoryDown = { viewModel.moveCategoryDown(it) },
-                        onSeedStandardCategories = { viewModel.seedStandardCategories() }
+                        onSeedStandardCategories = { type -> viewModel.seedStandardCategories(type) }
                     )
                     InAppSubPage.PROFILE -> UserProfileDialog(
                         currentUser = currentUser,
@@ -868,6 +952,12 @@ fun MainScreen(
                         onShowPremiumPaywall = { viewModel.showPremiumPaywall("profile_upgrade") },
                         onSignOut = { viewModel.signOutUser() },
                         onDeleteAccount = { viewModel.deleteCurrentUserAccount() },
+                        onDeleteAccountWithPassword = { password, onSuccess, onError ->
+                            viewModel.deleteCurrentUserAccountWithPassword(password, onSuccess, onError)
+                        },
+                        onDeleteAccountWithGoogleToken = { idToken, onSuccess, onError ->
+                            viewModel.deleteCurrentUserAccountWithGoogleToken(idToken, onSuccess, onError)
+                        },
                         onDismiss = { viewModel.dismissUserProfileDialog() }
                     )
                     InAppSubPage.HOUSEHOLDS -> ExodologioDetailsDialog(
@@ -992,8 +1082,22 @@ fun MainScreen(
                         onMessage = { viewModel.showSnackbar(it) },
                         onDismiss = { viewModel.dismissSettingsDialog() }
                     )
+                    InAppSubPage.FINSAY_PRO -> FinsayProShowcasePage(
+                        isPro = isUserPro,
+                        appLanguage = appLanguage,
+                        onLaunchBilling = { productId ->
+                            val act = context as? android.app.Activity
+                            if (act != null) onLaunchBilling(act, productId) else false
+                        },
+                        onDismiss = { viewModel.dismissFinsayProPage() }
+                    )
                     InAppSubPage.GUIDE -> OnboardingCarouselDialog(
                         appLanguage = appLanguage,
+                        isPro = isUserPro,
+                        onOpenProPaywall = {
+                            viewModel.dismissOnboardingCarousel()
+                            viewModel.showPremiumPaywall("guide_pro")
+                        },
                         onDismiss = { viewModel.dismissOnboardingCarousel() },
                         onAddMember = if (canManage) {
                             {
@@ -1076,6 +1180,7 @@ fun MainScreen(
                 onOpenProfile = { viewModel.openUserProfileDialog() },
                 onOpenExodologio = { viewModel.openExodologioDetailsDialog() },
                 onOpenSettings = { viewModel.openSettingsDialog() },
+                onOpenProInfo = { viewModel.openFinsayProPage() },
                 onOpenGuide = { viewModel.openOnboardingGuide() },
                 onOpenReminders = if (canManage) { { viewModel.openRemindersManagerDialog() } } else null,
                 onOpenGoals = { viewModel.openSavingsGoalsManagerDialog() },
@@ -1158,6 +1263,8 @@ fun MainScreen(
         ManualIncomeDialog(
             incomeToEdit = editingIncome,
             members = members,
+            incomeCategories = incomeCategories,
+            appLanguage = appLanguage,
             onDismiss = { viewModel.dismissManualIncomeDialog() },
             onSave = { id, title, amount, memberId, memberName, category, timestamp, note ->
                 viewModel.saveIncome(
@@ -1189,12 +1296,23 @@ fun MainScreen(
 
     // Category Dialog
     if (showCategoryDialog) {
+        val activeCategoryType = editingCategory?.categoryType ?: editingCategoryType
         CategoryDialog(
             categoryToEdit = editingCategory,
+            isIncomeCategory = activeCategoryType.equals("INCOME", ignoreCase = true),
             appLanguage = appLanguage,
             onDismiss = { viewModel.dismissCategoryDialog() },
             onSave = { id, name, iconKey, monthlyBudget, colorHex, voiceKeywords, fontColorHex ->
-                viewModel.saveCategory(id, name, iconKey, monthlyBudget, colorHex, voiceKeywords, fontColorHex)
+                viewModel.saveCategory(
+                    id = id,
+                    name = name,
+                    iconKey = iconKey,
+                    monthlyBudget = monthlyBudget,
+                    colorHex = colorHex,
+                    voiceKeywords = voiceKeywords,
+                    fontColorHex = fontColorHex,
+                    categoryType = activeCategoryType
+                )
             }
         )
     }

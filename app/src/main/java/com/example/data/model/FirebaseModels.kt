@@ -58,7 +58,7 @@ enum class SyncStatusState {
 @IgnoreExtraProperties
 data class Household(
     var id: String = "",
-    var name: String = "Το Εξοδολόγιό μου",
+    var name: String = "My Household Book",
     var ownerId: String = "",
     var inviteCode: String = "",
     var memberUids: List<String> = emptyList(),
@@ -115,7 +115,7 @@ data class UserProfile(
     var isPremium: Boolean = false,
     var photoUrl: String = "",
     var authProvider: String = "password", // "password" or "google"
-    var appLanguage: String = "EL",
+    var appLanguage: String = "EN",
     var themeMode: String = "SYSTEM",
     var reminderEnabled: Boolean = false,
     var reminderHour: Int = 21,
@@ -123,6 +123,8 @@ data class UserProfile(
     var notificationConsentCompleted: Boolean = false,
     var requiresEmailVerification: Boolean = false,
     var emailVerifiedConfirmed: Boolean = true,
+    var acceptedLegalVersion: String = "",
+    var acceptedLegalAt: Long = 0L,
     var createdAt: Timestamp? = null,
     var updatedAt: Timestamp? = null
 )
@@ -178,6 +180,7 @@ data class FirebaseCategory(
     var sortOrder: Int = 0,
     var fontColorHex: Long = 0L,
     var isDeleted: Boolean = false,
+    var categoryType: String = "EXPENSE",
     var createdAt: Timestamp? = null
 )
 

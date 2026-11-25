@@ -85,7 +85,7 @@ class FirestoreSyncRepository(
     suspend fun createHousehold(ownerUid: String, exodologioName: String, currencyCode: String = "EUR"): Household =
         householdDelegate.createHousehold(ownerUid, exodologioName, currencyCode)
 
-    suspend fun ensureHouseholdExists(householdId: String, ownerUid: String, householdName: String = "Το Εξοδολόγιό μου"): Household =
+    suspend fun ensureHouseholdExists(householdId: String, ownerUid: String, householdName: String = "My Household Book"): Household =
         householdDelegate.ensureHouseholdExists(householdId, ownerUid, householdName)
 
     suspend fun fetchUserHouseholds(householdIds: List<String>, excludedHouseholdIds: Set<String> = emptySet()): List<Household> =
@@ -154,9 +154,10 @@ class FirestoreSyncRepository(
         occupation: String = "",
         city: String = "",
         authProvider: String = "",
-        excludedHouseholdIds: Set<String> = emptySet()
+        excludedHouseholdIds: Set<String> = emptySet(),
+        appLanguage: String = "EN"
     ): UserProfile = userProfileDelegate.getOrCreateUserProfile(
-        uid, email, displayName, firstName, lastName, birthDate, phoneNumber, occupation, city, authProvider, excludedHouseholdIds
+        uid, email, displayName, firstName, lastName, birthDate, phoneNumber, occupation, city, authProvider, excludedHouseholdIds, appLanguage
     )
 
     suspend fun getUserProfileOnce(uid: String): UserProfile? =
@@ -164,6 +165,9 @@ class FirestoreSyncRepository(
 
     suspend fun savePendingUserProfile(profile: UserProfile) =
         userProfileDelegate.savePendingUserProfile(profile)
+
+    suspend fun recordLegalAcceptance(uid: String, version: String, acceptedAt: Long) =
+        userProfileDelegate.recordLegalAcceptance(uid, version, acceptedAt)
 
     suspend fun markEmailVerifiedConfirmed(uid: String) =
         userProfileDelegate.markEmailVerifiedConfirmed(uid)
@@ -358,11 +362,20 @@ class FirestoreSyncRepository(
     suspend fun deleteCategory(householdId: String, categoryId: String) =
         structureDelegate.deleteCategory(householdId, categoryId)
 
-    suspend fun setCategoryDeleted(householdId: String, categoryId: String, categoryName: String, isDeleted: Boolean) =
-        structureDelegate.setCategoryDeleted(householdId, categoryId, categoryName, isDeleted)
+    suspend fun setCategoryDeleted(
+        householdId: String,
+        categoryId: String,
+        categoryName: String,
+        isDeleted: Boolean,
+        categoryType: String = "EXPENSE"
+    ) = structureDelegate.setCategoryDeleted(householdId, categoryId, categoryName, isDeleted, categoryType)
 
-    suspend fun permanentDeleteCategoryExact(householdId: String, categoryId: String, categoryName: String) =
-        structureDelegate.permanentDeleteCategoryExact(householdId, categoryId, categoryName)
+    suspend fun permanentDeleteCategoryExact(
+        householdId: String,
+        categoryId: String,
+        categoryName: String,
+        categoryType: String = "EXPENSE"
+    ) = structureDelegate.permanentDeleteCategoryExact(householdId, categoryId, categoryName, categoryType)
 
     suspend fun getCategoriesOnce(householdId: String): List<FirebaseCategory> =
         structureDelegate.getCategoriesOnce(householdId)

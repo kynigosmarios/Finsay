@@ -82,6 +82,13 @@ internal class OikoNomosTransactionDelegate(
     }
 
     fun resolveSuggestedCategoryForBankTx(tx: PendingBankTransaction): ExpenseCategory? {
+        if (tx.isIncome) {
+            return BankNotificationParser.categorizeIncomeMerchant(
+                merchant = tx.merchantName,
+                rawText = tx.rawText,
+                incomeCategories = vm._incomeCategories.value
+            )
+        }
         val categories = vm._allCategories.value
         val merchantQuery = tx.merchantName.ifBlank { tx.rawText }
         // Learned user preference ALWAYS takes priority over generic keyword rules
@@ -96,6 +103,26 @@ internal class OikoNomosTransactionDelegate(
 
         val matchedCategory = resolveSuggestedCategoryForBankTx(tx)
         val defaultPayers = vm.resolveDefaultPayerMembers()
+
+        if (tx.isIncome) {
+            val primaryMember = defaultPayers.firstOrNull() ?: vm._allMembers.value.firstOrNull()
+            val fallbackCategory = matchedCategory?.name
+                ?: vm._incomeCategories.value.lastOrNull()?.name
+                ?: "Άλλο"
+            val prefilledIncome = Income(
+                id = 0L,
+                title = tx.merchantName,
+                amount = tx.amount,
+                memberId = primaryMember?.id ?: 0L,
+                memberName = primaryMember?.name ?: "Κοινό Οικογένειας",
+                category = fallbackCategory,
+                timestamp = tx.timestamp,
+                note = "Αυτόματος εντοπισμός (${tx.bankName})"
+            )
+            vm.openManualIncomeDialog(prefilledIncome)
+            return
+        }
+
         val resolvedDefault = DefaultPayerHelper.buildEqualPayerFields(defaultPayers, tx.amount, fallbackLabel = "")
         pendingBankMerchantForLearning = tx.merchantName.trim().takeIf { it.isNotBlank() }
 

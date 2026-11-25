@@ -44,7 +44,10 @@ internal class OikoNomosRecurringGoalsDelegate(
         ) return
         if (goal == null && !vm.isCurrentUserPro() && vm.allSavingsGoals.value.size >= 1) {
             vm.showPremiumPaywall("savings_goal_limit")
-            vm.showSnackbar("Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης")
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN") "Free edition supports up to 1 Savings Goal"
+                else "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
+            )
             return
         }
         vm._editingSavingsGoal.value = goal
@@ -271,7 +274,10 @@ internal class OikoNomosRecurringGoalsDelegate(
                     amount = goal.targetAmount,
                     householdIdOverride = activeHouseholdId.ifBlank { null }
                 )
-                vm.showSnackbar("Ο στόχος «${goal.title}» διαγράφηκε")
+                vm.showSnackbar(
+                    if (vm._appLanguage.value == "EN") "Goal \"${goal.title}\" deleted"
+                    else "Ο στόχος «${goal.title}» διαγράφηκε"
+                )
             } finally {
                 vm.trackSyncEnd()
             }
@@ -577,6 +583,50 @@ internal class OikoNomosRecurringGoalsDelegate(
         vm._dismissedReminderKeys.value = updated
         vm.prefs.edit().putStringSet("dismissed_reminder_keys", updated).apply()
         vm._manualTriggeredReminderIds.value = vm._manualTriggeredReminderIds.value - reminder.id
+
+        // Persist lastGeneratedMonth to Room & Firestore so logout/login or reinstall never re-shows this period's reminder
+        if (reminder.lastGeneratedMonth != periodKey) {
+            vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+                try {
+                    val stamped = reminder.copy(lastGeneratedMonth = periodKey)
+                    vm.repository.updateRecurringExpense(stamped)
+                    val user = vm._currentUser.value
+                    val householdId = vm._currentHousehold.value?.id ?: ""
+                    val fbRecurring = FirebaseRecurringExpense(
+                        id = stamped.id.toString(),
+                        householdId = householdId,
+                        userId = user?.uid ?: "",
+                        title = stamped.title,
+                        amount = stamped.amount,
+                        categoryId = stamped.categoryId,
+                        categoryName = stamped.categoryName,
+                        frequency = stamped.frequency,
+                        dayOfMonth = stamped.dayOfMonth,
+                        reminderHour = stamped.reminderHour,
+                        reminderMinute = stamped.reminderMinute,
+                        splitType = stamped.splitType,
+                        memberIdsCsv = stamped.memberIdsCsv,
+                        memberNamesDisplay = stamped.memberNamesDisplay,
+                        note = stamped.note,
+                        isActive = stamped.isActive,
+                        lastGeneratedMonth = stamped.lastGeneratedMonth,
+                        payerMemberId = stamped.payerMemberId,
+                        payerMemberName = stamped.payerMemberName,
+                        payerMemberIdsCsv = stamped.payerMemberIdsCsv,
+                        payerAmountsCsv = stamped.payerAmountsCsv,
+                        anchorMonth = stamped.anchorMonth
+                    )
+                    if (householdId.isNotBlank()) {
+                        vm.firestoreSyncRepo.syncRecurringExpense(householdId, fbRecurring)
+                    } else if (user != null) {
+                        vm.firestoreSyncRepo.syncUserRecurringExpense(user.uid, fbRecurring)
+                    }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.w("OikoNomosVM", "dismissDueReminder cloud persist warning: ${e.message}")
+                }
+            }
+        }
     }
 
     fun logExpenseFromReminder(reminder: RecurringExpense) {
@@ -628,7 +678,10 @@ internal class OikoNomosRecurringGoalsDelegate(
         ) return
         if (recurring == null && !vm.isCurrentUserPro() && vm.allRecurringExpenses.value.size >= 2) {
             vm.showPremiumPaywall("recurring_expense_limit")
-            vm.showSnackbar("Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές")
+            vm.showSnackbar(
+                if (vm._appLanguage.value == "EN") "Free edition supports up to 2 Standing Orders"
+                else "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
+            )
             return
         }
         vm._editingRecurringExpense.value = recurring
@@ -756,6 +809,29 @@ internal class OikoNomosRecurringGoalsDelegate(
                 val periodKey = RecurringScheduleHelper.periodKeyFor(recurring, nowMillis)
                 var autoRegisteredThisPeriod = false
 
+                // For pure reminders (!autoRegisterIfDue), if scheduled time today has already passed,
+                // stamp current periodKey so it waits for the next scheduled day & time instead of firing now or on re-login.
+                // Conversely, if the user rescheduled to a future time today, clear lastGeneratedMonth so it fires on time.
+                if (!autoRegisterIfDue) {
+                    val scheduleChanged = existing == null ||
+                        existing.frequency != recurring.frequency ||
+                        existing.dayOfMonth != recurring.dayOfMonth ||
+                        existing.anchorMonth != recurring.anchorMonth ||
+                        existing.reminderHour != recurring.reminderHour ||
+                        existing.reminderMinute != recurring.reminderMinute
+                    if (scheduleChanged) {
+                        val updatedPeriodStamp = if (RecurringScheduleHelper.isReminderTimeAlreadyPassedToday(recurring, nowMillis)) {
+                            periodKey
+                        } else {
+                            ""
+                        }
+                        if (recurring.lastGeneratedMonth != updatedPeriodStamp) {
+                            recurring = recurring.copy(lastGeneratedMonth = updatedPeriodStamp)
+                            vm.repository.updateRecurringExpense(recurring)
+                        }
+                    }
+                }
+
                 if (autoRegisterIfDue && RecurringScheduleHelper.isDueNow(recurring, nowMillis)) {
                     val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
                     val currentYear = cal.get(Calendar.YEAR)
@@ -779,7 +855,14 @@ internal class OikoNomosRecurringGoalsDelegate(
 
                     if (!RecurringExpenseAutoProcessor.isAlreadyGeneratedForPeriod(recurring, periodKey, relevantExpenses)) {
                         val targetTimestamp = RecurringScheduleHelper.calculateTargetTimestampForPeriod(recurring, nowMillis)
-                        val noteText = note.ifBlank { "Πάγια εντολή (${RecurringScheduleHelper.scheduleSummary(recurring, Localization.Language.GREEK)})" }
+                        val noteLang = Localization.Language.fromCode(vm._appLanguage.value)
+                        val noteText = note.ifBlank {
+                            if (noteLang == Localization.Language.ENGLISH) {
+                                "Standing order (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
+                            } else {
+                                "Πάγια εντολή (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
+                            }
+                        }
                         val docId = "recurring_${generatedId}_${periodKey}"
 
                         val newExpense = Expense(
@@ -871,19 +954,34 @@ internal class OikoNomosRecurringGoalsDelegate(
                 )
 
                 val lang = Localization.Language.fromCode(vm._appLanguage.value)
+                val isEn = lang == Localization.Language.ENGLISH
                 val schedSummary = RecurringScheduleHelper.scheduleSummary(recurring, lang)
                 if (!autoRegisterIfDue) {
                     val timeStr = String.format(Locale.US, "%02d:%02d", recurring.reminderHour, recurring.reminderMinute)
                     vm.showSnackbar(
-                        if (id == 0L) "Η υπενθύμιση «$title» αποθηκεύτηκε ($schedSummary, $timeStr)!"
-                        else "Η υπενθύμιση «$title» ενημερώθηκε ($schedSummary, $timeStr)!"
+                        if (id == 0L) {
+                            if (isEn) "Reminder \"$title\" saved ($schedSummary, $timeStr)!"
+                            else "Η υπενθύμιση «$title» αποθηκεύτηκε ($schedSummary, $timeStr)!"
+                        } else {
+                            if (isEn) "Reminder \"$title\" updated ($schedSummary, $timeStr)!"
+                            else "Η υπενθύμιση «$title» ενημερώθηκε ($schedSummary, $timeStr)!"
+                        }
                     )
                 } else if (autoRegisteredThisPeriod) {
-                    vm.showSnackbar("Η πάγια εντολή «$title» καταχωρήθηκε αυτόματα στα έξοδα!")
+                    vm.showSnackbar(
+                        if (isEn) "Standing order \"$title\" automatically logged to expenses!"
+                        else "Η πάγια εντολή «$title» καταχωρήθηκε αυτόματα στα έξοδα!"
+                    )
                 } else if (id == 0L) {
-                    vm.showSnackbar("Η πάγια εντολή «$title» αποθηκεύτηκε ($schedSummary).")
+                    vm.showSnackbar(
+                        if (isEn) "Standing order \"$title\" saved ($schedSummary)."
+                        else "Η πάγια εντολή «$title» αποθηκεύτηκε ($schedSummary)."
+                    )
                 } else {
-                    vm.showSnackbar("Η πάγια εντολή «$title» ενημερώθηκε επιτυχώς!")
+                    vm.showSnackbar(
+                        if (isEn) "Standing order \"$title\" updated successfully!"
+                        else "Η πάγια εντολή «$title» ενημερώθηκε επιτυχώς!"
+                    )
                 }
             } finally {
                 vm.trackSyncEnd()
@@ -923,7 +1021,10 @@ internal class OikoNomosRecurringGoalsDelegate(
                     summaryEn = "Deleted standing order: ${recurring.title}",
                     amount = recurring.amount
                 )
-                vm.showSnackbar("Η υπενθύμιση «${recurring.title}» διαγράφηκε")
+                vm.showSnackbar(
+                    if (vm._appLanguage.value == "EN") "Reminder \"${recurring.title}\" deleted"
+                    else "Η υπενθύμιση «${recurring.title}» διαγράφηκε"
+                )
             } finally {
                 vm.trackSyncEnd()
             }
@@ -969,8 +1070,16 @@ internal class OikoNomosRecurringGoalsDelegate(
             )
             if (householdId.isNotBlank()) vm.firestoreSyncRepo.syncRecurringExpense(householdId, fbRecurring)
             else if (user != null) vm.firestoreSyncRepo.syncUserRecurringExpense(user.uid, fbRecurring)
-            val status = if (updated.isActive) "ενεργοποιήθηκε" else "απενεργοποιήθηκε"
-            vm.showSnackbar("Η υπενθύμιση «${recurring.title}» $status")
+            val isEn = vm._appLanguage.value == "EN"
+            val status = if (isEn) {
+                if (updated.isActive) "enabled" else "disabled"
+            } else {
+                if (updated.isActive) "ενεργοποιήθηκε" else "απενεργοποιήθηκε"
+            }
+            vm.showSnackbar(
+                if (isEn) "Reminder \"${recurring.title}\" $status"
+                else "Η υπενθύμιση «${recurring.title}» $status"
+            )
         }
     }
 
@@ -998,7 +1107,14 @@ internal class OikoNomosRecurringGoalsDelegate(
                     splitType = recurring.splitType,
                     memberIdsCsv = recurring.memberIdsCsv,
                     memberNamesDisplay = recurring.memberNamesDisplay,
-                    note = recurring.note.ifBlank { "Εκτέλεση πάγιας εντολής (${RecurringScheduleHelper.scheduleSummary(recurring, Localization.Language.GREEK)})" },
+                    note = recurring.note.ifBlank {
+                        val noteLang = Localization.Language.fromCode(vm._appLanguage.value)
+                        if (noteLang == Localization.Language.ENGLISH) {
+                            "Standing order executed (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
+                        } else {
+                            "Εκτέλεση πάγιας εντολής (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
+                        }
+                    },
                     payerMemberId = recurring.payerMemberId,
                     payerMemberName = recurring.payerMemberName,
                     payerMemberIdsCsv = recurring.payerMemberIdsCsv,
@@ -1061,7 +1177,11 @@ internal class OikoNomosRecurringGoalsDelegate(
                     amount = recurring.amount
                 )
                 val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
-                vm.showSnackbar("Εκτελέστηκε η πάγια: «${recurring.title}» (${String.format(Locale.US, "%.2f", recurring.amount)}$curSymbol)")
+                val isEn = vm._appLanguage.value == "EN"
+                vm.showSnackbar(
+                    if (isEn) "Executed standing order: \"${recurring.title}\" (${String.format(Locale.US, "%.2f", recurring.amount)}$curSymbol)"
+                    else "Εκτελέστηκε η πάγια: «${recurring.title}» (${String.format(Locale.US, "%.2f", recurring.amount)}$curSymbol)"
+                )
             } finally {
                 vm.trackSyncEnd()
             }
@@ -1089,9 +1209,17 @@ internal class OikoNomosRecurringGoalsDelegate(
                         vm._allExpenses.value = (genuinelyNew + vm._allExpenses.value).sortedWith(
                             compareByDescending<Expense> { it.timestamp }.thenByDescending { it.id }
                         )
-                        val names = genuinelyNew.take(2).joinToString(", ") { "«${it.title}»" }
-                        val suffix = if (genuinelyNew.size > 2) " και άλλες ${genuinelyNew.size - 2}" else ""
-                        vm.showSnackbar("Αυτόματη καταχώρηση: $names$suffix στα έξοδα!")
+                        val isEn = vm._appLanguage.value == "EN"
+                        val names = genuinelyNew.take(2).joinToString(", ") {
+                            if (isEn) "\"${it.title}\"" else "«${it.title}»"
+                        }
+                        val suffix = if (genuinelyNew.size > 2) {
+                            if (isEn) " and ${genuinelyNew.size - 2} more" else " και άλλες ${genuinelyNew.size - 2}"
+                        } else ""
+                        vm.showSnackbar(
+                            if (isEn) "Auto-logged to expenses: $names$suffix!"
+                            else "Αυτόματη καταχώρηση: $names$suffix στα έξοδα!"
+                        )
                     }
                 }
             } catch (e: Exception) {

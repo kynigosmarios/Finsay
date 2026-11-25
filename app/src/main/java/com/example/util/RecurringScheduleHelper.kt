@@ -169,8 +169,9 @@ object RecurringScheduleHelper {
     /**
      * Strict schedule check for in-app reminder banners:
      * Returns true ONLY on the exact scheduled day (accounting for frequency & anchorMonth)
-     * AND once current local time reaches or passes reminderHour:reminderMinute on that day,
-     * provided the reminder has not already been logged in the current period.
+     * AND within a tight 5-minute window starting at reminderHour:reminderMinute on that day,
+     * provided the reminder has not already been logged or dismissed in the current period.
+     * This ensures logging out/in or reinstalling later in the day never re-triggers old reminders.
      */
     fun isReminderDueAtExactTime(
         recurring: RecurringExpense,
@@ -181,8 +182,35 @@ object RecurringScheduleHelper {
         if (recurring.lastGeneratedMonth == currentKey) return false
 
         val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+        if (!isExactScheduledDay(recurring, nowMillis, cal)) return false
+
+        val currentMinutesOfDay = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val targetMinutesOfDay = recurring.reminderHour.coerceIn(0, 23) * 60 + recurring.reminderMinute.coerceIn(0, 59)
+        return currentMinutesOfDay in targetMinutesOfDay..(targetMinutesOfDay + 5)
+    }
+
+    /**
+     * Returns true if today is the exact scheduled day for this reminder and the configured
+     * reminderHour:reminderMinute has already passed (strictly greater than target minute).
+     */
+    fun isReminderTimeAlreadyPassedToday(
+        recurring: RecurringExpense,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+        if (!isExactScheduledDay(recurring, nowMillis, cal)) return false
+        val currentMinutesOfDay = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        val targetMinutesOfDay = recurring.reminderHour.coerceIn(0, 23) * 60 + recurring.reminderMinute.coerceIn(0, 59)
+        return currentMinutesOfDay > targetMinutesOfDay
+    }
+
+    private fun isExactScheduledDay(
+        recurring: RecurringExpense,
+        nowMillis: Long,
+        cal: Calendar
+    ): Boolean {
         val freq = normalizeFrequency(recurring.frequency)
-        val isExactDayMatch = when (freq) {
+        return when (freq) {
             FREQ_WEEKLY -> {
                 val targetIso = recurring.dayOfMonth.coerceIn(1, 7)
                 val currentIso = calendarDowToIso(cal.get(Calendar.DAY_OF_WEEK))
@@ -219,11 +247,6 @@ object RecurringScheduleHelper {
                 cal.get(Calendar.DAY_OF_MONTH) == effectiveDay
             }
         }
-        if (!isExactDayMatch) return false
-
-        val currentMinutesOfDay = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-        val targetMinutesOfDay = recurring.reminderHour.coerceIn(0, 23) * 60 + recurring.reminderMinute.coerceIn(0, 59)
-        return currentMinutesOfDay >= targetMinutesOfDay
     }
 
     fun calculateTargetTimestampForPeriod(recurring: RecurringExpense, nowMillis: Long = System.currentTimeMillis()): Long {

@@ -650,5 +650,47 @@ test("Sensitive profile PII lives exclusively in owner-only /users/{uid}/private
   );
 });
 
+test("Legal consent acceptance proof (acceptedLegalVersion & acceptedLegalAt) is strictly owner-only in /users/{uid}/private/profile", async () => {
+  await seedSharedHousehold();
+  const creatorDb = testEnv.authenticatedContext(CREATOR_UID).firestore();
+  const editorDb = testEnv.authenticatedContext(EDITOR_UID).firestore();
+  const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore();
+
+  // Owner can save legal acceptance version and timestamp in private/profile
+  await assertSucceeds(
+    creatorDb.collection("users").doc(CREATOR_UID).collection("private").doc("profile").set({
+      acceptedLegalVersion: "2026-11",
+      acceptedLegalAt: 1795534200000,
+    }, { merge: true })
+  );
+
+  // Invalid types / negative timestamp must fail
+  await assertFails(
+    creatorDb.collection("users").doc(CREATOR_UID).collection("private").doc("profile").set({
+      acceptedLegalVersion: "2026-11",
+      acceptedLegalAt: -5,
+    }, { merge: true })
+  );
+
+  // Writing legal consent fields onto public /users/{uid} must fail
+  await assertFails(
+    creatorDb.collection("users").doc(CREATOR_UID).set({
+      acceptedLegalVersion: "2026-11",
+      acceptedLegalAt: 1795534200000,
+    }, { merge: true })
+  );
+
+  // Other users cannot read or write owner's private legal consent record
+  await assertFails(
+    editorDb.collection("users").doc(CREATOR_UID).collection("private").doc("profile").get()
+  );
+  await assertFails(
+    outsiderDb.collection("users").doc(CREATOR_UID).collection("private").doc("profile").set({
+      acceptedLegalVersion: "tampered",
+    }, { merge: true })
+  );
+});
+
+
 
 

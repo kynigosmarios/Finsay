@@ -49,3 +49,10 @@
 # ML Kit OCR & Barcode Scanning
 -keep class com.google.mlkit.** { *; }
 -keep class com.google.android.gms.vision.** { *; }
+
+# Strip verbose, debug, and info logs in release builds
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}

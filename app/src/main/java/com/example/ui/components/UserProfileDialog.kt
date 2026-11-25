@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -41,18 +42,22 @@ import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.LocationCity
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,6 +73,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,18 +82,30 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import com.example.R
 import com.example.data.model.UserProfile
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.ImageUtils
 import com.example.util.Localization
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.Companion.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseUser
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 @Composable
@@ -105,12 +123,24 @@ fun UserProfileDialog(
     onShowPremiumPaywall: () -> Unit,
     onSignOut: () -> Unit,
     onDeleteAccount: () -> Unit = {},
+    onDeleteAccountWithPassword: ((password: String, onSuccess: () -> Unit, onError: (String) -> Unit) -> Unit)? = null,
+    onDeleteAccountWithGoogleToken: ((idToken: String, onSuccess: () -> Unit, onError: (String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val lang = Localization.Language.fromCode(appLanguage)
+    val isEnglish = lang == Localization.Language.ENGLISH
     var isEditingProfile by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var showDeleteReauthDialog by remember { mutableStateOf(false) }
+    var deletePasswordInput by remember { mutableStateOf("") }
+    var deletePasswordVisible by remember { mutableStateOf(false) }
+    var deleteReauthLoading by remember { mutableStateOf(false) }
+    var deleteReauthError by remember { mutableStateOf<String?>(null) }
+    val hasPasswordProvider = remember(currentUser) {
+        currentUser?.providerData?.any { it.providerId == EmailAuthProvider.PROVIDER_ID } == true
+    }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -590,8 +620,8 @@ fun UserProfileDialog(
                                                     "$dStr/$mStr/$birthYearText"
                                                 } else ""
                                             },
-                                            label = { Text("Ημέρα", fontSize = 11.5.sp) },
-                                            placeholder = { Text("ΗΗ", fontSize = 12.sp) },
+                                            label = { Text(if (isEnglish) "Day" else "Ημέρα", fontSize = 11.5.sp) },
+                                            placeholder = { Text(if (isEnglish) "DD" else "ΗΗ", fontSize = 12.sp) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             shape = RoundedCornerShape(12.dp),
@@ -614,8 +644,8 @@ fun UserProfileDialog(
                                                     "$dStr/$mStr/$birthYearText"
                                                 } else ""
                                             },
-                                            label = { Text("Μήνας", fontSize = 11.5.sp) },
-                                            placeholder = { Text("ΜΜ", fontSize = 12.sp) },
+                                            label = { Text(if (isEnglish) "Month" else "Μήνας", fontSize = 11.5.sp) },
+                                            placeholder = { Text(if (isEnglish) "MM" else "ΜΜ", fontSize = 12.sp) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             shape = RoundedCornerShape(12.dp),
@@ -638,8 +668,8 @@ fun UserProfileDialog(
                                                     "$dStr/$mStr/$birthYearText"
                                                 } else ""
                                             },
-                                            label = { Text("Έτος", fontSize = 11.5.sp) },
-                                            placeholder = { Text("ΕΕΕΕ", fontSize = 12.sp) },
+                                            label = { Text(if (isEnglish) "Year" else "Έτος", fontSize = 11.5.sp) },
+                                            placeholder = { Text(if (isEnglish) "YYYY" else "ΕΕΕΕ", fontSize = 12.sp) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             shape = RoundedCornerShape(12.dp),
@@ -1104,7 +1134,7 @@ fun UserProfileDialog(
                 }
     }
 
-    // Delete Account Confirmation Dialog
+    // Step 1: Delete Account Confirmation Dialog
     if (showDeleteConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
@@ -1126,13 +1156,24 @@ fun UserProfileDialog(
                 Button(
                     onClick = {
                         showDeleteConfirmDialog = false
-                        onDismiss()
-                        onDeleteAccount()
+                        deletePasswordInput = ""
+                        deletePasswordVisible = false
+                        deleteReauthError = null
+                        deleteReauthLoading = false
+                        if ((hasPasswordProvider && onDeleteAccountWithPassword != null) ||
+                            (!hasPasswordProvider && onDeleteAccountWithGoogleToken != null)
+                        ) {
+                            showDeleteReauthDialog = true
+                        } else {
+                            onDismiss()
+                            onDeleteAccount()
+                        }
                     },
+                    modifier = Modifier.testTag("delete_account_step1_confirm_btn"),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text(
-                        text = Localization.deleteAccountTitle(lang),
+                        text = if (isEnglish) "Continue" else "Συνέχεια",
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -1144,6 +1185,260 @@ fun UserProfileDialog(
                 }
             }
         )
+    }
+
+    // Step 2: Security Re-Authentication Dialog before permanent deletion
+    if (showDeleteReauthDialog) {
+        Dialog(
+            onDismissRequest = {
+                if (!deleteReauthLoading) {
+                    showDeleteReauthDialog = false
+                    deletePasswordInput = ""
+                    deleteReauthError = null
+                }
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Card(
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 20.dp)
+                    .widthIn(max = 440.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(22.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            modifier = Modifier.size(42.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (hasPasswordProvider) {
+                                if (isEnglish) "Confirm Your Password" else "Επιβεβαίωση Κωδικού"
+                            } else {
+                                if (isEnglish) "Verify Your Account" else "Επαλήθευση Λογαριασμού"
+                            },
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = if (hasPasswordProvider) {
+                            if (isEnglish) {
+                                "For your security, please enter your account password to permanently delete your account and all associated data."
+                            } else {
+                                "Για λόγους ασφαλείας, πληκτρολογήστε τον κωδικό πρόσβασής σας για να ολοκληρωθεί η οριστική διαγραφή του λογαριασμού και των δεδομένων σας."
+                            }
+                        } else {
+                            if (isEnglish) {
+                                "For your security, please confirm your Google account identity before your account and all data are permanently deleted."
+                            } else {
+                                "Για λόγους ασφαλείας, επιβεβαιώστε την ταυτότητα του λογαριασμού σας Google πριν διαγραφούν οριστικά ο λογαριασμός και τα δεδομένα σας."
+                            }
+                        },
+                        fontSize = 13.5.sp,
+                        lineHeight = 19.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    if (hasPasswordProvider) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedTextField(
+                            value = deletePasswordInput,
+                            onValueChange = {
+                                deletePasswordInput = it
+                                deleteReauthError = null
+                            },
+                            enabled = !deleteReauthLoading,
+                            label = { Text(if (isEnglish) "Account Password" else "Κωδικός Πρόσβασης") },
+                            singleLine = true,
+                            visualTransformation = if (deletePasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { deletePasswordVisible = !deletePasswordVisible },
+                                    enabled = !deleteReauthLoading
+                                ) {
+                                    Icon(
+                                        imageVector = if (deletePasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (isEnglish) "Toggle password visibility" else "Εμφάνιση ή απόκρυψη κωδικού"
+                                    )
+                                }
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.error,
+                                focusedLabelColor = MaterialTheme.colorScheme.error,
+                                cursorColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("delete_account_password_input")
+                        )
+                    }
+
+                    if (!deleteReauthError.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = deleteReauthError.orEmpty(),
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                showDeleteReauthDialog = false
+                                deletePasswordInput = ""
+                                deleteReauthError = null
+                            },
+                            enabled = !deleteReauthLoading
+                        ) {
+                            Text(text = Localization.cancel(lang))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (hasPasswordProvider && onDeleteAccountWithPassword != null) {
+                                    if (deletePasswordInput.isBlank()) {
+                                        deleteReauthError = if (isEnglish) {
+                                            "Please enter your password."
+                                        } else {
+                                            "Παρακαλούμε πληκτρολογήστε τον κωδικό σας."
+                                        }
+                                        return@Button
+                                    }
+                                    deleteReauthLoading = true
+                                    deleteReauthError = null
+                                    onDeleteAccountWithPassword(
+                                        deletePasswordInput,
+                                        {
+                                            deleteReauthLoading = false
+                                            showDeleteReauthDialog = false
+                                            deletePasswordInput = ""
+                                            onDismiss()
+                                        },
+                                        { errMsg ->
+                                            deleteReauthLoading = false
+                                            deleteReauthError = errMsg
+                                        }
+                                    )
+                                } else if (onDeleteAccountWithGoogleToken != null) {
+                                    val serverClientId = try {
+                                        context.getString(R.string.default_web_client_id)
+                                    } catch (_: Exception) {
+                                        deleteReauthError = if (isEnglish) {
+                                            "Google verification configuration missing."
+                                        } else {
+                                            "Λείπει η ρύθμιση επαλήθευσης Google."
+                                        }
+                                        return@Button
+                                    }
+                                    deleteReauthLoading = true
+                                    deleteReauthError = null
+                                    val credentialManager = CredentialManager.create(context)
+                                    val signInOption = GetSignInWithGoogleOption.Builder(serverClientId = serverClientId).build()
+                                    val request = GetCredentialRequest.Builder().addCredentialOption(signInOption).build()
+                                    coroutineScope.launch {
+                                        try {
+                                            val activity = context as? Activity
+                                                ?: throw IllegalStateException("Activity context unavailable")
+                                            val result = credentialManager.getCredential(activity, request)
+                                            val cred = result.credential
+                                            if (cred is CustomCredential && cred.type == TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                                                val idToken = GoogleIdTokenCredential.createFrom(cred.data).idToken
+                                                onDeleteAccountWithGoogleToken(
+                                                    idToken,
+                                                    {
+                                                        deleteReauthLoading = false
+                                                        showDeleteReauthDialog = false
+                                                        onDismiss()
+                                                    },
+                                                    { errMsg ->
+                                                        deleteReauthLoading = false
+                                                        deleteReauthError = errMsg
+                                                    }
+                                                )
+                                            } else {
+                                                deleteReauthLoading = false
+                                                deleteReauthError = if (isEnglish) "Invalid Google credential." else "Μη έγκυρο διαπιστευτήριο Google."
+                                            }
+                                        } catch (_: GetCredentialCancellationException) {
+                                            deleteReauthLoading = false
+                                        } catch (e: Exception) {
+                                            deleteReauthLoading = false
+                                            deleteReauthError = if (isEnglish) {
+                                                "Google verification failed: ${e.localizedMessage ?: "please try again"}"
+                                            } else {
+                                                "Η επαλήθευση Google απέτυχε: ${e.localizedMessage ?: "δοκιμάστε ξανά"}"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            enabled = !deleteReauthLoading,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.testTag("delete_account_password_confirm_btn")
+                        ) {
+                            if (deleteReauthLoading) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            } else {
+                                Text(
+                                    text = if (hasPasswordProvider) {
+                                        if (isEnglish) "Delete Forever" else "Οριστική Διαγραφή"
+                                    } else {
+                                        if (isEnglish) "Verify & Delete" else "Επαλήθευση & Διαγραφή"
+                                    },
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // Date Picker Dialog for Profile Edit (with full backspace/delete support and zero stickiness)
@@ -1210,8 +1505,8 @@ fun UserProfileDialog(
                             onValueChange = { input ->
                                 dialogDayText = input.filter { it.isDigit() }.take(2)
                             },
-                            label = { Text("Ημέρα") },
-                            placeholder = { Text("ΗΗ") },
+                            label = { Text(if (isEnglish) "Day" else "Ημέρα") },
+                            placeholder = { Text(if (isEnglish) "DD" else "ΗΗ") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -1223,8 +1518,8 @@ fun UserProfileDialog(
                             onValueChange = { input ->
                                 dialogMonthText = input.filter { it.isDigit() }.take(2)
                             },
-                            label = { Text("Μήνας") },
-                            placeholder = { Text("ΜΜ") },
+                            label = { Text(if (isEnglish) "Month" else "Μήνας") },
+                            placeholder = { Text(if (isEnglish) "MM" else "ΜΜ") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -1236,8 +1531,8 @@ fun UserProfileDialog(
                             onValueChange = { input ->
                                 dialogYearText = input.filter { it.isDigit() }.take(4)
                             },
-                            label = { Text("Έτος") },
-                            placeholder = { Text("ΕΕΕΕ") },
+                            label = { Text(if (isEnglish) "Year" else "Έτος") },
+                            placeholder = { Text(if (isEnglish) "YYYY" else "ΕΕΕΕ") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),

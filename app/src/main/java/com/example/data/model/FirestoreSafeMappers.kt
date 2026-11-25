@@ -121,6 +121,8 @@ fun DocumentSnapshot.safeGet(field: String): Any? = try {
 
 fun DocumentSnapshot.safeString(field: String): String? = coerceSafeString(safeGet(field))
 
+fun DocumentSnapshot.safeLong(field: String): Long? = coerceSafeLong(safeGet(field))
+
 fun DocumentSnapshot.safeBoolean(field: String): Boolean? = coerceSafeBoolean(safeGet(field))
 
 fun DocumentSnapshot.safeStringList(field: String): List<String>? = coerceSafeStringList(safeGet(field))
@@ -287,6 +289,7 @@ fun mapCategoryFromFields(
         sortOrder = sort,
         fontColorHex = fontColor,
         isDeleted = coerceSafeBoolean(getField("isDeleted")) ?: existing?.isDeleted ?: false,
+        categoryType = coerceSafeString(getField("categoryType"))?.takeIf { it.isNotBlank() } ?: existing?.categoryType ?: "EXPENSE",
         createdAt = coerceSafeTimestamp(getField("createdAt")) ?: existing?.createdAt
     )
 } catch (_: Throwable) {
@@ -321,7 +324,7 @@ fun mapHouseholdFromFields(
 
     (existing ?: Household()).copy(
         id = resolvedId,
-        name = coerceSafeString(getField("name"))?.ifBlank { null } ?: existing?.name ?: "Το Εξοδολόγιό μου",
+        name = coerceSafeString(getField("name"))?.ifBlank { null } ?: existing?.name ?: "My Household Book",
         ownerId = coerceSafeString(getField("ownerId")) ?: existing?.ownerId ?: "",
         inviteCode = coerceSafeString(getField("inviteCode")) ?: existing?.inviteCode ?: "",
         memberUids = members,
@@ -377,7 +380,7 @@ fun mapUserProfileFromFields(
         isPremium = isPrem,
         photoUrl = coerceSafeString(getField("photoUrl")) ?: existing?.photoUrl ?: "",
         authProvider = coerceSafeString(getField("authProvider")) ?: existing?.authProvider ?: "password",
-        appLanguage = coerceSafeString(getField("appLanguage")) ?: existing?.appLanguage ?: "EL",
+        appLanguage = coerceSafeString(getField("appLanguage")) ?: existing?.appLanguage ?: "EN",
         themeMode = coerceSafeString(getField("themeMode")) ?: existing?.themeMode ?: "SYSTEM",
         reminderEnabled = coerceSafeBoolean(getField("reminderEnabled")) ?: existing?.reminderEnabled ?: false,
         reminderHour = remHour,

@@ -155,7 +155,7 @@ internal class FirestoreHouseholdDelegate(
 
         val household = Household(
             id = householdId,
-            name = exodologioName.ifBlank { "Το Εξοδολόγιό μου" },
+            name = exodologioName.ifBlank { "My Household Book" },
             ownerId = ownerUid,
             inviteCode = inviteCode,
             memberUids = listOf(ownerUid),
@@ -192,7 +192,7 @@ internal class FirestoreHouseholdDelegate(
     suspend fun ensureHouseholdExists(
         householdId: String,
         ownerUid: String,
-        householdName: String = "Το Εξοδολόγιό μου"
+        householdName: String = "My Household Book"
     ): Household {
         if (householdId.isBlank() || ownerUid.isBlank()) {
             return Household(id = householdId, name = householdName, ownerId = ownerUid, memberUids = listOf(ownerUid))
@@ -213,7 +213,7 @@ internal class FirestoreHouseholdDelegate(
 
         val newHousehold = Household(
             id = householdId,
-            name = householdName.ifBlank { "Το Εξοδολόγιό μου" },
+            name = householdName.ifBlank { "My Household Book" },
             ownerId = ownerUid,
             inviteCode = "OIKO-" + Random.nextInt(1000, 9999).toString(),
             memberUids = listOf(ownerUid),
@@ -686,6 +686,16 @@ internal class FirestoreHouseholdDelegate(
                         val ownerId = hDoc.getString("ownerId") ?: ""
                         val members = (hDoc.get("memberUids") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
                         if (ownerId == userId && (members.isEmpty() || members == listOf(userId))) {
+                            val hSubs = listOf("expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses", "activities")
+                            for (sub in hSubs) {
+                                try {
+                                    val docs = hRef.collection(sub).get().await()
+                                    for (d in docs.documents) d.reference.delete().await()
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
+                                    Log.w(TAG, "Error cleaning household $hId subcollection $sub: ${e.message}")
+                                }
+                            }
                             hRef.delete().await()
                         } else {
                             hRef.update("memberUids", FieldValue.arrayRemove(userId)).await()

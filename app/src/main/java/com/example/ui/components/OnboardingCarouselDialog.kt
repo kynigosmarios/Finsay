@@ -81,6 +81,8 @@ fun OnboardingCarouselDialog(
     onAddCategory: (() -> Unit)? = null,
     onSeedCategories: (() -> Unit)? = null,
     appLanguage: String = "EN",
+    isPro: Boolean = false,
+    onOpenProPaywall: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isEnglish = appLanguage.equals("EN", ignoreCase = true)
@@ -315,7 +317,10 @@ fun OnboardingCarouselDialog(
                             TabGuideAccordionCard(
                                 section = section,
                                 isExpanded = expandedTabs[section.id] == true,
-                                onToggle = { expandedTabs[section.id] = !(expandedTabs[section.id] == true) }
+                                onToggle = { expandedTabs[section.id] = !(expandedTabs[section.id] == true) },
+                                isEnglish = isEnglish,
+                                showProCta = section.id == "finsay_pro" && !isPro && onOpenProPaywall != null,
+                                onOpenProPaywall = onOpenProPaywall
                             )
                         }
                     }
@@ -336,7 +341,10 @@ fun OnboardingCarouselDialog(
                             SmartFeatureGuideCard(
                                 feature = feature,
                                 isExpanded = expandedFeatures[feature.id] == true,
-                                onToggle = { expandedFeatures[feature.id] = !(expandedFeatures[feature.id] == true) }
+                                onToggle = { expandedFeatures[feature.id] = !(expandedFeatures[feature.id] == true) },
+                                isEnglish = isEnglish,
+                                showProCta = feature.id == "finsay_pro" && !isPro && onOpenProPaywall != null,
+                                onOpenProPaywall = onOpenProPaywall
                             )
                         }
                     }
@@ -656,7 +664,10 @@ private fun QuickStartStepCard(
 private fun TabGuideAccordionCard(
     section: TabGuideSection,
     isExpanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    isEnglish: Boolean = false,
+    showProCta: Boolean = false,
+    onOpenProPaywall: (() -> Unit)? = null
 ) {
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -765,6 +776,26 @@ private fun TabGuideAccordionCard(
                             )
                         }
                     }
+                    if (showProCta && onOpenProPaywall != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Button(
+                            onClick = onOpenProPaywall,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = section.accentColor),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .testTag("guide_tab_upgrade_pro_button")
+                        ) {
+                            Text(
+                                text = if (isEnglish) "View Finsay Pro Plans" else "Δείτε τα πακέτα Finsay Pro",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -775,7 +806,10 @@ private fun TabGuideAccordionCard(
 private fun SmartFeatureGuideCard(
     feature: SmartFeatureItem,
     isExpanded: Boolean,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
+    isEnglish: Boolean = false,
+    showProCta: Boolean = false,
+    onOpenProPaywall: (() -> Unit)? = null
 ) {
     val chevronRotation by animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
@@ -906,6 +940,27 @@ private fun SmartFeatureGuideCard(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
+                        }
+                    }
+
+                    if (showProCta && onOpenProPaywall != null) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Button(
+                            onClick = onOpenProPaywall,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = feature.accentColor),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .testTag("guide_feature_upgrade_pro_button")
+                        ) {
+                            Text(
+                                text = if (isEnglish) "View Finsay Pro Plans" else "Δείτε τα πακέτα Finsay Pro",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
                         }
                     }
                 }

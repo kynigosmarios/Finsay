@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.data.model.FirebaseHouseholdActivity
 import com.example.data.model.UserProfile
 import com.example.data.model.safeBoolean
+import com.example.data.model.safeLong
 import com.example.data.model.safeString
 import com.example.data.model.toSafeUserProfile
 import com.google.firebase.Timestamp
@@ -37,7 +38,9 @@ internal class FirestoreUserProfileDelegate(
         val birthDate: String = "",
         val phoneNumber: String = "",
         val occupation: String = "",
-        val city: String = ""
+        val city: String = "",
+        val acceptedLegalVersion: String = "",
+        val acceptedLegalAt: Long = 0L
     )
 
     private fun privateProfileRef(uid: String) =
@@ -47,14 +50,24 @@ internal class FirestoreUserProfileDelegate(
         birthDate: String,
         phoneNumber: String,
         occupation: String,
-        city: String
-    ): Map<String, Any> = mapOf(
-        "birthDate" to birthDate.trim().take(40),
-        "phoneNumber" to phoneNumber.trim().take(40),
-        "occupation" to occupation.trim().take(120),
-        "city" to city.trim().take(120),
-        "updatedAt" to Timestamp.now()
-    )
+        city: String,
+        acceptedLegalVersion: String = "",
+        acceptedLegalAt: Long = 0L
+    ): Map<String, Any> {
+        val map = mutableMapOf<String, Any>(
+            "birthDate" to birthDate.trim().take(40),
+            "phoneNumber" to phoneNumber.trim().take(40),
+            "occupation" to occupation.trim().take(120),
+            "city" to city.trim().take(120),
+            "updatedAt" to Timestamp.now()
+        )
+        val cleanLegalVersion = acceptedLegalVersion.trim().take(40)
+        if (cleanLegalVersion.isNotBlank()) {
+            map["acceptedLegalVersion"] = cleanLegalVersion
+            map["acceptedLegalAt"] = acceptedLegalAt.coerceAtLeast(0L)
+        }
+        return map
+    }
 
     private fun UserProfile.toPublicFirestoreMap(includePremium: Boolean): Map<String, Any> {
         val map = mutableMapOf<String, Any>(
@@ -102,6 +115,8 @@ internal class FirestoreUserProfileDelegate(
         val privPhone = privateDoc?.safeString("phoneNumber").orEmpty()
         val privOcc = privateDoc?.safeString("occupation").orEmpty()
         val privCity = privateDoc?.safeString("city").orEmpty()
+        val privLegalVersion = privateDoc?.safeString("acceptedLegalVersion").orEmpty()
+        val privLegalAt = privateDoc?.safeLong("acceptedLegalAt") ?: 0L
 
         val hasLegacyFields = publicDoc.contains("birthDate") ||
             publicDoc.contains("phoneNumber") ||
@@ -141,7 +156,9 @@ internal class FirestoreUserProfileDelegate(
             birthDate = mergedBirth,
             phoneNumber = mergedPhone,
             occupation = mergedOcc,
-            city = mergedCity
+            city = mergedCity,
+            acceptedLegalVersion = privLegalVersion,
+            acceptedLegalAt = privLegalAt
         )
     }
 
@@ -156,8 +173,10 @@ internal class FirestoreUserProfileDelegate(
         occupation: String = "",
         city: String = "",
         authProvider: String = "",
-        excludedHouseholdIds: Set<String> = emptySet()
+        excludedHouseholdIds: Set<String> = emptySet(),
+        appLanguage: String = "EN"
     ): UserProfile {
+        val requestedLang = appLanguage.ifBlank { "EN" }
         val userRef = db.collection("users").document(uid)
         val snapshot = userRef.get().await()
         val privateSnap = readPrivateProfileOnce(uid)
@@ -173,7 +192,10 @@ internal class FirestoreUserProfileDelegate(
 
             val migratedPrivate = migrateLegacyPrivateFieldsIfPresent(uid, snapshot, privateSnap)
 
-            val profileDisplayName = if (existing.displayName.isNotBlank()) existing.displayName else displayName.ifBlank { "Χρήστης Finsay" }
+            val existingLang = existing.appLanguage.ifBlank { requestedLang }
+            val defaultHouseholdName = if (existingLang.equals("EL", ignoreCase = true)) "Το Εξοδολόγιό μου" else "My Household Book"
+            val defaultDisplayName = if (existingLang.equals("EL", ignoreCase = true)) "Χρήστης Finsay" else "Finsay User"
+            val profileDisplayName = if (existing.displayName.isNotBlank()) existing.displayName else displayName.ifBlank { defaultDisplayName }
             val derivedFirst = if (existing.firstName.isNotBlank()) {
                 existing.firstName
             } else if (firstName.isNotBlank()) {
@@ -221,7 +243,7 @@ internal class FirestoreUserProfileDelegate(
             } else if (allHids.isNotEmpty()) {
                 allHids.first()
             } else {
-                val newHousehold = householdDelegate.createHousehold(uid, "Το Εξοδολόγιό μου")
+                val newHousehold = householdDelegate.createHousehold(uid, defaultHouseholdName)
                 newHousehold.id
             }
 
@@ -245,7 +267,9 @@ internal class FirestoreUserProfileDelegate(
                 householdIds = finalHouseholdIds,
                 authProvider = effectiveAuthProvider,
                 requiresEmailVerification = existing.requiresEmailVerification,
-                emailVerifiedConfirmed = existing.emailVerifiedConfirmed
+                emailVerifiedConfirmed = existing.emailVerifiedConfirmed,
+                acceptedLegalVersion = migratedPrivate.acceptedLegalVersion,
+                acceptedLegalAt = migratedPrivate.acceptedLegalAt
             )
 
             // Write ONLY non-sensitive public fields to /users/{uid}
@@ -265,17 +289,19 @@ internal class FirestoreUserProfileDelegate(
             }
             merged
         } else {
+            val defaultHouseholdName = if (requestedLang.equals("EL", ignoreCase = true)) "Το Εξοδολόγιό μου" else "My Household Book"
+            val defaultDisplayName = if (requestedLang.equals("EL", ignoreCase = true)) "Χρήστης Finsay" else "Finsay User"
             val allDiscovered = discoveredHids.filter { it.isNotBlank() }.distinct()
             val (initialHouseholdId, initialHouseholdIds) = if (allDiscovered.isNotEmpty()) {
                 val withExp = householdDelegate.findHouseholdWithExpenses(allDiscovered) ?: allDiscovered.first()
                 Pair(withExp, allDiscovered)
             } else {
-                val newHousehold = householdDelegate.createHousehold(uid, "Το Εξοδολόγιό μου")
+                val newHousehold = householdDelegate.createHousehold(uid, defaultHouseholdName)
                 Pair(newHousehold.id, listOf(newHousehold.id))
             }
 
             val profileDisplayName = displayName.ifBlank {
-                if (firstName.isNotBlank() || lastName.isNotBlank()) "$firstName $lastName".trim() else "Χρήστης Finsay"
+                if (firstName.isNotBlank() || lastName.isNotBlank()) "$firstName $lastName".trim() else defaultDisplayName
             }
             val derivedFirst = if (firstName.isNotBlank()) firstName else profileDisplayName.split(" ").firstOrNull().orEmpty()
             val derivedLast = if (lastName.isNotBlank()) lastName else {
@@ -287,6 +313,8 @@ internal class FirestoreUserProfileDelegate(
             val privPhone = privateSnap?.safeString("phoneNumber").orEmpty().ifBlank { phoneNumber.trim() }
             val privOcc = privateSnap?.safeString("occupation").orEmpty().ifBlank { occupation.trim() }
             val privCity = privateSnap?.safeString("city").orEmpty().ifBlank { city.trim() }
+            val privLegalVersion = privateSnap?.safeString("acceptedLegalVersion").orEmpty()
+            val privLegalAt = privateSnap?.safeLong("acceptedLegalAt") ?: 0L
 
             val newProfile = UserProfile(
                 uid = uid,
@@ -302,6 +330,9 @@ internal class FirestoreUserProfileDelegate(
                 householdIds = initialHouseholdIds,
                 isPremium = false,
                 authProvider = authProvider.ifBlank { "password" },
+                appLanguage = requestedLang,
+                acceptedLegalVersion = privLegalVersion,
+                acceptedLegalAt = privLegalAt,
                 createdAt = Timestamp.now()
             )
             // Write ONLY non-sensitive public fields to /users/{uid}
@@ -335,7 +366,9 @@ internal class FirestoreUserProfileDelegate(
                     birthDate = priv.safeString("birthDate").orEmpty().ifBlank { base.birthDate },
                     phoneNumber = priv.safeString("phoneNumber").orEmpty().ifBlank { base.phoneNumber },
                     occupation = priv.safeString("occupation").orEmpty().ifBlank { base.occupation },
-                    city = priv.safeString("city").orEmpty().ifBlank { base.city }
+                    city = priv.safeString("city").orEmpty().ifBlank { base.city },
+                    acceptedLegalVersion = priv.safeString("acceptedLegalVersion").orEmpty(),
+                    acceptedLegalAt = priv.safeLong("acceptedLegalAt") ?: 0L
                 )
             } else {
                 base
@@ -349,7 +382,7 @@ internal class FirestoreUserProfileDelegate(
 
     suspend fun savePendingUserProfile(profile: UserProfile) {
         if (profile.uid.isBlank()) return
-        // Never write sensitive personal fields (birthDate, phoneNumber, occupation, city) to root /users/{uid}
+        // Never write sensitive personal fields (birthDate, phoneNumber, occupation, city, legal consent) to root /users/{uid}
         db.collection("users").document(profile.uid)
             .set(profile.toPublicFirestoreMap(includePremium = false), SetOptions.merge())
             .await()
@@ -357,18 +390,33 @@ internal class FirestoreUserProfileDelegate(
         if (profile.birthDate.isNotBlank() ||
             profile.phoneNumber.isNotBlank() ||
             profile.occupation.isNotBlank() ||
-            profile.city.isNotBlank()
+            profile.city.isNotBlank() ||
+            profile.acceptedLegalVersion.isNotBlank()
         ) {
             privateProfileRef(profile.uid).set(
                 buildPrivateDetailsMap(
                     birthDate = profile.birthDate,
                     phoneNumber = profile.phoneNumber,
                     occupation = profile.occupation,
-                    city = profile.city
+                    city = profile.city,
+                    acceptedLegalVersion = profile.acceptedLegalVersion,
+                    acceptedLegalAt = profile.acceptedLegalAt
                 ),
                 SetOptions.merge()
             ).await()
         }
+    }
+
+    suspend fun recordLegalAcceptance(uid: String, version: String, acceptedAt: Long) {
+        if (uid.isBlank() || version.isBlank()) return
+        privateProfileRef(uid).set(
+            mapOf(
+                "acceptedLegalVersion" to version.trim().take(40),
+                "acceptedLegalAt" to acceptedAt.coerceAtLeast(0L),
+                "updatedAt" to Timestamp.now()
+            ),
+            SetOptions.merge()
+        ).await()
     }
 
     suspend fun markEmailVerifiedConfirmed(uid: String) {
@@ -458,7 +506,9 @@ internal class FirestoreUserProfileDelegate(
                         birthDate = snapshot.safeString("birthDate").orEmpty(),
                         phoneNumber = snapshot.safeString("phoneNumber").orEmpty(),
                         occupation = snapshot.safeString("occupation").orEmpty(),
-                        city = snapshot.safeString("city").orEmpty()
+                        city = snapshot.safeString("city").orEmpty(),
+                        acceptedLegalVersion = snapshot.safeString("acceptedLegalVersion").orEmpty(),
+                        acceptedLegalAt = snapshot.safeLong("acceptedLegalAt") ?: 0L
                     )
                 } else {
                     PrivateProfileDetails()
@@ -474,7 +524,9 @@ internal class FirestoreUserProfileDelegate(
                 birthDate = priv.birthDate.ifBlank { pub.birthDate },
                 phoneNumber = priv.phoneNumber.ifBlank { pub.phoneNumber },
                 occupation = priv.occupation.ifBlank { pub.occupation },
-                city = priv.city.ifBlank { pub.city }
+                city = priv.city.ifBlank { pub.city },
+                acceptedLegalVersion = priv.acceptedLegalVersion,
+                acceptedLegalAt = priv.acceptedLegalAt
             )
         }
     }

@@ -159,7 +159,7 @@ internal fun ExpenseCardItem(
                 SwipeToDismissBoxValue.Settled -> false
             }
         },
-        positionalThreshold = { totalDistance -> totalDistance * 0.35f }
+        positionalThreshold = { totalDistance -> totalDistance * 0.62f }
     )
 
     SwipeToDismissBox(

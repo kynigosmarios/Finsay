@@ -11,8 +11,14 @@ import kotlinx.coroutines.flow.asStateFlow
 class BillingManager(
     private val context: Context,
     private val onPurchasePending: () -> Unit = {},
-    private val onSubscriptionActivated: (Boolean) -> Unit
+    private val onActivePurchasesUpdated: (purchases: List<PlayPurchaseEntitlement>, isFreshPurchase: Boolean) -> Unit
 ) : PurchasesUpdatedListener {
+
+    data class PlayPurchaseEntitlement(
+        val purchaseToken: String,
+        val obfuscatedAccountId: String?,
+        val productIds: List<String>
+    )
 
     companion object {
         private const val TAG = "FinsayBilling"
@@ -53,8 +59,8 @@ class BillingManager(
     private var inappQueryDone = false
     private var subsQueryOk = false
     private var inappQueryOk = false
-    private var hasActiveSubs = false
-    private var hasActiveInapp = false
+    private var activeSubsList: List<PlayPurchaseEntitlement> = emptyList()
+    private var activeInappList: List<PlayPurchaseEntitlement> = emptyList()
     private val notifiedPendingTokens = mutableSetOf<String>()
 
     fun startConnection() {
@@ -160,7 +166,11 @@ class BillingManager(
         }
     }
 
-    fun launchPurchaseFlow(activity: Activity, productId: String = SUB_YEARLY): Boolean {
+    fun launchPurchaseFlow(
+        activity: Activity,
+        productId: String = SUB_YEARLY,
+        obfuscatedAccountId: String? = null
+    ): Boolean {
         val client = billingClient ?: return false
         return try {
             if (!client.isReady) {
@@ -176,10 +186,12 @@ class BillingManager(
                 val productDetailsParams = BillingFlowParams.ProductDetailsParams.newBuilder()
                     .setProductDetails(details)
                     .build()
-                val billingFlowParams = BillingFlowParams.newBuilder()
+                val flowBuilder = BillingFlowParams.newBuilder()
                     .setProductDetailsParamsList(listOf(productDetailsParams))
-                    .build()
-                val result = client.launchBillingFlow(activity, billingFlowParams)
+                if (!obfuscatedAccountId.isNullOrBlank()) {
+                    flowBuilder.setObfuscatedAccountId(obfuscatedAccountId)
+                }
+                val result = client.launchBillingFlow(activity, flowBuilder.build())
                 result.responseCode == BillingClient.BillingResponseCode.OK
             } else {
                 val details = if (productId == SUB_MONTHLY) _monthlyProductDetails.value else _yearlyProductDetails.value
@@ -192,10 +204,12 @@ class BillingManager(
                     .setProductDetails(details)
                     .setOfferToken(offerToken)
                     .build()
-                val billingFlowParams = BillingFlowParams.newBuilder()
+                val flowBuilder = BillingFlowParams.newBuilder()
                     .setProductDetailsParamsList(listOf(productDetailsParams))
-                    .build()
-                val result = client.launchBillingFlow(activity, billingFlowParams)
+                if (!obfuscatedAccountId.isNullOrBlank()) {
+                    flowBuilder.setObfuscatedAccountId(obfuscatedAccountId)
+                }
+                val result = client.launchBillingFlow(activity, flowBuilder.build())
                 result.responseCode == BillingClient.BillingResponseCode.OK
             }
         } catch (t: Throwable) {
@@ -236,8 +250,8 @@ class BillingManager(
                 inappQueryDone = false
                 subsQueryOk = false
                 inappQueryOk = false
-                hasActiveSubs = false
-                hasActiveInapp = false
+                activeSubsList = emptyList()
+                activeInappList = emptyList()
             }
 
             // 1. Query Subscriptions
@@ -247,11 +261,11 @@ class BillingManager(
             client.queryPurchasesAsync(subsParams) { billingResult, purchases ->
                 try {
                     val ok = billingResult.responseCode == BillingClient.BillingResponseCode.OK
-                    val active = if (ok) processPurchasesBatch(purchases, isPurchaseUpdate = false) else false
-                    evaluateCombinedQueryResult(isSubs = true, queryOk = ok, hasActive = active)
+                    val active = if (ok) processPurchasesBatch(purchases, isPurchaseUpdate = false) else emptyList()
+                    evaluateCombinedQueryResult(isSubs = true, queryOk = ok, activePurchases = active)
                 } catch (t: Throwable) {
                     Log.w(TAG, "querySubsPurchases callback warning: ${t.message}")
-                    evaluateCombinedQueryResult(isSubs = true, queryOk = false, hasActive = false)
+                    evaluateCombinedQueryResult(isSubs = true, queryOk = false, activePurchases = emptyList())
                 }
             }
 
@@ -262,11 +276,11 @@ class BillingManager(
             client.queryPurchasesAsync(inappParams) { billingResult, purchases ->
                 try {
                     val ok = billingResult.responseCode == BillingClient.BillingResponseCode.OK
-                    val active = if (ok) processPurchasesBatch(purchases, isPurchaseUpdate = false) else false
-                    evaluateCombinedQueryResult(isSubs = false, queryOk = ok, hasActive = active)
+                    val active = if (ok) processPurchasesBatch(purchases, isPurchaseUpdate = false) else emptyList()
+                    evaluateCombinedQueryResult(isSubs = false, queryOk = ok, activePurchases = active)
                 } catch (t: Throwable) {
                     Log.w(TAG, "queryInAppPurchases callback warning: ${t.message}")
-                    evaluateCombinedQueryResult(isSubs = false, queryOk = false, hasActive = false)
+                    evaluateCombinedQueryResult(isSubs = false, queryOk = false, activePurchases = emptyList())
                 }
             }
         } catch (t: Throwable) {
@@ -274,39 +288,50 @@ class BillingManager(
         }
     }
 
-    private fun evaluateCombinedQueryResult(isSubs: Boolean, queryOk: Boolean, hasActive: Boolean) {
-        var resolvedEntitlement: Boolean? = null
+    private fun evaluateCombinedQueryResult(
+        isSubs: Boolean,
+        queryOk: Boolean,
+        activePurchases: List<PlayPurchaseEntitlement>
+    ) {
+        var combinedToEmit: List<PlayPurchaseEntitlement>? = null
         synchronized(purchaseQueryLock) {
             if (isSubs) {
                 subsQueryDone = true
                 subsQueryOk = queryOk
-                hasActiveSubs = hasActive
+                activeSubsList = activePurchases
             } else {
                 inappQueryDone = true
                 inappQueryOk = queryOk
-                hasActiveInapp = hasActive
+                activeInappList = activePurchases
             }
 
-            if (hasActiveSubs || hasActiveInapp) {
-                resolvedEntitlement = true
-            } else if (subsQueryDone && inappQueryDone && subsQueryOk && inappQueryOk) {
-                resolvedEntitlement = false
+            if (subsQueryDone && inappQueryDone && (subsQueryOk || inappQueryOk)) {
+                combinedToEmit = (activeSubsList + activeInappList).distinctBy { it.purchaseToken }
             }
         }
-        resolvedEntitlement?.let { isActive ->
-            Log.d(TAG, "Google Play active entitlement resolved: $isActive")
-            onSubscriptionActivated(isActive)
+        combinedToEmit?.let { list ->
+            Log.d(TAG, "Google Play active purchases resolved: ${list.size}")
+            onActivePurchasesUpdated(list, false)
         }
     }
 
-    private fun processPurchasesBatch(purchases: List<Purchase>?, isPurchaseUpdate: Boolean): Boolean {
-        var hasActive = false
+    private fun processPurchasesBatch(
+        purchases: List<Purchase>?,
+        isPurchaseUpdate: Boolean
+    ): List<PlayPurchaseEntitlement> {
+        val activeList = mutableListOf<PlayPurchaseEntitlement>()
         var notifyPending = false
         try {
             purchases?.forEach { purchase ->
                 when (purchase.purchaseState) {
                     Purchase.PurchaseState.PURCHASED -> {
-                        hasActive = true
+                        activeList.add(
+                            PlayPurchaseEntitlement(
+                                purchaseToken = purchase.purchaseToken,
+                                obfuscatedAccountId = purchase.accountIdentifiers?.obfuscatedAccountId,
+                                productIds = purchase.products.toList()
+                            )
+                        )
                         if (!purchase.isAcknowledged) {
                             acknowledgePurchase(purchase)
                         }
@@ -335,17 +360,20 @@ class BillingManager(
         } catch (t: Throwable) {
             Log.w(TAG, "processPurchasesBatch warning: ${t.message}")
         }
-        return hasActive
+        return activeList
     }
 
     override fun onPurchasesUpdated(billingResult: BillingResult, purchases: List<Purchase>?) {
         try {
             when (billingResult.responseCode) {
                 BillingClient.BillingResponseCode.OK -> {
-                    val hasActive = processPurchasesBatch(purchases, isPurchaseUpdate = true)
-                    if (hasActive) {
+                    val freshPurchases = processPurchasesBatch(purchases, isPurchaseUpdate = true)
+                    if (freshPurchases.isNotEmpty()) {
                         Log.d(TAG, "Purchase completed via Google Play.")
-                        onSubscriptionActivated(true)
+                        val merged = synchronized(purchaseQueryLock) {
+                            (activeSubsList + activeInappList + freshPurchases).distinctBy { it.purchaseToken }
+                        }
+                        onActivePurchasesUpdated(merged, true)
                     }
                 }
                 BillingClient.BillingResponseCode.USER_CANCELED -> {
@@ -371,7 +399,15 @@ class BillingManager(
                 try {
                     if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                         Log.d(TAG, "Purchase acknowledged successfully: ${purchase.orderId}")
-                        onSubscriptionActivated(true)
+                        val entitlement = PlayPurchaseEntitlement(
+                            purchaseToken = purchase.purchaseToken,
+                            obfuscatedAccountId = purchase.accountIdentifiers?.obfuscatedAccountId,
+                            productIds = purchase.products.toList()
+                        )
+                        val merged = synchronized(purchaseQueryLock) {
+                            (activeSubsList + activeInappList + entitlement).distinctBy { it.purchaseToken }
+                        }
+                        onActivePurchasesUpdated(merged, true)
                     } else {
                         Log.w(TAG, "Purchase acknowledge note: ${result.debugMessage}")
                     }

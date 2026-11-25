@@ -139,7 +139,8 @@ class BankNotificationListenerService : NotificationListenerService() {
             )
 
             if (parsed != null) {
-                Log.d(TAG, "Caught bank transaction: ${parsed.bankName} - ${parsed.merchantName} - ${parsed.amount}€")
+                val txKind = if (parsed.isIncome) "INCOME" else "EXPENSE"
+                Log.d(TAG, "Caught bank $txKind notification")
                 BankNotificationHolder.markSignatureHandled(sig, this)
                 val added = BankNotificationHolder.addTransaction(parsed, this)
                 if (added) {

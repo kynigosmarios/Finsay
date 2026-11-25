@@ -267,7 +267,11 @@ fun BankNotificationBanner(
                             }
 
                             Text(
-                                text = if (isGreek) "Εντοπίστηκε Συναλλαγή" else "Transaction Detected",
+                                text = if (currentTx.isIncome) {
+                                    if (isGreek) "Εντοπίστηκε Έσοδο" else "Income Detected"
+                                } else {
+                                    if (isGreek) "Εντοπίστηκε Έξοδο" else "Expense Detected"
+                                },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -348,7 +352,11 @@ fun BankNotificationBanner(
                             ) {
                                 Text(
                                     text = currentTx.merchantName.ifBlank {
-                                        if (isGreek) "Πληρωμή με κάρτα" else "Card payment"
+                                        if (currentTx.isIncome) {
+                                            if (isGreek) "Εισερχόμενη πίστωση" else "Incoming deposit"
+                                        } else {
+                                            if (isGreek) "Πληρωμή με κάρτα" else "Card payment"
+                                        }
                                     },
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
@@ -400,7 +408,7 @@ fun BankNotificationBanner(
                             }
 
                             Text(
-                                text = String.format(Locale.GERMANY, "%.2f %s", currentTx.amount, currencySymbol),
+                                text = "${if (currentTx.isIncome) "+" else ""}${String.format(Locale.GERMANY, "%.2f %s", currentTx.amount, currencySymbol)}",
                                 fontSize = 17.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Emerald700,
@@ -433,7 +441,11 @@ fun BankNotificationBanner(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isGreek) "Καταχώρηση" else "Record",
+                                    text = if (currentTx.isIncome) {
+                                        if (isGreek) "Καταχώρηση Εσόδου" else "Record Income"
+                                    } else {
+                                        if (isGreek) "Καταχώρηση" else "Record"
+                                    },
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,

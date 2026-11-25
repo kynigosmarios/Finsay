@@ -57,11 +57,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.Income
 import com.example.util.Localization
@@ -69,7 +71,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val DEFAULT_INCOME_CATEGORIES = listOf(
+private val DEFAULT_INCOME_CATEGORIES_EL = listOf(
     "Μισθός",
     "Ενοίκιο",
     "Επιχείρηση / Freelance",
@@ -79,11 +81,22 @@ private val DEFAULT_INCOME_CATEGORIES = listOf(
     "Άλλο"
 )
 
+private val DEFAULT_INCOME_CATEGORIES_EN = listOf(
+    "Salary",
+    "Rent",
+    "Business / Freelance",
+    "Subsidy / Allowance",
+    "Bonus / Gift",
+    "Investments",
+    "Other"
+)
+
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ManualIncomeDialog(
     incomeToEdit: Income?,
     members: List<FamilyMember>,
+    incomeCategories: List<ExpenseCategory> = emptyList(),
     appLanguage: String = "EL",
     onDismiss: () -> Unit,
     onSave: (
@@ -98,13 +111,43 @@ fun ManualIncomeDialog(
     ) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
+    val effectiveIncomeCategories = remember(incomeCategories, lang) {
+        if (incomeCategories.isNotEmpty()) {
+            incomeCategories
+        } else {
+            val defaults = if (lang == Localization.Language.ENGLISH) DEFAULT_INCOME_CATEGORIES_EN else DEFAULT_INCOME_CATEGORIES_EL
+            defaults.mapIndexed { idx, name ->
+                ExpenseCategory(
+                    id = -(idx + 1).toLong(),
+                    name = name,
+                    iconKey = when (idx) {
+                        0 -> "work"
+                        1 -> "house"
+                        2 -> "tech"
+                        3 -> "loan"
+                        4 -> "gift"
+                        5 -> "savings"
+                        else -> "other"
+                    },
+                    monthlyBudget = 0.0,
+                    colorHex = 0xFF059669L,
+                    sortOrder = idx,
+                    categoryType = "INCOME"
+                )
+            }
+        }
+    }
 
     var title by remember(incomeToEdit) { mutableStateOf(incomeToEdit?.title ?: "") }
     var amountText by remember(incomeToEdit) {
         mutableStateOf(incomeToEdit?.let { String.format(Locale.US, "%.2f", it.amount) } ?: "")
     }
-    var selectedCategory by remember(incomeToEdit) {
-        mutableStateOf(incomeToEdit?.category ?: "Μισθός")
+    var selectedCategory by remember(incomeToEdit, effectiveIncomeCategories) {
+        mutableStateOf(
+            incomeToEdit?.category?.takeIf { it.isNotBlank() }
+                ?: effectiveIncomeCategories.firstOrNull()?.name
+                ?: "Μισθός"
+        )
     }
     var selectedMemberId by remember(incomeToEdit, members) {
         val initialId = if (incomeToEdit != null) {
@@ -227,12 +270,17 @@ fun ManualIncomeDialog(
                 // Title Input
                 OutlinedTextField(
                     value = title,
-                    onValueChange = {
-                        title = it
+                    onValueChange = { rawInput ->
+                        title = if (title.isEmpty() && rawInput.isNotEmpty() && rawInput[0].isLowerCase()) {
+                            rawInput.replaceFirstChar { ch -> ch.titlecase(Locale.getDefault()) }
+                        } else {
+                            rawInput
+                        }
                         errorMessage = null
                     },
                     label = { Text(Localization.incomeDescLabel(lang)) },
                     placeholder = { Text(Localization.incomeDescPlaceholder(lang)) },
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     singleLine = true,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
@@ -368,16 +416,31 @@ fun ManualIncomeDialog(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    DEFAULT_INCOME_CATEGORIES.forEach { cat ->
-                        val isSelected = cat == selectedCategory
+                    effectiveIncomeCategories.forEach { cat ->
+                        val isSelected = cat.name.equals(selectedCategory, ignoreCase = true)
+                        val chipColor = Color(cat.colorHex)
                         FilterChip(
                             selected = isSelected,
-                            onClick = { selectedCategory = if (isSelected) "" else cat },
-                            label = { Text(Localization.translateCategory(cat, lang), fontSize = 12.sp) },
+                            onClick = { selectedCategory = if (isSelected) "" else cat.name },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = CategoryIconHelper.getIcon(cat.iconKey),
+                                    contentDescription = null,
+                                    tint = if (isSelected) chipColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = Localization.translateCategory(cat.name, lang),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
                             shape = RoundedCornerShape(10.dp),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF059669).copy(alpha = 0.12f),
-                                selectedLabelColor = Color(0xFF059669)
+                                selectedContainerColor = chipColor.copy(alpha = 0.14f),
+                                selectedLabelColor = chipColor
                             )
                         )
                     }

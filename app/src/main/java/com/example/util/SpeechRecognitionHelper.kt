@@ -15,7 +15,8 @@ class SpeechRecognitionHelper(
     private val onListeningStateChanged: (Boolean) -> Unit,
     private val onResult: (String) -> Unit,
     private val onError: (String) -> Unit,
-    private val onRmsChanged: (Float) -> Unit = {}
+    private val onRmsChanged: (Float) -> Unit = {},
+    private val languageProvider: () -> String = { "EN" }
 ) {
     companion object {
         private const val TAG = "SpeechRecognizer"
@@ -104,11 +105,16 @@ class SpeechRecognitionHelper(
         // Always cleanly destroy any previous instance before allocating a new one
         cancelListening()
 
+        val isEnglish = languageProvider().equals("EN", ignoreCase = true)
+
         if (!isRecognitionAvailable()) {
             isStarting = false
             mainHandler.post {
                 onListeningStateChanged(false)
-                onError("Η φωνητική αναγνώριση δεν είναι διαθέσιμη σε αυτή τη συσκευή. Μπορείτε να πληκτρολογήσετε ή να επιλέξετε ένα έτοιμο παράδειγμα!")
+                onError(
+                    if (isEnglish) "Voice recognition is not available on this device. You can type or pick a quick example!"
+                    else "Η φωνητική αναγνώριση δεν είναι διαθέσιμη σε αυτή τη συσκευή. Μπορείτε να πληκτρολογήσετε ή να επιλέξετε ένα έτοιμο παράδειγμα!"
+                )
             }
             return
         }
@@ -145,12 +151,18 @@ class SpeechRecognitionHelper(
 
                 override fun onError(error: Int) {
                     removeWatchdog()
+                    val isEnNow = languageProvider().equals("EN", ignoreCase = true)
                     val message = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH -> "Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά."
-                        SpeechRecognizer.ERROR_NETWORK -> "Σφάλμα σύνδεσης δικτύου κατά τη φωνητική αναγνώριση."
-                        SpeechRecognizer.ERROR_AUDIO -> "Σφάλμα μικροφώνου."
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Δεν ακούστηκε ομιλία."
-                        else -> "Σφάλμα φωνητικής αναγνώρισης ($error)"
+                        SpeechRecognizer.ERROR_NO_MATCH ->
+                            if (isEnNow) "No speech recognized. Please try again." else "Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά."
+                        SpeechRecognizer.ERROR_NETWORK ->
+                            if (isEnNow) "Network error during voice recognition." else "Σφάλμα σύνδεσης δικτύου κατά τη φωνητική αναγνώριση."
+                        SpeechRecognizer.ERROR_AUDIO ->
+                            if (isEnNow) "Microphone audio error." else "Σφάλμα μικροφώνου."
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
+                            if (isEnNow) "No speech heard." else "Δεν ακούστηκε ομιλία."
+                        else ->
+                            if (isEnNow) "Voice recognition error ($error)" else "Σφάλμα φωνητικής αναγνώρισης ($error)"
                     }
                     // Cleanly destroy recognizer on error to avoid leaked audio buffers
                     cancelListening()
@@ -162,6 +174,7 @@ class SpeechRecognitionHelper(
 
                 override fun onResults(results: Bundle?) {
                     removeWatchdog()
+                    val isEnNow = languageProvider().equals("EN", ignoreCase = true)
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = matches?.firstOrNull()?.trim().orEmpty()
                     // Cleanly release recognizer once results are obtained
@@ -171,7 +184,10 @@ class SpeechRecognitionHelper(
                         if (text.isNotBlank()) {
                             onResult(text)
                         } else {
-                            onError("Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά.")
+                            onError(
+                                if (isEnNow) "No speech recognized. Please try again."
+                                else "Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά."
+                            )
                         }
                     }
                 }
@@ -181,14 +197,20 @@ class SpeechRecognitionHelper(
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
 
+            val localeTag = if (isEnglish) "en-US" else "el-GR"
+            val promptText = if (isEnglish) {
+                "Speak your expense in English (e.g. \"15 euros supermarket\")"
+            } else {
+                "Πείτε το έξοδο στα ελληνικά (π.χ. «πέντε σαράντα σούπερ μάρκετ»)"
+            }
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "el-GR")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "el-GR")
-                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "el-GR")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, localeTag)
+                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, localeTag)
                 putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "Πείτε το έξοδο στα ελληνικά (π.χ. «πέντε σαράντα σούπερ μάρκετ»)")
+                putExtra(RecognizerIntent.EXTRA_PROMPT, promptText)
             }
             recognizer.startListening(intent)
         } catch (t: Throwable) {
@@ -198,7 +220,10 @@ class SpeechRecognitionHelper(
             cancelListening()
             mainHandler.post {
                 onListeningStateChanged(false)
-                onError("Η φωνητική αναγνώριση δεν μπόρεσε να ξεκινήσει (${t.localizedMessage ?: "μη διαθέσιμη"}).")
+                onError(
+                    if (isEnglish) "Voice recognition could not start (${t.localizedMessage ?: "unavailable"})."
+                    else "Η φωνητική αναγνώριση δεν μπόρεσε να ξεκινήσει (${t.localizedMessage ?: "μη διαθέσιμη"})."
+                )
             }
         }
     }

@@ -10,9 +10,9 @@ object Localization {
         ENGLISH("en", "English", "🇬🇧");
 
         companion object {
-            fun fromCode(code: String): Language = when (code.lowercase()) {
-                "en", "english" -> ENGLISH
-                else -> GREEK
+            fun fromCode(code: String): Language = when (code.trim().lowercase()) {
+                "el", "gr", "greek" -> GREEK
+                else -> ENGLISH
             }
         }
     }
@@ -314,22 +314,57 @@ object Localization {
     fun inviteCopiedMsg(lang: Language): String = if (lang == Language.ENGLISH) "Invite link copied to clipboard!" else "Ο σύνδεσμος πρόσκλησης αντιγράφηκε!"
 
     fun translateCategory(name: String, lang: Language): String {
-        if (lang != Language.ENGLISH) return name
-        return when (name.trim().lowercase()) {
-            "σουπερ μαρκετ", "σούπερ μάρκετ", "supermarket" -> "Supermarket"
-            "διατροφή", "φαγητό", "food" -> "Food"
-            "λογαριασμοί", "bills" -> "Bills"
-            "ενοίκιο", "rent" -> "Rent"
-            "μετακίνηση", "transport", "βενζίνη" -> "Transportation"
-            "υγεία", "health", "φάρμακα" -> "Health & Care"
-            "διασκέδαση", "entertainment" -> "Entertainment"
-            "παιδιά", "kids" -> "Children"
-            "σπίτι", "home" -> "Home & Maintenance"
-            "ρούχα", "ένδυση", "clothing" -> "Clothing"
-            "εκπαίδευση", "education" -> "Education"
-            "μισθός", "salary" -> "Salary"
-            "άλλο", "λοιπά", "other" -> "Other"
-            else -> name
+        val key = name.trim().lowercase()
+        return if (lang == Language.ENGLISH) {
+            when (key) {
+                "σουπερ μαρκετ", "σούπερ μάρκετ", "supermarket" -> "Supermarket"
+                "φαγητό & καφές", "φαγητο & καφες", "food & coffee" -> "Food & Coffee"
+                "διατροφή", "φαγητό", "food" -> "Food"
+                "λογαριασμοί & σπίτι", "λογαριασμοι & σπιτι", "bills & home" -> "Bills & Home"
+                "λογαριασμοί", "bills" -> "Bills"
+                "ενοίκιο", "ενοικιο", "rent" -> "Rent"
+                "μετακινήσεις & καύσιμα", "μετακινησεις & καυσιμα", "transport & fuel" -> "Transport & Fuel"
+                "μετακίνηση", "transport", "βενζίνη" -> "Transportation"
+                "υγεία & φαρμακείο", "υγεια & φαρμακειο", "health & pharmacy" -> "Health & Pharmacy"
+                "υγεία", "health", "φάρμακα" -> "Health & Care"
+                "διασκέδαση & ψυχαγωγία", "διασκεδαση & ψυχαγωγια", "διασκέδαση", "entertainment" -> "Entertainment"
+                "παιδιά", "kids" -> "Children"
+                "σπίτι", "home" -> "Home & Maintenance"
+                "ρούχα", "ένδυση", "clothing" -> "Clothing"
+                "εκπαίδευση", "education" -> "Education"
+                "μισθός", "μισθος", "salary" -> "Salary"
+                "επιχείρηση / freelance", "επιχειρηση / freelance", "business / freelance" -> "Business / Freelance"
+                "επιδότηση", "επιδοτηση", "subsidy", "subsidy / allowance" -> "Subsidy / Allowance"
+                "bonus / δώρο", "bonus / δωρο", "bonus / gift" -> "Bonus / Gift"
+                "επενδύσεις", "επενδυσεις", "investments" -> "Investments"
+                "άλλο", "αλλο", "λοιπά", "other" -> "Other"
+                else -> name
+            }
+        } else {
+            when (key) {
+                "supermarket" -> "Σούπερ μάρκετ"
+                "food & coffee" -> "Φαγητό & Καφές"
+                "food" -> "Διατροφή"
+                "bills & home" -> "Λογαριασμοί & Σπίτι"
+                "bills" -> "Λογαριασμοί"
+                "rent" -> "Ενοίκιο"
+                "transport & fuel" -> "Μετακινήσεις & Καύσιμα"
+                "transportation", "transport" -> "Μετακίνηση"
+                "health & pharmacy" -> "Υγεία & Φαρμακείο"
+                "health & care", "health" -> "Υγεία"
+                "entertainment" -> "Διασκέδαση & Ψυχαγωγία"
+                "children", "kids" -> "Παιδιά"
+                "home & maintenance", "home" -> "Σπίτι"
+                "clothing" -> "Ρούχα"
+                "education" -> "Εκπαίδευση"
+                "salary" -> "Μισθός"
+                "business / freelance" -> "Επιχείρηση / Freelance"
+                "subsidy", "subsidy / allowance" -> "Επιδότηση"
+                "bonus / gift" -> "Bonus / Δώρο"
+                "investments" -> "Επενδύσεις"
+                "other" -> "Άλλο"
+                else -> name
+            }
         }
     }
     fun translateCategory(lang: Language, name: String): String = translateCategory(name, lang)

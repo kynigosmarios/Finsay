@@ -56,6 +56,7 @@ internal class OikoNomosSyncDelegate(
         vm._allIncomes.value = emptyList()
         vm._allMembers.value = emptyList()
         vm._allCategories.value = emptyList()
+        vm._incomeCategories.value = emptyList()
         vm._allSavingsGoals.value = emptyList()
         vm._deletedMembers.value = emptyList()
         vm._deletedCategories.value = emptyList()
@@ -65,6 +66,8 @@ internal class OikoNomosSyncDelegate(
         vm._userHouseholds.value = emptyList()
         vm._currentHousehold.value = null
         vm._userProfile.value = null
+        vm._isProUser.value = false
+        vm.syncBankCatcherProEntitlement()
         vm._resolvedUsersByUid.value = emptyMap()
 
         if (!currentUid.isNullOrBlank()) {
@@ -96,7 +99,7 @@ internal class OikoNomosSyncDelegate(
         val placeholder = Household(
             id = hid,
             name = vm.prefs.getString("household_name_$hid", null)?.takeIf { it.isNotBlank() }
-                ?: if (vm._appLanguage.value == "EN") "My Household Book" else "Το Εξοδολόγιό μου",
+                ?: if (vm._appLanguage.value == "EL") "Το Εξοδολόγιό μου" else "My Household Book",
             ownerId = user.uid,
             memberUids = listOf(user.uid),
             memberRoles = mapOf(user.uid to HouseholdRole.CREATOR.key)
@@ -145,28 +148,77 @@ internal class OikoNomosSyncDelegate(
             val deletedHids = vm.prefs.getStringSet("deleted_households_${user.uid}", emptySet()).orEmpty() +
                 vm.prefs.getStringSet("deleted_households_global", emptySet()).orEmpty()
 
-            val provider = user.providerData.firstOrNull { it.providerId == "google.com" }?.providerId?.let { "google" }
-                ?: "password"
+            val provider = when {
+                user.providerData.any { it.providerId == "google.com" } -> "google"
+                user.providerData.any { it.providerId == "facebook.com" } -> "facebook"
+                else -> "password"
+            }
             val displayName = user.displayName.orEmpty().trim()
             val parts = displayName.split(" ").filter { it.isNotBlank() }
+            val currentLang = vm._appLanguage.value.ifBlank { "EN" }
             val profile = vm.firestoreSyncRepo.getOrCreateUserProfile(
                 uid = user.uid,
                 email = user.email.orEmpty(),
-                displayName = displayName.ifBlank { user.email?.substringBefore("@") ?: "Χρήστης" },
+                displayName = displayName.ifBlank { user.email?.substringBefore("@") ?: if (currentLang == "EL") "Χρήστης" else "User" },
                 firstName = parts.firstOrNull().orEmpty(),
                 lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
                 authProvider = provider,
-                excludedHouseholdIds = deletedHids
+                excludedHouseholdIds = deletedHids,
+                appLanguage = currentLang
             )
-            vm._userProfile.value = profile
-            persistProfileToPrefs(profile)
-            vm.syncBankCatcherProEntitlement()
-
-            if (profile.appLanguage.isNotBlank() && !vm.prefs.getBoolean("user_explicitly_set_language_v2", false)) {
-                vm._appLanguage.value = profile.appLanguage
+            val remoteAccepted = profile.acceptedLegalVersion == com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION
+            val localAccepted = vm.prefs.getString("legal_accepted_version_${user.uid}", "") ==
+                com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION
+            val effectiveProfile = when {
+                remoteAccepted -> {
+                    val acceptedAt = if (profile.acceptedLegalAt > 0L) profile.acceptedLegalAt else System.currentTimeMillis()
+                    vm.prefs.edit()
+                        .putString("legal_accepted_version_${user.uid}", profile.acceptedLegalVersion)
+                        .putLong("legal_accepted_at_${user.uid}", acceptedAt)
+                        .apply()
+                    vm._hasAcceptedCurrentLegal.value = true
+                    vm._isLegalStatusResolved.value = true
+                    profile
+                }
+                localAccepted -> {
+                    val localAt = vm.prefs.getLong("legal_accepted_at_${user.uid}", System.currentTimeMillis())
+                        .takeIf { it > 0L } ?: System.currentTimeMillis()
+                    try {
+                        vm.firestoreSyncRepo.recordLegalAcceptance(
+                            user.uid,
+                            com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION,
+                            localAt
+                        )
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Log.w(tag, "Backfill legal acceptance warning: ${e.message}")
+                    }
+                    vm._hasAcceptedCurrentLegal.value = true
+                    vm._isLegalStatusResolved.value = true
+                    profile.copy(
+                        acceptedLegalVersion = com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION,
+                        acceptedLegalAt = localAt
+                    )
+                }
+                else -> {
+                    vm._hasAcceptedCurrentLegal.value = false
+                    vm._isLegalStatusResolved.value = true
+                    profile
+                }
             }
-            if (profile.themeMode.isNotBlank()) {
-                vm._themeMode.value = profile.themeMode
+            vm._userProfile.value = effectiveProfile
+            persistProfileToPrefs(effectiveProfile)
+            vm.recomputeProEntitlement()
+
+            if (effectiveProfile.appLanguage.isNotBlank()) {
+                vm._appLanguage.value = effectiveProfile.appLanguage
+                vm.prefs.edit().putString("app_language", effectiveProfile.appLanguage).apply()
+                try {
+                    vm.auth.setLanguageCode(if (effectiveProfile.appLanguage == "EN") "en" else "el")
+                } catch (_: Throwable) {}
+            }
+            if (effectiveProfile.themeMode.isNotBlank()) {
+                vm._themeMode.value = effectiveProfile.themeMode
             }
 
             val discoveredHouseholds = vm.firestoreSyncRepo.getAllUserHouseholds(
@@ -180,10 +232,11 @@ internal class OikoNomosSyncDelegate(
                     val targetHid = profile.householdId.takeIf {
                         StartupSafety.isHouseholdAllowedForUser(it, false, emptySet(), profile.householdIds.toSet())
                     } ?: vm.getOrEnsureHouseholdId(user)
+                    val defaultHouseholdName = if (vm._appLanguage.value == "EL") "Το Εξοδολόγιό μου" else "My Household Book"
                     val ensured = vm.firestoreSyncRepo.ensureHouseholdExists(
                         householdId = targetHid,
                         ownerUid = user.uid,
-                        householdName = "Το Εξοδολόγιό μου"
+                        householdName = defaultHouseholdName
                     )
                     discoveredHouseholds.add(ensured)
                     ensured
@@ -222,6 +275,7 @@ internal class OikoNomosSyncDelegate(
             if (e is CancellationException) throw e
             Log.e(tag, "loadUserProfileAndHousehold error: ${e.message}", e)
         } finally {
+            vm._isLegalStatusResolved.value = true
             vm._isSyncing.value = false
             vm._isInitialExpensesLoading.value = false
             vm.trackSyncEnd()
@@ -242,9 +296,26 @@ internal class OikoNomosSyncDelegate(
                 .catch { t -> Log.w(tag, "observeUserProfile error: ${t.message}") }
                 .collect { remoteProfile ->
                     if (remoteProfile != null) {
-                        vm._userProfile.value = remoteProfile
-                        persistProfileToPrefs(remoteProfile)
-                        vm.syncBankCatcherProEntitlement()
+                        val currentVersion = com.example.ui.components.LegalConstants.CURRENT_LEGAL_VERSION
+                        val resolvedProfile = if (remoteProfile.acceptedLegalVersion == currentVersion) {
+                            vm.prefs.edit()
+                                .putString("legal_accepted_version_$userId", currentVersion)
+                                .putLong("legal_accepted_at_$userId", remoteProfile.acceptedLegalAt)
+                                .apply()
+                            vm._hasAcceptedCurrentLegal.value = true
+                            vm._isLegalStatusResolved.value = true
+                            remoteProfile
+                        } else if (vm.prefs.getString("legal_accepted_version_$userId", "") == currentVersion) {
+                            remoteProfile.copy(
+                                acceptedLegalVersion = currentVersion,
+                                acceptedLegalAt = vm.prefs.getLong("legal_accepted_at_$userId", 0L)
+                            )
+                        } else {
+                            remoteProfile
+                        }
+                        vm._userProfile.value = resolvedProfile
+                        persistProfileToPrefs(resolvedProfile)
+                        vm.recomputeProEntitlement()
                     }
                 }
         }
@@ -768,6 +839,8 @@ internal class OikoNomosSyncDelegate(
                 .putInt("cached_user_reminder_hour", profile.reminderHour)
                 .putInt("cached_user_reminder_minute", profile.reminderMinute)
                 .putBoolean("cached_user_notification_consent_completed", profile.notificationConsentCompleted)
+                .putString("cached_user_legal_version", profile.acceptedLegalVersion)
+                .putLong("cached_user_legal_at", profile.acceptedLegalAt)
                 .apply()
         } catch (_: Throwable) {}
     }

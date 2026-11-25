@@ -67,7 +67,8 @@ object BankNotificationHolder {
                         amount = obj.getDouble("amount"),
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
                         rawText = obj.optString("rawText", ""),
-                        householdId = obj.optString("householdId", "")
+                        householdId = obj.optString("householdId", ""),
+                        isIncome = obj.optBoolean("isIncome", false)
                     )
                 )
             }
@@ -89,6 +90,7 @@ object BankNotificationHolder {
                 obj.put("timestamp", tx.timestamp)
                 obj.put("rawText", tx.rawText)
                 obj.put("householdId", tx.householdId)
+                obj.put("isIncome", tx.isIncome)
                 array.put(obj)
             }
             p.edit().putString("pending_tx_json", array.toString()).apply()
@@ -130,6 +132,7 @@ object BankNotificationHolder {
         // Deduplicate both identical notifications and cross-app duplicates within the same household
         val duplicateIndex = current.indexOfFirst { existing ->
             val sameHousehold = existing.householdId.trim() == stampedTx.householdId.trim()
+            val sameType = existing.isIncome == stampedTx.isIncome
             val sameAmount = kotlin.math.abs(existing.amount - stampedTx.amount) < 0.01
             val closeInTime = kotlin.math.abs(existing.timestamp - stampedTx.timestamp) < 120_000L
             val sameMerchant = existing.merchantName.equals(stampedTx.merchantName, ignoreCase = true) ||
@@ -137,13 +140,14 @@ object BankNotificationHolder {
                 stampedTx.merchantName.contains(existing.merchantName, ignoreCase = true)
             val crossWalletAndBank = (existing.bankName == "Google Pay" && stampedTx.bankName != "Google Pay") ||
                 (stampedTx.bankName == "Google Pay" && existing.bankName != "Google Pay")
-            sameHousehold && sameAmount && closeInTime && (sameMerchant || crossWalletAndBank)
+            sameHousehold && sameType && sameAmount && closeInTime && (sameMerchant || crossWalletAndBank)
         }
 
         if (duplicateIndex >= 0) {
             val existing = current[duplicateIndex]
-            val existingIsGeneric = existing.merchantName.startsWith("Συναλλαγή ")
+            val existingIsGeneric = existing.merchantName.startsWith("Συναλλαγή ") || existing.merchantName.startsWith("Πίστωση ")
             val newIsRicher = !stampedTx.merchantName.startsWith("Συναλλαγή ") &&
+                !stampedTx.merchantName.startsWith("Πίστωση ") &&
                 (existingIsGeneric || (stampedTx.bankName == "Google Pay" && existing.merchantName.length < stampedTx.merchantName.length))
             if (newIsRicher) {
                 current[duplicateIndex] = existing.copy(merchantName = stampedTx.merchantName)
@@ -174,5 +178,13 @@ object BankNotificationHolder {
         _pendingTransactions.value = emptyList()
         saveToPrefs()
         list.forEach { tx -> onTransactionRemoved?.invoke(tx.id) }
+    }
+
+    fun wipeLocalStore(context: Context) {
+        clearAll()
+        try {
+            val targetPrefs = prefs ?: context.applicationContext.getSharedPreferences("bank_notif_holder_prefs", Context.MODE_PRIVATE)
+            targetPrefs.edit().clear().apply()
+        } catch (_: Exception) {}
     }
 }

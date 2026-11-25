@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -87,6 +88,7 @@ fun BurgerMenuDrawer(
     onOpenProfile: () -> Unit,
     onOpenExodologio: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenProInfo: (() -> Unit)? = null,
     onOpenGuide: (() -> Unit)? = null,
     onOpenReminders: (() -> Unit)? = null,
     onOpenGoals: (() -> Unit)? = null,
@@ -375,8 +377,80 @@ fun BurgerMenuDrawer(
                         }
                     )
 
+                    if (onOpenProInfo != null) {
+                        // 6. Finsay Pro (highlighted entry below Settings and above Guide)
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onOpenProInfo()
+                                }
+                                .testTag("burger_item_finsay_pro"),
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isDark) Color(0xFFD97706).copy(alpha = 0.16f) else Color(0xFFFEF3C7).copy(alpha = 0.72f),
+                            border = BorderStroke(1.dp, Color(0xFFD97706).copy(alpha = if (isDark) 0.45f else 0.35f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFD97706).copy(alpha = if (isDark) 0.28f else 0.18f),
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = null,
+                                            tint = if (isDark) Color(0xFFFBBF24) else Color(0xFFB45309),
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Finsay Pro",
+                                        fontSize = 14.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = if (isPro) {
+                                            if (lang == Localization.Language.ENGLISH) "Active subscription" else "Ενεργή συνδρομή"
+                                        } else {
+                                            if (lang == Localization.Language.ENGLISH) "Unlock all features" else "Ξεκλειδώστε όλες τις δυνατότητες"
+                                        },
+                                        fontSize = 11.sp,
+                                        color = if (isDark) Color(0xFFFDE68A) else Color(0xFF92400E)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = if (isPro) Emerald700 else Color(0xFFD97706)
+                                ) {
+                                    Text(
+                                        text = if (isPro) {
+                                            if (lang == Localization.Language.ENGLISH) "ACTIVE" else "PRO"
+                                        } else {
+                                            "PRO"
+                                        },
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     if (onOpenGuide != null) {
-                        // 6. Οδηγίες
+                        // 7. Οδηγίες
                         BurgerNavigationItem(
                             title = if (lang == Localization.Language.ENGLISH) "Guide" else "Οδηγίες",
                             icon = Icons.Default.Info,

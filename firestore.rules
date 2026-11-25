@@ -58,7 +58,9 @@ service cloud.firestore {
         !('birthDate' in incoming()) &&
         !('phoneNumber' in incoming()) &&
         !('occupation' in incoming()) &&
-        !('city' in incoming());
+        !('city' in incoming()) &&
+        !('acceptedLegalVersion' in incoming()) &&
+        !('acceptedLegalAt' in incoming());
     }
 
     function isValidUserUpdate(userId) {
@@ -68,14 +70,18 @@ service cloud.firestore {
         (!('birthDate' in incoming()) || incoming().birthDate == existing().get('birthDate', '')) &&
         (!('phoneNumber' in incoming()) || incoming().phoneNumber == existing().get('phoneNumber', '')) &&
         (!('occupation' in incoming()) || incoming().occupation == existing().get('occupation', '')) &&
-        (!('city' in incoming()) || incoming().city == existing().get('city', ''));
+        (!('city' in incoming()) || incoming().city == existing().get('city', '')) &&
+        !('acceptedLegalVersion' in incoming()) &&
+        !('acceptedLegalAt' in incoming());
     }
 
     function isValidPrivateProfileWrite() {
       return (!('birthDate' in incoming()) || (incoming().birthDate is string && incoming().birthDate.size() <= 40)) &&
         (!('phoneNumber' in incoming()) || (incoming().phoneNumber is string && incoming().phoneNumber.size() <= 40)) &&
         (!('occupation' in incoming()) || (incoming().occupation is string && incoming().occupation.size() <= 120)) &&
-        (!('city' in incoming()) || (incoming().city is string && incoming().city.size() <= 120));
+        (!('city' in incoming()) || (incoming().city is string && incoming().city.size() <= 120)) &&
+        (!('acceptedLegalVersion' in incoming()) || (incoming().acceptedLegalVersion is string && incoming().acceptedLegalVersion.size() <= 40)) &&
+        (!('acceptedLegalAt' in incoming()) || (incoming().acceptedLegalAt is int && incoming().acceptedLegalAt >= 0));
     }
 
     function isValidHouseholdCreate() {
