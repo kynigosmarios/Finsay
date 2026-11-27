@@ -51,14 +51,16 @@ internal class FirestoreTransactionsDelegate(
                 sortExpenses(
                     querySnapshot.documents.mapNotNull { doc ->
                         val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                        if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                        if (obj != null) {
+                            if (obj.id.isBlank()) obj.id = doc.id
+                            if (obj.householdId.isBlank()) obj.householdId = householdId
+                        }
                         obj?.takeIf { !it.isDeleted }
                     }
                 )
             }
             .catch { t ->
-                Log.w(TAG, "observeExpenses flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeExpenses flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -98,8 +100,7 @@ internal class FirestoreTransactionsDelegate(
                 )
             }
             .catch { t ->
-                Log.w(TAG, "observeUserExpenses flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeUserExpenses flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -127,9 +128,13 @@ internal class FirestoreTransactionsDelegate(
                 val docs = db.collection("households").document(householdId).collection("expenses").get().await()
                 for (doc in docs.documents) doc.reference.delete().await()
             }
-            if (userId.isNotBlank()) {
+            if (userId.isNotBlank() && householdId.isNotBlank()) {
                 val docs = db.collection("users").document(userId).collection("expenses").get().await()
-                for (doc in docs.documents) doc.reference.delete().await()
+                for (doc in docs.documents) {
+                    if (doc.getString("householdId") == householdId) {
+                        doc.reference.delete().await()
+                    }
+                }
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
@@ -230,14 +235,16 @@ internal class FirestoreTransactionsDelegate(
                 sortIncomes(
                     querySnapshot.documents.mapNotNull { doc ->
                         val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                        if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                        if (obj != null) {
+                            if (obj.id.isBlank()) obj.id = doc.id
+                            if (obj.householdId.isBlank()) obj.householdId = householdId
+                        }
                         obj?.takeIf { !it.isDeleted }
                     }
                 )
             }
             .catch { t ->
-                Log.w(TAG, "observeIncomes flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeIncomes flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -277,8 +284,7 @@ internal class FirestoreTransactionsDelegate(
                 )
             }
             .catch { t ->
-                Log.w(TAG, "observeUserIncomes flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeUserIncomes flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -317,7 +323,10 @@ internal class FirestoreTransactionsDelegate(
             sortExpenses(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                    if (obj != null) {
+                        if (obj.id.isBlank()) obj.id = doc.id
+                        if (obj.householdId.isBlank()) obj.householdId = householdId
+                    }
                     obj?.takeIf { !it.isDeleted }
                 }
             )
@@ -334,7 +343,10 @@ internal class FirestoreTransactionsDelegate(
             sortIncomes(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                    if (obj != null) {
+                        if (obj.id.isBlank()) obj.id = doc.id
+                        if (obj.householdId.isBlank()) obj.householdId = householdId
+                    }
                     obj?.takeIf { !it.isDeleted }
                 }
             )
@@ -350,7 +362,10 @@ internal class FirestoreTransactionsDelegate(
             sortExpenses(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                    if (obj != null) {
+                        if (obj.id.isBlank()) obj.id = doc.id
+                        if (obj.householdId.isBlank()) obj.householdId = householdId
+                    }
                     obj?.takeIf { !it.isDeleted }
                 }
             )
@@ -368,7 +383,10 @@ internal class FirestoreTransactionsDelegate(
             sortIncomes(
                 snapshot.documents.mapNotNull { doc ->
                     val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
-                    if (obj != null && obj.id.isBlank()) obj.id = doc.id
+                    if (obj != null) {
+                        if (obj.id.isBlank()) obj.id = doc.id
+                        if (obj.householdId.isBlank()) obj.householdId = householdId
+                    }
                     obj?.takeIf { !it.isDeleted }
                 }
             )

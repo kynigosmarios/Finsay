@@ -112,7 +112,6 @@ fun ExodologioDetailsDialog(
     onDismiss: () -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEn = lang == Localization.Language.ENGLISH
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var newHouseholdName by remember { mutableStateOf("") }
@@ -157,7 +156,7 @@ fun ExodologioDetailsDialog(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (isEn) "Back" else "Επιστροφή",
+                        contentDescription = Localization.tr(lang, "Back", "Επιστροφή"),
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -185,9 +184,9 @@ fun ExodologioDetailsDialog(
                     )
                     Text(
                         text = if (isPremium)
-                            (if (isEn) "Pro • Unlimited Households" else "Pro • Απεριόριστα εξοδολόγια")
+                            Localization.tr(lang, "Pro • Unlimited Households", "Pro • Απεριόριστα εξοδολόγια")
                         else
-                            (if (isEn) "Basic • 1 Household" else "Βασικό • 1 εξοδολόγιο"),
+                            Localization.tr(lang, "Basic • 1 Household", "Βασικό • 1 εξοδολόγιο"),
                         fontSize = 11.5.sp,
                         color = if (isPremium) Amber700 else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -321,7 +320,7 @@ fun ExodologioDetailsDialog(
                                                         Box(contentAlignment = Alignment.Center) {
                                                             Icon(
                                                                 imageVector = Icons.Default.Delete,
-                                                                contentDescription = if (isEn) "Delete Household" else "Διαγραφή Εξοδολογίου",
+                                                                contentDescription = Localization.tr(lang, "Delete Household", "Διαγραφή Εξοδολογίου"),
                                                                 tint = Color(0xFFEF4444),
                                                                 modifier = Modifier.size(16.dp)
                                                             )
@@ -357,7 +356,7 @@ fun ExodologioDetailsDialog(
                                                     color = Emerald700
                                                 ) {
                                                     Text(
-                                                        text = if (isEn) "ACTIVE" else "ΕΝΕΡΓΟ",
+                                                        text = Localization.tr(lang, "ACTIVE", "ΕΝΕΡΓΟ"),
                                                         color = Color.White,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold,
@@ -545,7 +544,7 @@ fun ExodologioDetailsDialog(
             shape = RoundedCornerShape(20.dp),
             title = {
                 Text(
-                    text = if (isEn) "Rename Household" else "Επεξεργασία Εξοδολογίου",
+                    text = Localization.tr(lang, "Rename Household", "Επεξεργασία Εξοδολογίου"),
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -553,7 +552,7 @@ fun ExodologioDetailsDialog(
                 OutlinedTextField(
                     value = renameInput,
                     onValueChange = { renameInput = it },
-                    placeholder = { Text(if (isEn) "Household name" else "Όνομα εξοδολογίου") },
+                    placeholder = { Text(Localization.tr(lang, "Household name", "Όνομα εξοδολογίου")) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -590,13 +589,13 @@ fun ExodologioDetailsDialog(
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
             shape = RoundedCornerShape(20.dp),
-            title = { Text(if (isEn) "New Household" else "Νέο Εξοδολόγιο", fontWeight = FontWeight.Bold) },
+            title = { Text(Localization.tr(lang, "New Household", "Νέο Εξοδολόγιο"), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = newHouseholdName,
                         onValueChange = { newHouseholdName = it },
-                        placeholder = { Text(if (isEn) "e.g. Home, Work, Trip" else "π.χ. Σπίτι, Εργασία, Ταξίδι") },
+                        placeholder = { Text(Localization.tr(lang, "e.g. Home, Work, Trip", "π.χ. Σπίτι, Εργασία, Ταξίδι")) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -607,7 +606,7 @@ fun ExodologioDetailsDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = if (isEn) "Currency" else "Νόμισμα",
+                            text = Localization.tr(lang, "Currency", "Νόμισμα"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -711,7 +710,7 @@ fun ExodologioDetailsDialog(
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        text = if (isEn) "Delete Household" else "Διαγραφή Εξοδολογίου",
+                        text = Localization.tr(lang, "Delete Household", "Διαγραφή Εξοδολογίου"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
@@ -719,17 +718,22 @@ fun ExodologioDetailsDialog(
             },
             text = {
                 val isSingle = allHouseholds.size <= 1
+                val hName = Localization.translateHouseholdName(householdToDelete?.name ?: "", lang)
                 Text(
-                    text = if (isEn) {
-                        if (isSingle)
-                            "Are you sure you want to delete \"${householdToDelete?.name}\"? All its expenses, incomes, categories and members will be permanently removed, and a fresh new household will be created."
-                        else
-                            "Are you sure you want to delete \"${householdToDelete?.name}\"? All its expenses, incomes, categories and members will be permanently removed."
+                    text = if (isSingle) {
+                        Localization.trFormat(
+                            lang,
+                            "Are you sure you want to delete \"%1\$s\"? All its expenses, incomes, categories and members will be permanently removed, and a fresh new household will be created.",
+                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «%1\$s»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά και θα δημιουργηθεί ένα νέο κενό εξοδολόγιο.",
+                            hName
+                        )
                     } else {
-                        if (isSingle)
-                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «${householdToDelete?.name}»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά και θα δημιουργηθεί ένα νέο κενό εξοδολόγιο."
-                        else
-                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «${householdToDelete?.name}»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά."
+                        Localization.trFormat(
+                            lang,
+                            "Are you sure you want to delete \"%1\$s\"? All its expenses, incomes, categories and members will be permanently removed.",
+                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «%1\$s»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά.",
+                            hName
+                        )
                     },
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -749,7 +753,7 @@ fun ExodologioDetailsDialog(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = if (isEn) "Delete" else "Διαγραφή",
+                        text = Localization.delete(lang),
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
@@ -757,7 +761,7 @@ fun ExodologioDetailsDialog(
             },
             dismissButton = {
                 TextButton(onClick = { householdToDelete = null }) {
-                    Text(text = if (isEn) "Cancel" else "Ακύρωση")
+                    Text(text = Localization.cancel(lang))
                 }
             }
         )

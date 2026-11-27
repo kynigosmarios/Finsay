@@ -97,14 +97,13 @@ fun SavingsGoalsManagerDialog(
     onDepositToGoal: (SavingsGoal, Double, FamilyMember?, String) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isGreek = lang != Localization.Language.ENGLISH
 
     var goalForDeposit by remember { mutableStateOf<SavingsGoal?>(null) }
     var goalPendingDelete by remember { mutableStateOf<SavingsGoal?>(null) }
 
-    val subtitle = remember(householdName, isGreek) {
-        if (householdName.isNotBlank()) householdName
-        else if (isGreek) "Στόχοι ενεργού εξοδολογίου" else "Active household savings goals"
+    val subtitle = remember(householdName, lang) {
+        if (householdName.isNotBlank()) Localization.translateHouseholdName(householdName, lang)
+        else Localization.tr(lang, "Active household savings goals", "Στόχοι ενεργού εξοδολογίου")
     }
 
     Column(
@@ -137,7 +136,7 @@ fun SavingsGoalsManagerDialog(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (isGreek) "Επιστροφή" else "Back",
+                        contentDescription = Localization.tr(lang, "Back", "Επιστροφή"),
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -158,7 +157,7 @@ fun SavingsGoalsManagerDialog(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isGreek) "Στόχοι" else "Goals",
+                        text = Localization.tr(lang, "Goals", "Στόχοι"),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -190,7 +189,7 @@ fun SavingsGoalsManagerDialog(
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isGreek) "Νέος Στόχος Αποταμίευσης" else "New Savings Goal",
+                    text = Localization.tr(lang, "New Savings Goal", "Νέος Στόχος Αποταμίευσης"),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -214,7 +213,7 @@ fun SavingsGoalsManagerDialog(
                 contentAlignment = Alignment.Center
             ) {
                 EmptyGoalsSection(
-                    isGreek = isGreek,
+                    lang = lang,
                     canManage = canManage,
                     onSelectTemplate = { title, targetAmount, note ->
                         onOpenGoalEditor(
@@ -246,7 +245,7 @@ fun SavingsGoalsManagerDialog(
                     SavingsGoalCard(
                         goal = goal,
                         currencySymbol = currencySymbol,
-                        isGreek = isGreek,
+                        lang = lang,
                         canManage = canManage,
                         onDepositClick = { goalForDeposit = goal },
                         onEditClick = { onOpenGoalEditor(goal) },
@@ -265,7 +264,6 @@ fun SavingsGoalsManagerDialog(
             members = members,
             defaultPayerMember = defaultPayerMember,
             currencySymbol = currencySymbol,
-            isGreek = isGreek,
             lang = lang,
             onDismiss = { goalForDeposit = null },
             onConfirmDeposit = { amount, payer, note ->
@@ -282,18 +280,19 @@ fun SavingsGoalsManagerDialog(
             shape = RoundedCornerShape(22.dp),
             title = {
                 Text(
-                    text = if (isGreek) "Διαγραφή Στόχου;" else "Delete Goal?",
+                    text = Localization.tr(lang, "Delete Goal?", "Διαγραφή Στόχου;"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 18.sp
                 )
             },
             text = {
                 Text(
-                    text = if (isGreek) {
-                        "Θέλετε σίγουρα να διαγράψετε τον στόχο «${targetGoal.title}»;"
-                    } else {
-                        "Are you sure you want to delete the goal \"${targetGoal.title}\"?"
-                    },
+                    text = Localization.trFormat(
+                        lang,
+                        "Are you sure you want to delete the goal \"%1\$s\"?",
+                        "Θέλετε σίγουρα να διαγράψετε τον στόχο «%1\$s»;",
+                        targetGoal.title
+                    ),
                     fontSize = 13.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -322,7 +321,7 @@ fun SavingsGoalsManagerDialog(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EmptyGoalsSection(
-    isGreek: Boolean,
+    lang: Localization.Language,
     canManage: Boolean,
     onSelectTemplate: (title: String, targetAmount: Double, note: String) -> Unit
 ) {
@@ -348,7 +347,7 @@ private fun EmptyGoalsSection(
         }
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = if (isGreek) "Δεν υπάρχουν ακόμη στόχοι" else "No savings goals yet",
+            text = Localization.tr(lang, "No savings goals yet", "Δεν υπάρχουν ακόμη στόχοι"),
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
             color = MaterialTheme.colorScheme.onSurface
@@ -356,7 +355,7 @@ private fun EmptyGoalsSection(
         if (canManage) {
             Spacer(modifier = Modifier.height(14.dp))
             Text(
-                text = if (isGreek) "Γρήγορες προτάσεις στόχων:" else "Suggested goal templates:",
+                text = Localization.tr(lang, "Suggested goal templates:", "Γρήγορες προτάσεις στόχων:"),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -368,24 +367,24 @@ private fun EmptyGoalsSection(
             ) {
                 val templates = listOf(
                     Triple(
-                        if (isGreek) "🏖️ Διακοπές" else "🏖️ Vacation",
+                        "🏖️ " + Localization.tr(lang, "Vacation", "Διακοπές"),
                         1200.0,
-                        if (isGreek) "Καλοκαιρινές διακοπές" else "Summer trip"
+                        Localization.tr(lang, "Summer trip", "Καλοκαιρινές διακοπές")
                     ),
                     Triple(
-                        if (isGreek) "🆘 Ταμείο Ανάγκης" else "🆘 Emergency Fund",
+                        "🆘 " + Localization.tr(lang, "Emergency Fund", "Ταμείο Ανάγκης"),
                         2000.0,
-                        if (isGreek) "Οικονομικό μαξιλάρι ασφαλείας" else "Safety buffer"
+                        Localization.tr(lang, "Safety buffer", "Οικονομικό μαξιλάρι ασφαλείας")
                     ),
                     Triple(
-                        if (isGreek) "🚗 Αυτοκίνητο" else "🚗 Car",
+                        "🚗 " + Localization.tr(lang, "Car", "Αυτοκίνητο"),
                         3500.0,
-                        if (isGreek) "Αγορά / συντήρηση οχήματος" else "Vehicle fund"
+                        Localization.tr(lang, "Vehicle fund", "Αγορά / συντήρηση οχήματος")
                     ),
                     Triple(
-                        if (isGreek) "🏠 Σπίτι" else "🏠 Home",
+                        "🏠 " + Localization.tr(lang, "Home", "Σπίτι"),
                         1500.0,
-                        if (isGreek) "Εξοπλισμός & βελτιώσεις" else "Home upgrade"
+                        Localization.tr(lang, "Home upgrade", "Εξοπλισμός & βελτιώσεις")
                     )
                 )
                 templates.forEach { (label, amount, note) ->
@@ -409,7 +408,7 @@ private fun EmptyGoalsSection(
 private fun SavingsGoalCard(
     goal: SavingsGoal,
     currencySymbol: String,
-    isGreek: Boolean,
+    lang: Localization.Language,
     canManage: Boolean,
     onDepositClick: () -> Unit,
     onEditClick: () -> Unit,
@@ -555,13 +554,14 @@ private fun SavingsGoalCard(
                     )
                     Text(
                         text = if (isCompleted) {
-                            if (isGreek) "Ολοκληρώθηκε!" else "Completed!"
+                            Localization.tr(lang, "Completed!", "Ολοκληρώθηκε!")
                         } else {
-                            if (isGreek) {
-                                "Λείπουν: ${formatCurrency(remainingAmount, currencySymbol)}"
-                            } else {
-                                "Left: ${formatCurrency(remainingAmount, currencySymbol)}"
-                            }
+                            Localization.trFormat(
+                                lang,
+                                "Left: %1\$s",
+                                "Λείπουν: %1\$s",
+                                formatCurrency(remainingAmount, currencySymbol)
+                            )
                         },
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -589,7 +589,7 @@ private fun SavingsGoalCard(
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = if (isGreek) "Κατάθεση" else "Deposit",
+                            text = Localization.tr(lang, "Deposit", "Κατάθεση"),
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1
@@ -602,7 +602,7 @@ private fun SavingsGoalCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
-                            contentDescription = if (isGreek) "Επεξεργασία" else "Edit",
+                            contentDescription = Localization.tr(lang, "Edit", "Επεξεργασία"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
@@ -614,7 +614,7 @@ private fun SavingsGoalCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = if (isGreek) "Διαγραφή" else "Delete",
+                            contentDescription = Localization.tr(lang, "Delete", "Διαγραφή"),
                             tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(18.dp)
                         )
@@ -632,7 +632,6 @@ private fun GoalDepositDialog(
     members: List<FamilyMember>,
     defaultPayerMember: FamilyMember?,
     currencySymbol: String,
-    isGreek: Boolean,
     lang: Localization.Language,
     onDismiss: () -> Unit,
     onConfirmDeposit: (Double, FamilyMember?, String) -> Unit
@@ -652,7 +651,7 @@ private fun GoalDepositDialog(
         shape = RoundedCornerShape(22.dp),
         title = {
             Text(
-                text = if (isGreek) "Κατάθεση στον Στόχο" else "Deposit to Goal",
+                text = Localization.tr(lang, "Deposit to Goal", "Κατάθεση στον Στόχο"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 18.sp
             )
@@ -671,7 +670,7 @@ private fun GoalDepositDialog(
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it },
-                    label = { Text(if (isGreek) "Ποσό κατάθεσης ($currencySymbol)" else "Deposit amount ($currencySymbol)") },
+                    label = { Text(Localization.trFormat(lang, "Deposit amount (%1\$s)", "Ποσό κατάθεσης (%1\$s)", currencySymbol)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
@@ -703,7 +702,7 @@ private fun GoalDepositDialog(
                             },
                             label = {
                                 Text(
-                                    text = if (isGreek) "Υπόλοιπο" else "Pay off",
+                                    text = Localization.tr(lang, "Pay off", "Υπόλοιπο"),
                                     fontSize = 11.5.sp
                                 )
                             },
@@ -728,7 +727,7 @@ private fun GoalDepositDialog(
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = if (isGreek) "Ποιος κατέθεσε;" else "Deposited by",
+                                text = Localization.tr(lang, "Deposited by", "Ποιος κατέθεσε;"),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -765,7 +764,7 @@ private fun GoalDepositDialog(
                 OutlinedTextField(
                     value = noteText,
                     onValueChange = { noteText = it },
-                    label = { Text(if (isGreek) "Σημείωση (προαιρετικά)" else "Note (optional)") },
+                    label = { Text(Localization.tr(lang, "Note (optional)", "Σημείωση (προαιρετικά)")) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -794,11 +793,11 @@ private fun GoalDepositDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = if (isGreek) {
+                            text = Localization.tr(
+                                lang,
+                                "Automatically recorded in Expenses.",
                                 "Καταχωρείται αυτόματα και στα Έξοδα."
-                            } else {
-                                "Automatically recorded in Expenses."
-                            },
+                            ),
                             fontSize = 11.5.sp,
                             lineHeight = 15.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -820,7 +819,7 @@ private fun GoalDepositDialog(
                 modifier = Modifier.testTag("goal_deposit_confirm_button")
             ) {
                 Text(
-                    text = if (isGreek) "Κατάθεση" else "Deposit",
+                    text = Localization.tr(lang, "Deposit", "Κατάθεση"),
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )

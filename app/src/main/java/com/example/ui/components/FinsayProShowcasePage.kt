@@ -83,118 +83,95 @@ private data class ProBenefitItem(
 fun FinsayProShowcasePage(
     isPro: Boolean,
     appLanguage: String = "EN",
+    proPlanPrices: BillingManager.ProPlanPrices = BillingManager.ProPlanPrices(),
     onLaunchBilling: ((String) -> Boolean)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEnglish = lang == Localization.Language.ENGLISH
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
     var selectedPlan by remember { mutableStateOf(BillingManager.SUB_YEARLY) }
 
     BackHandler(onBack = onDismiss)
 
-    val benefits = remember(isEnglish) {
-        if (isEnglish) {
-            listOf(
-                ProBenefitItem(
-                    icon = Icons.Default.Category,
-                    accent = Color(0xFF059669),
-                    title = "Unlimited Categories",
-                    description = "Create as many expense and income categories as your lifestyle needs.",
-                    freeLimitBadge = "Free: 5 each"
+    val benefits = remember(lang) {
+        listOf(
+            ProBenefitItem(
+                icon = Icons.Default.Category,
+                accent = Color(0xFF059669),
+                title = Localization.tr(lang, "Unlimited Categories", "Απεριόριστες Κατηγορίες"),
+                description = Localization.tr(
+                    lang,
+                    "Create as many expense and income categories as your lifestyle needs.",
+                    "Δημιουργήστε όσες κατηγορίες εξόδων και εσόδων χρειάζεστε χωρίς περιορισμούς."
                 ),
-                ProBenefitItem(
-                    icon = Icons.Default.Mic,
-                    accent = Color(0xFF7C3AED),
-                    title = "Unlimited Voice Logging",
-                    description = "Dictate expenses naturally anytime without monthly voice quotas.",
-                    freeLimitBadge = "Free: 15/mo"
+                freeLimitBadge = Localization.tr(lang, "Free: 5 each", "Δωρεάν: έως 5")
+            ),
+            ProBenefitItem(
+                icon = Icons.Default.Mic,
+                accent = Color(0xFF7C3AED),
+                title = Localization.tr(lang, "Unlimited Voice Logging", "Απεριόριστες Φωνητικές Καταχωρήσεις"),
+                description = Localization.tr(
+                    lang,
+                    "Dictate expenses naturally anytime without monthly voice quotas.",
+                    "Καταγράψτε έξοδα με τη φωνή σας όσες φορές θέλετε κάθε μήνα."
                 ),
-                ProBenefitItem(
-                    icon = Icons.Default.CameraAlt,
-                    accent = Color(0xFF0284C7),
-                    title = "Receipt OCR & AADE QR Scanner",
-                    description = "Snap paper receipts or scan QR codes to autofill merchant, amount & date."
+                freeLimitBadge = Localization.tr(lang, "Free: 15/mo", "Δωρεάν: 15/μήνα")
+            ),
+            ProBenefitItem(
+                icon = Icons.Default.CameraAlt,
+                accent = Color(0xFF0284C7),
+                title = Localization.tr(lang, "Receipt OCR & AADE QR Scanner", "Σάρωση Απόδειξης (OCR & QR ΑΑΔΕ)"),
+                description = Localization.tr(
+                    lang,
+                    "Snap paper receipts or scan QR codes to autofill merchant, amount & date.",
+                    "Φωτογραφίστε αποδείξεις ή σαρώστε QR ΑΑΔΕ για άμεση συμπλήρωση στοιχείων."
+                )
+            ),
+            ProBenefitItem(
+                icon = Icons.Default.AccountBalance,
+                accent = Color(0xFF0D9488),
+                title = Localization.tr(lang, "Automatic Bank & Wallet Catcher", "Αυτόματος Εντοπισμός Τραπεζών"),
+                description = Localization.tr(
+                    lang,
+                    "Detect payments and deposits from banks, Revolut, Google Pay & PayPal automatically.",
+                    "Αναγνωρίζει πληρωμές και καταθέσεις από τράπεζες, Revolut, Google Pay & PayPal."
+                )
+            ),
+            ProBenefitItem(
+                icon = Icons.Default.Groups,
+                accent = Color(0xFFD97706),
+                title = Localization.tr(lang, "Multiple Household Books & Members", "Πολλαπλά Εξοδολόγια & Μέλη"),
+                description = Localization.tr(
+                    lang,
+                    "Manage separate books for home, travel, or business with unlimited members.",
+                    "Οργανώστε ξεχωριστά εξοδολόγια για σπίτι, ταξίδια ή επιχείρηση με απεριόριστα μέλη."
                 ),
-                ProBenefitItem(
-                    icon = Icons.Default.AccountBalance,
-                    accent = Color(0xFF0D9488),
-                    title = "Automatic Bank & Wallet Catcher",
-                    description = "Detect payments and deposits from banks, Revolut, Google Pay & PayPal automatically."
+                freeLimitBadge = Localization.tr(lang, "Free: 1 book • 4 members", "Δωρεάν: 1 βιβλίο • 4 μέλη")
+            ),
+            ProBenefitItem(
+                icon = Icons.Default.Savings,
+                accent = Color(0xFF10B981),
+                title = Localization.tr(lang, "Unlimited Goals & Bill Reminders", "Απεριόριστοι Στόχοι & Πάγιες Εντολές"),
+                description = Localization.tr(
+                    lang,
+                    "Track every savings goal and automate recurring bills without caps.",
+                    "Παρακολουθήστε όλους τους στόχους αποταμίευσης και τις υπενθυμίσεις λογαριασμών."
                 ),
-                ProBenefitItem(
-                    icon = Icons.Default.Groups,
-                    accent = Color(0xFFD97706),
-                    title = "Multiple Household Books & Members",
-                    description = "Manage separate books for home, travel, or business with unlimited members.",
-                    freeLimitBadge = "Free: 1 book • 4 members"
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.Savings,
-                    accent = Color(0xFF10B981),
-                    title = "Unlimited Goals & Bill Reminders",
-                    description = "Track every savings goal and automate recurring bills without caps.",
-                    freeLimitBadge = "Free: 1 goal • 2 bills"
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.Description,
-                    accent = Color(0xFF2563EB),
-                    title = "PDF, Excel & CSV Reports",
-                    description = "Export polished financial summaries and member settle-up reports in one tap."
+                freeLimitBadge = Localization.tr(lang, "Free: 1 goal • 2 bills", "Δωρεάν: 1 στόχος • 2 πάγιες")
+            ),
+            ProBenefitItem(
+                icon = Icons.Default.Description,
+                accent = Color(0xFF2563EB),
+                title = Localization.tr(lang, "PDF, Excel & CSV Reports", "Εξαγωγή Αναφορών PDF, Excel & CSV"),
+                description = Localization.tr(
+                    lang,
+                    "Export polished financial summaries and member settle-up reports in one tap.",
+                    "Κατεβάστε και μοιραστείτε καθαρές οικονομικές αναφορές και εκκαθαρίσεις με 1 πάτημα."
                 )
             )
-        } else {
-            listOf(
-                ProBenefitItem(
-                    icon = Icons.Default.Category,
-                    accent = Color(0xFF059669),
-                    title = "Απεριόριστες Κατηγορίες",
-                    description = "Δημιουργήστε όσες κατηγορίες εξόδων και εσόδων χρειάζεστε χωρίς περιορισμούς.",
-                    freeLimitBadge = "Δωρεάν: έως 5"
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.Mic,
-                    accent = Color(0xFF7C3AED),
-                    title = "Απεριόριστες Φωνητικές Καταχωρήσεις",
-                    description = "Καταγράψτε έξοδα με τη φωνή σας όσες φορές θέλετε κάθε μήνα.",
-                    freeLimitBadge = "Δωρεάν: 15/μήνα"
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.CameraAlt,
-                    accent = Color(0xFF0284C7),
-                    title = "Σάρωση Απόδειξης (OCR & QR ΑΑΔΕ)",
-                    description = "Φωτογραφίστε αποδείξεις ή σαρώστε QR ΑΑΔΕ για άμεση συμπλήρωση στοιχείων."
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.AccountBalance,
-                    accent = Color(0xFF0D9488),
-                    title = "Αυτόματος Εντοπισμός Τραπεζών",
-                    description = "Αναγνωρίζει πληρωμές και καταθέσεις από τράπεζες, Revolut, Google Pay & PayPal."
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.Groups,
-                    accent = Color(0xFFD97706),
-                    title = "Πολλαπλά Εξοδολόγια & Μέλη",
-                    description = "Οργανώστε ξεχωριστά εξοδολόγια για σπίτι, ταξίδια ή επιχείρηση με απεριόριστα μέλη.",
-                    freeLimitBadge = "Δωρεάν: 1 βιβλίο • 4 μέλη"
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.Savings,
-                    accent = Color(0xFF10B981),
-                    title = "Απεριόριστοι Στόχοι & Πάγιες Εντολές",
-                    description = "Παρακολουθήστε όλους τους στόχους αποταμίευσης και τις υπενθυμίσεις λογαριασμών.",
-                    freeLimitBadge = "Δωρεάν: 1 στόχος • 2 πάγιες"
-                ),
-                ProBenefitItem(
-                    icon = Icons.Default.Description,
-                    accent = Color(0xFF2563EB),
-                    title = "Εξαγωγή Αναφορών PDF, Excel & CSV",
-                    description = "Κατεβάστε και μοιραστείτε καθαρές οικονομικές αναφορές και εκκαθαρίσεις με 1 πάτημα."
-                )
-            )
-        }
+        )
     }
 
     Box(
@@ -224,7 +201,7 @@ fun FinsayProShowcasePage(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (isEnglish) "Back" else "Πίσω",
+                        contentDescription = Localization.tr(lang, "Back", "Πίσω"),
                         tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
@@ -254,7 +231,7 @@ fun FinsayProShowcasePage(
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = if (isEnglish) "ACTIVE" else "ΕΝΕΡΓΟ",
+                                text = Localization.tr(lang, "ACTIVE", "ΕΝΕΡΓΟ"),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Amber700
@@ -325,9 +302,9 @@ fun FinsayProShowcasePage(
                                 )
                                 Text(
                                     text = if (isPro) {
-                                        if (isEnglish) "YOU ARE A PRO MEMBER" else "ΕΙΣΤΕ ΜΕΛΟΣ FINSAY PRO"
+                                        Localization.tr(lang, "YOU ARE A PRO MEMBER", "ΕΙΣΤΕ ΜΕΛΟΣ FINSAY PRO")
                                     } else {
-                                        if (isEnglish) "COMPLETE FINANCIAL FREEDOM" else "ΠΛΗΡΗΣ ΟΙΚΟΝΟΜΙΚΟΣ ΕΛΕΓΧΟΣ"
+                                        Localization.tr(lang, "COMPLETE FINANCIAL FREEDOM", "ΠΛΗΡΗΣ ΟΙΚΟΝΟΜΙΚΟΣ ΕΛΕΓΧΟΣ")
                                     },
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold,
@@ -341,11 +318,17 @@ fun FinsayProShowcasePage(
 
                         Text(
                             text = if (isPro) {
-                                if (isEnglish) "All Finsay Pro features are unlocked"
-                                else "Όλες οι δυνατότητες του Finsay Pro είναι ενεργές"
+                                Localization.tr(
+                                    lang,
+                                    "All Finsay Pro features are unlocked",
+                                    "Όλες οι δυνατότητες του Finsay Pro είναι ενεργές"
+                                )
                             } else {
-                                if (isEnglish) "Unlock the full power of Finsay"
-                                else "Ξεκλειδώστε όλη τη δύναμη του Finsay"
+                                Localization.tr(
+                                    lang,
+                                    "Unlock the full power of Finsay",
+                                    "Ξεκλειδώστε όλη τη δύναμη του Finsay"
+                                )
                             },
                             fontSize = 22.sp,
                             lineHeight = 27.sp,
@@ -358,11 +341,17 @@ fun FinsayProShowcasePage(
 
                         Text(
                             text = if (isPro) {
-                                if (isEnglish) "Thank you for supporting Finsay! Enjoy unlimited automation, categories, books, and exports."
-                                else "Ευχαριστούμε που στηρίζετε το Finsay! Απολαύστε απεριόριστους αυτοματισμούς, κατηγορίες, βιβλία και αναφορές."
+                                Localization.tr(
+                                    lang,
+                                    "Thank you for supporting Finsay! Enjoy unlimited automation, categories, books, and exports.",
+                                    "Ευχαριστούμε που στηρίζετε το Finsay! Απολαύστε απεριόριστους αυτοματισμούς, κατηγορίες, βιβλία και αναφορές."
+                                )
                             } else {
-                                if (isEnglish) "Automate every expense, remove all free limits, and manage your finances effortlessly."
-                                else "Αυτοματοποιήστε κάθε συναλλαγή, καταργήστε όλα τα όρια και διαχειριστείτε τα οικονομικά σας χωρίς κόπο."
+                                Localization.tr(
+                                    lang,
+                                    "Automate every expense, remove all free limits, and manage your finances effortlessly.",
+                                    "Αυτοματοποιήστε κάθε συναλλαγή, καταργήστε όλα τα όρια και διαχειριστείτε τα οικονομικά σας χωρίς κόπο."
+                                )
                             },
                             fontSize = 13.5.sp,
                             lineHeight = 19.sp,
@@ -378,7 +367,7 @@ fun FinsayProShowcasePage(
             // Pricing Section (or Manage Subscription if already Pro)
             if (!isPro) {
                 Text(
-                    text = if (isEnglish) "Choose Your Plan" else "Επιλέξτε το Πλάνο σας",
+                    text = Localization.tr(lang, "Choose Your Plan", "Επιλέξτε το Πλάνο σας"),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground,
@@ -386,12 +375,24 @@ fun FinsayProShowcasePage(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
+                val yearlyPriceDisplay = proPlanPrices.yearlyPrice?.let {
+                    "$it / ${Localization.tr(lang, "year", "έτος")}"
+                } ?: Localization.tr(lang, "29€ / year", "29€ / έτος")
+                val monthlyPriceDisplay = proPlanPrices.monthlyPrice?.let {
+                    "$it / ${Localization.tr(lang, "month", "μήνα")}"
+                } ?: Localization.tr(lang, "2.99€ / month", "2,99€ / μήνα")
+                val lifetimePriceDisplay = proPlanPrices.lifetimePrice ?: "49€"
+
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ProPlanOptionCard(
-                        title = if (isEnglish) "Yearly Plan" else "Ετήσιο Πλάνο",
-                        price = if (isEnglish) "29€ / year" else "29€ / έτος",
-                        subtitle = if (isEnglish) "Just 2.41€/month • Best value" else "Μόλις 2,41€/μήνα • Καλύτερη επιλογή",
-                        badge = if (isEnglish) "POPULAR • -19%" else "ΔΗΜΟΦΙΛΕΣ • -19%",
+                        title = Localization.tr(lang, "Yearly Plan", "Ετήσιο Πλάνο"),
+                        price = yearlyPriceDisplay,
+                        subtitle = if (proPlanPrices.yearlyPrice != null) {
+                            Localization.tr(lang, "Best value • Save vs monthly", "Καλύτερη επιλογή • Οικονομία έναντι μηνιαίου")
+                        } else {
+                            Localization.tr(lang, "Just 2.41€/month • Best value", "Μόλις 2,41€/μήνα • Καλύτερη επιλογή")
+                        },
+                        badge = Localization.tr(lang, "POPULAR • -19%", "ΔΗΜΟΦΙΛΕΣ • -19%"),
                         badgeColor = Emerald700,
                         isSelected = selectedPlan == BillingManager.SUB_YEARLY,
                         isDark = isDark,
@@ -400,9 +401,9 @@ fun FinsayProShowcasePage(
                     )
 
                     ProPlanOptionCard(
-                        title = if (isEnglish) "Monthly Plan" else "Μηνιαίο Πλάνο",
-                        price = if (isEnglish) "2.99€ / month" else "2,99€ / μήνα",
-                        subtitle = if (isEnglish) "Flexible billing • Cancel anytime" else "Ευέλικτη χρέωση • Ακύρωση όποτε θέλετε",
+                        title = Localization.tr(lang, "Monthly Plan", "Μηνιαίο Πλάνο"),
+                        price = monthlyPriceDisplay,
+                        subtitle = Localization.tr(lang, "Flexible billing • Cancel anytime", "Ευέλικτη χρέωση • Ακύρωση όποτε θέλετε"),
                         badge = null,
                         badgeColor = Emerald700,
                         isSelected = selectedPlan == BillingManager.SUB_MONTHLY,
@@ -412,10 +413,10 @@ fun FinsayProShowcasePage(
                     )
 
                     ProPlanOptionCard(
-                        title = if (isEnglish) "Lifetime Access" else "Εφάπαξ (Lifetime)",
-                        price = "49€",
-                        subtitle = if (isEnglish) "Pay once, own Finsay Pro forever" else "Πληρώνετε μία φορά, το έχετε για πάντα",
-                        badge = if (isEnglish) "ONE-TIME" else "ΓΙΑ ΠΑΝΤΑ",
+                        title = Localization.tr(lang, "Lifetime Access", "Εφάπαξ (Lifetime)"),
+                        price = lifetimePriceDisplay,
+                        subtitle = Localization.tr(lang, "Pay once, own Finsay Pro forever", "Πληρώνετε μία φορά, το έχετε για πάντα"),
+                        badge = Localization.tr(lang, "ONE-TIME", "ΓΙΑ ΠΑΝΤΑ"),
                         badgeColor = Amber700,
                         isSelected = selectedPlan == BillingManager.INAPP_LIFETIME,
                         isDark = isDark,
@@ -456,9 +457,9 @@ fun FinsayProShowcasePage(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = when (selectedPlan) {
-                            BillingManager.SUB_MONTHLY -> if (isEnglish) "Upgrade to Pro • 2.99€/mo" else "Αναβάθμιση σε Pro • 2,99€/μήνα"
-                            BillingManager.INAPP_LIFETIME -> if (isEnglish) "Unlock Lifetime Pro • 49€" else "Απόκτηση Lifetime Pro • 49€"
-                            else -> if (isEnglish) "Upgrade to Pro • 29€/year" else "Αναβάθμιση σε Pro • 29€/έτος"
+                            BillingManager.SUB_MONTHLY -> "${Localization.tr(lang, "Upgrade to Pro", "Αναβάθμιση σε Pro")} • $monthlyPriceDisplay"
+                            BillingManager.INAPP_LIFETIME -> "${Localization.tr(lang, "Unlock Lifetime Pro", "Απόκτηση Lifetime Pro")} • $lifetimePriceDisplay"
+                            else -> "${Localization.tr(lang, "Upgrade to Pro", "Αναβάθμιση σε Pro")} • $yearlyPriceDisplay"
                         },
                         fontSize = 15.5.sp,
                         fontWeight = FontWeight.ExtraBold
@@ -468,11 +469,11 @@ fun FinsayProShowcasePage(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = if (isEnglish) {
-                        "Secure checkout via Google Play • Cancel subscriptions anytime"
-                    } else {
+                    text = Localization.tr(
+                        lang,
+                        "Secure checkout via Google Play • Cancel subscriptions anytime",
                         "Ασφαλής πληρωμή μέσω Google Play • Ακύρωση συνδρομής ανά πάσα στιγμή"
-                    },
+                    ),
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -495,7 +496,7 @@ fun FinsayProShowcasePage(
                         .testTag("finsay_pro_manage_sub_btn")
                 ) {
                     Text(
-                        text = if (isEnglish) "Manage Subscription in Google Play" else "Διαχείριση Συνδρομής στο Google Play",
+                        text = Localization.tr(lang, "Manage Subscription in Google Play", "Διαχείριση Συνδρομής στο Google Play"),
                         fontWeight = FontWeight.Bold,
                         color = Emerald700
                     )
@@ -506,7 +507,7 @@ fun FinsayProShowcasePage(
 
             // Features Showcase Section
             Text(
-                text = if (isEnglish) "Everything Included in Finsay Pro" else "Όλα όσα περιλαμβάνει το Finsay Pro",
+                text = Localization.tr(lang, "Everything Included in Finsay Pro", "Όλα όσα περιλαμβάνει το Finsay Pro"),
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground,

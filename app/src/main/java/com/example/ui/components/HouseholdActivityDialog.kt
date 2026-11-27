@@ -60,7 +60,6 @@ fun HouseholdActivityDialog(
     onDismiss: () -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEn = lang == Localization.Language.ENGLISH
     val dateFormat = remember(lang) {
         SimpleDateFormat("dd/MM HH:mm", Localization.getDateLocale(lang))
     }
@@ -115,7 +114,7 @@ fun HouseholdActivityDialog(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (isEn) "${activities.size} recent events" else "${activities.size} πρόσφατες κινήσεις",
+                                text = Localization.trFormat(lang, "%1\$d recent events", "%1\$d πρόσφατες κινήσεις", activities.size),
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -194,12 +193,12 @@ fun HouseholdActivityDialog(
                                 else -> Emerald700
                             }
                             val actorLabel = item.actorName.ifBlank {
-                                if (isEn) "Household member" else "Μέλος εξοδολογίου"
+                                Localization.tr(lang, "Household member", "Μέλος εξοδολογίου")
                             }
-                            val summaryText = if (isEn) {
-                                item.summaryEn.ifBlank { item.summaryEl }
-                            } else {
+                            val summaryText = if (lang == Localization.Language.GREEK) {
                                 item.summaryEl.ifBlank { item.summaryEn }
+                            } else {
+                                item.summaryEn.ifBlank { item.summaryEl }
                             }
 
                             Surface(

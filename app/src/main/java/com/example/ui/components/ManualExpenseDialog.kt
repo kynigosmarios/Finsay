@@ -72,6 +72,9 @@ import androidx.core.content.ContextCompat
 import com.example.data.entity.Expense
 import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
+import com.example.data.entity.getPayerShares
+import com.example.data.entity.resolveReconciledBeneficiaries
+import com.example.data.entity.resolveReconciledPayers
 import com.example.ui.theme.Emerald100
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
@@ -149,7 +152,7 @@ fun ManualExpenseDialog(
             validConfigured
         } else {
             val single = defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } }
-                ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                ?: members.firstOrNull { Localization.canonicalRoleKey(it.role) == "PARENT" }
                 ?: members.firstOrNull()
             listOfNotNull(single)
         }
@@ -159,31 +162,9 @@ fun ManualExpenseDialog(
     val selectedPayerIds = remember(expenseToEdit, members, fallbackDefaultPayers) {
         val list = mutableStateListOf<Long>()
         if (expenseToEdit != null) {
-            val parsedIds = if (expenseToEdit.payerAmountsCsv.isNotBlank()) {
-                expenseToEdit.payerAmountsCsv.split(",").mapNotNull { it.split(":").firstOrNull()?.trim()?.toLongOrNull() }
-            } else if (expenseToEdit.payerMemberIdsCsv.isNotBlank()) {
-                expenseToEdit.payerMemberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-            } else if (expenseToEdit.payerMemberId != 0L) {
-                listOf(expenseToEdit.payerMemberId)
-            } else emptyList()
-
-            val valid = parsedIds.filter { id -> members.any { it.id == id } }
-            if (valid.isNotEmpty()) {
-                list.addAll(valid)
-            } else if (expenseToEdit.payerMemberName.isNotBlank()) {
-                val cleanPayer = expenseToEdit.payerMemberName.replace(Regex("\\([^)]*\\)"), "").trim()
-                if (cleanPayer.equals("Γονείς", ignoreCase = true) || cleanPayer.equals("Parents", ignoreCase = true)) {
-                    val parents = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
-                    if (parents.isNotEmpty()) list.addAll(parents.map { it.id })
-                } else {
-                    val names = cleanPayer.split(Regex("[&,/]+")).map { it.trim() }.filter { it.isNotBlank() }
-                    val matched = members.filter { m -> names.any { n -> n.equals(m.name, ignoreCase = true) || cleanPayer.contains(m.name, ignoreCase = true) } }
-                    if (matched.isNotEmpty()) {
-                        list.addAll(matched.map { it.id })
-                    } else if (fallbackDefaultPayers.isNotEmpty()) {
-                        list.addAll(fallbackDefaultPayers.map { it.id })
-                    }
-                }
+            val reconciled = expenseToEdit.resolveReconciledPayers(members)
+            if (reconciled.isNotEmpty()) {
+                list.addAll(reconciled.map { it.id })
             } else if (fallbackDefaultPayers.isNotEmpty()) {
                 list.addAll(fallbackDefaultPayers.map { it.id })
             }
@@ -205,16 +186,25 @@ fun ManualExpenseDialog(
         mutableStateOf(hasCustom)
     }
 
-    val customPayerAmounts = remember(expenseToEdit) {
+    val customPayerAmounts = remember(expenseToEdit, members) {
         val map = mutableStateMapOf<Long, String>()
         if (expenseToEdit != null && expenseToEdit.payerAmountsCsv.isNotBlank()) {
-            expenseToEdit.payerAmountsCsv.split(",").forEach { entry ->
-                val parts = entry.split(":")
-                if (parts.size == 2) {
-                    val id = parts[0].trim().toLongOrNull()
-                    val amt = parts[1].trim().toDoubleOrNull()
-                    if (id != null && amt != null) {
-                        map[id] = String.format(Locale.US, "%.2f", amt)
+            val shares = expenseToEdit.getPayerShares(members)
+            if (shares.isNotEmpty()) {
+                shares.forEach { share ->
+                    if (share.memberId > 0L) {
+                        map[share.memberId] = String.format(Locale.US, "%.2f", share.amount)
+                    }
+                }
+            } else {
+                expenseToEdit.payerAmountsCsv.split(",").forEach { entry ->
+                    val parts = entry.split(":")
+                    if (parts.size == 2) {
+                        val id = parts[0].trim().toLongOrNull()
+                        val amt = parts[1].trim().toDoubleOrNull()
+                        if (id != null && amt != null) {
+                            map[id] = String.format(Locale.US, "%.2f", amt)
+                        }
                     }
                 }
             }
@@ -311,7 +301,7 @@ fun ManualExpenseDialog(
                 Log.e("ManualExpenseDialog", "Error parsing receipt: ${e.message}", e)
                 Toast.makeText(
                     context,
-                    if (lang == Localization.Language.ENGLISH) "Receipt scan failed" else "Σφάλμα ανάγνωσης απόδειξης",
+                    Localization.tr(lang, "Receipt scan failed", "Σφάλμα ανάγνωσης απόδειξης"),
                     Toast.LENGTH_SHORT
                 ).show()
             } finally {
@@ -330,7 +320,7 @@ fun ManualExpenseDialog(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) cameraLauncher.launch(null)
-        else Toast.makeText(context, if (lang == Localization.Language.ENGLISH) "Camera permission is required" else "Απαιτείται άδεια κάμερας", Toast.LENGTH_SHORT).show()
+        else Toast.makeText(context, Localization.tr(lang, "Camera permission is required", "Απαιτείται άδεια κάμερας"), Toast.LENGTH_SHORT).show()
     }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
@@ -346,17 +336,19 @@ fun ManualExpenseDialog(
         }
     }
 
+    fun isCollectiveMemberDisplay(display: String): Boolean {
+        val d = display.trim()
+        if (d.isEmpty()) return false
+        return Localization.Language.entries.any { l ->
+            d.equals(Localization.allMembersWord(l), ignoreCase = true) ||
+                d.equals(Localization.tr(l, "All members", "Όλα τα μέλη"), ignoreCase = true) ||
+                d.equals(Localization.tr(l, "Family Shared", "Κοινό Οικογένειας"), ignoreCase = true) ||
+                d.equals(Localization.tr(l, "Family", "Οικογένεια"), ignoreCase = true)
+        }
+    }
+
     var isAllFamily by remember(expenseToEdit) {
-        val isCollectiveDisplay = expenseToEdit != null && (
-            expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) ||
-                expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true) ||
-                expenseToEdit.memberNamesDisplay.equals("Όλοι", ignoreCase = true) ||
-                expenseToEdit.memberNamesDisplay.equals("All", ignoreCase = true) ||
-                expenseToEdit.memberNamesDisplay.equals("Όλα τα μέλη", ignoreCase = true) ||
-                expenseToEdit.memberNamesDisplay.equals("All members", ignoreCase = true) ||
-                expenseToEdit.memberNamesDisplay.equals("Οικογένεια", ignoreCase = true) ||
-                expenseToEdit.memberNamesDisplay.equals("Family", ignoreCase = true)
-            )
+        val isCollectiveDisplay = expenseToEdit != null && isCollectiveMemberDisplay(expenseToEdit.memberNamesDisplay)
         val hasSpecific = expenseToEdit != null && expenseToEdit.splitType != "ALL_FAMILY" && (
             expenseToEdit.splitType == "SPECIFIC_MEMBERS" ||
                 expenseToEdit.memberIdsCsv.isNotBlank() ||
@@ -369,27 +361,14 @@ fun ManualExpenseDialog(
     val selectedMemberIds = remember(expenseToEdit, members) {
         val list = mutableStateListOf<Long>()
         if (expenseToEdit != null) {
-            val isCollectiveDisplay =
-                expenseToEdit.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) ||
-                    expenseToEdit.memberNamesDisplay.equals("Family Shared", ignoreCase = true) ||
-                    expenseToEdit.memberNamesDisplay.equals("Όλοι", ignoreCase = true) ||
-                    expenseToEdit.memberNamesDisplay.equals("All", ignoreCase = true) ||
-                    expenseToEdit.memberNamesDisplay.equals("Όλα τα μέλη", ignoreCase = true) ||
-                    expenseToEdit.memberNamesDisplay.equals("All members", ignoreCase = true) ||
-                    expenseToEdit.memberNamesDisplay.equals("Οικογένεια", ignoreCase = true) ||
-                    expenseToEdit.memberNamesDisplay.equals("Family", ignoreCase = true)
-            val parsedIds = expenseToEdit.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-            val validIds = parsedIds.filter { id -> members.any { it.id == id } }
-            if (validIds.isNotEmpty()) {
-                list.addAll(validIds)
-            } else if (expenseToEdit.memberNamesDisplay.isNotBlank() && !isCollectiveDisplay) {
-                val raw = expenseToEdit.memberNamesDisplay.trim()
-                if (Localization.isPluralRoleDisplay(raw)) {
-                    val roleKey = Localization.canonicalRoleKey(raw)
-                    list.addAll(members.filter { Localization.canonicalRoleKey(it.role) == roleKey }.map { it.id })
-                } else {
-                    list.addAll(members.filter { m -> expenseToEdit.memberNamesDisplay.contains(m.name, ignoreCase = true) }.map { it.id })
+            val isCollectiveDisplay = isCollectiveMemberDisplay(expenseToEdit.memberNamesDisplay)
+            if (!isCollectiveDisplay && expenseToEdit.splitType != "ALL_FAMILY" && expenseToEdit.splitType != "ALL") {
+                val reconciled = expenseToEdit.resolveReconciledBeneficiaries(members)
+                if (reconciled.isNotEmpty()) {
+                    list.addAll(reconciled.map { it.id })
                 }
+            } else {
+                list.addAll(members.map { it.id })
             }
         } else {
             list.addAll(members.map { it.id })
@@ -470,9 +449,9 @@ fun ManualExpenseDialog(
                 ) {
                     val dialogTitle = when {
                         isReminderMode && isEditingExistingReminder ->
-                            if (lang == Localization.Language.ENGLISH) "Edit Bill Reminder" else "Επεξεργασία Υπενθύμισης"
+                            Localization.tr(lang, "Edit Bill Reminder", "Επεξεργασία Υπενθύμισης")
                         isReminderMode ->
-                            if (lang == Localization.Language.ENGLISH) "New Bill Reminder" else "Νέα Υπενθύμιση Εξόδου"
+                            Localization.tr(lang, "New Bill Reminder", "Νέα Υπενθύμιση Εξόδου")
                         expenseToEdit == null -> Localization.recordExpenseTitle(lang)
                         else -> Localization.editExpenseTitle(lang)
                     }
@@ -507,7 +486,7 @@ fun ManualExpenseDialog(
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.CameraAlt,
-                                        contentDescription = "Σάρωση Απόδειξης",
+                                        contentDescription = Localization.tr(lang, "Scan Receipt", "Σάρωση Απόδειξης"),
                                         tint = Emerald700,
                                         modifier = Modifier.size(17.dp)
                                     )
@@ -724,13 +703,13 @@ fun ManualExpenseDialog(
                             val nextTitleError = if (title.isBlank()) Localization.fillDescriptionError(lang) else null
                             val nextAmountError = if (parsedAmount == null || parsedAmount <= 0) Localization.fillAmountError(lang) else null
                             val nextCategoryError = if (chosenCat == null) {
-                                if (lang == Localization.Language.ENGLISH) "Please select a category" else "Επιλέξτε κατηγορία εξόδου"
+                                Localization.tr(lang, "Please select a category", "Επιλέξτε κατηγορία εξόδου")
                             } else null
                             val nextPayerError = if (!hasValidPayer) {
-                                if (lang == Localization.Language.ENGLISH) "Please select who paid" else "Επιλέξτε ποιος πλήρωσε το έξοδο"
+                                Localization.tr(lang, "Please select who paid", "Επιλέξτε ποιος πλήρωσε το έξοδο")
                             } else null
                             val nextBeneficiaryError = if (!hasValidBeneficiary) {
-                                if (lang == Localization.Language.ENGLISH) "Please select who this expense is for" else "Επιλέξτε σε ποιον αφορά το έξοδο"
+                                Localization.tr(lang, "Please select who this expense is for", "Επιλέξτε σε ποιον αφορά το έξοδο")
                             } else null
 
                             titleError = nextTitleError

@@ -314,8 +314,8 @@ internal object ReceiptAmountAndQrParser {
             .connectTimeout(3500, TimeUnit.MILLISECONDS)
             .readTimeout(3500, TimeUnit.MILLISECONDS)
             .callTimeout(4500, TimeUnit.MILLISECONDS)
-            .followRedirects(true)
-            .followSslRedirects(true)
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
     }
 
@@ -556,19 +556,42 @@ internal object ReceiptAmountAndQrParser {
 
         val remoteData = withContext(Dispatchers.IO) {
             try {
-                val request = Request.Builder()
-                    .url(trimmed)
-                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) FinsayReceiptReader/1.0")
-                    .header("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
-                    .header("Accept-Language", "el-GR,el;q=0.9,en;q=0.8")
-                    .get()
-                    .build()
+                var currentUrl = trimmed
+                var parsedBody: InternalQrData? = null
+                for (hop in 0..2) {
+                    val hopUri = try { Uri.parse(currentUrl) } catch (_: Exception) { null }
+                    if (hopUri?.scheme?.lowercase(Locale.ROOT) != "https" || !isAllowedAadeOrInvoiceHost(hopUri.host)) {
+                        break
+                    }
+                    val request = Request.Builder()
+                        .url(currentUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) FinsayReceiptReader/1.0")
+                        .header("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
+                        .header("Accept-Language", "el-GR,el;q=0.9,en;q=0.8")
+                        .get()
+                        .build()
 
-                aadeHttpClient.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@withContext null
-                    val body = response.body?.string()?.take(262_144) ?: return@withContext null
-                    parseAadeVerificationHtmlOrJson(body)
+                    var nextRedirectUrl: String? = null
+                    aadeHttpClient.newCall(request).execute().use { response ->
+                        if (response.isRedirect) {
+                            val location = response.header("Location")?.trim()
+                            if (!location.isNullOrBlank()) {
+                                val resolved = response.request.url.resolve(location)
+                                if (resolved != null && resolved.isHttps && isAllowedAadeOrInvoiceHost(resolved.host)) {
+                                    nextRedirectUrl = resolved.toString()
+                                }
+                            }
+                        } else if (response.isSuccessful) {
+                            val body = response.body?.string()?.take(262_144)
+                            if (!body.isNullOrBlank()) {
+                                parsedBody = parseAadeVerificationHtmlOrJson(body)
+                            }
+                        }
+                    }
+                    if (parsedBody != null || nextRedirectUrl == null) break
+                    currentUrl = nextRedirectUrl!!
                 }
+                parsedBody
             } catch (_: Exception) {
                 null
             }

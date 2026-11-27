@@ -1,16 +1,22 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,26 +32,33 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Receipt
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.entity.Expense
@@ -53,6 +66,8 @@ import com.example.data.entity.Income
 import com.example.ui.components.CategoryIconHelper
 import com.example.ui.theme.Emerald700
 import com.example.util.Localization
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Composable
 internal fun ExpensesEmptyStateCard(
@@ -85,7 +100,7 @@ internal fun ExpensesEmptyStateCard(
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = if (isIncomeMode) {
-                    if (lang == Localization.Language.ENGLISH) "No incomes found" else "Δεν βρέθηκαν έσοδα"
+                    Localization.tr(lang, "No incomes found", "Δεν βρέθηκαν έσοδα")
                 } else {
                     Localization.noExpensesFound(lang)
                 },
@@ -114,9 +129,9 @@ internal fun ExpensesEmptyStateCard(
                     )
                     Text(
                         text = if (isIncomeMode) {
-                            if (lang == Localization.Language.ENGLISH) "Add Income" else "Καταχώρηση Εσόδου"
+                            Localization.tr(lang, "Add Income", "Καταχώρηση Εσόδου")
                         } else {
-                            if (lang == Localization.Language.ENGLISH) "Add Expense" else "Καταχώρηση Εξόδου"
+                            Localization.tr(lang, "Add Expense", "Καταχώρηση Εξόδου")
                         },
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold,
@@ -128,7 +143,31 @@ internal fun ExpensesEmptyStateCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+internal enum class ExpenseSwipeAction { NONE, DELETE, DUPLICATE }
+
+internal object ExpenseSwipePolicy {
+    // Must drag at least 72% across the card width (nearly edge-to-edge); velocity flicks NEVER trigger.
+    const val TRIGGER_WIDTH_FRACTION = 0.72f
+    const val HORIZONTAL_LOCK_RATIO = 2.5f
+    const val VERTICAL_CANCEL_DP = 12f
+    const val HORIZONTAL_START_SLOP_DP = 28f
+
+    fun evaluateAction(
+        offsetPx: Float,
+        cardWidthPx: Float,
+        canDuplicate: Boolean,
+        wasCancelled: Boolean
+    ): ExpenseSwipeAction {
+        if (wasCancelled || cardWidthPx <= 0f) return ExpenseSwipeAction.NONE
+        val requiredPx = cardWidthPx * TRIGGER_WIDTH_FRACTION
+        return when {
+            offsetPx <= -requiredPx -> ExpenseSwipeAction.DELETE
+            canDuplicate && offsetPx >= requiredPx -> ExpenseSwipeAction.DUPLICATE
+            else -> ExpenseSwipeAction.NONE
+        }
+    }
+}
+
 @Composable
 internal fun ExpenseCardItem(
     item: ActivityItem.ExpenseItem,
@@ -143,44 +182,146 @@ internal fun ExpenseCardItem(
     val currentExpense by rememberUpdatedState(expense)
     val currentOnSwipeDelete by rememberUpdatedState(onSwipeDeleteExpense ?: onDeleteExpense)
     val currentOnDuplicate by rememberUpdatedState(onDuplicateExpense)
-    val isEn = lang == Localization.Language.ENGLISH
+    val canDuplicate by rememberUpdatedState(onDuplicateExpense != null)
 
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.EndToStart -> {
-                    currentOnSwipeDelete(currentExpense)
-                    false
-                }
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    currentOnDuplicate?.invoke(currentExpense)
-                    false
-                }
-                SwipeToDismissBoxValue.Settled -> false
-            }
-        },
-        positionalThreshold = { totalDistance -> totalDistance * 0.62f }
+    val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
+    val horizontalStartSlopPx = with(density) { ExpenseSwipePolicy.HORIZONTAL_START_SLOP_DP.dp.toPx() }
+    val verticalCancelSlopPx = with(density) { ExpenseSwipePolicy.VERTICAL_CANCEL_DP.dp.toPx() }
+
+    var cardWidthPx by remember { mutableFloatStateOf(0f) }
+    var rawOffsetPx by remember(expense.id) { mutableFloatStateOf(0f) }
+    var isHorizontalDragging by remember(expense.id) { mutableStateOf(false) }
+
+    val animatedOffsetPx by animateFloatAsState(
+        targetValue = rawOffsetPx,
+        animationSpec = if (isHorizontalDragging) snap() else spring(stiffness = Spring.StiffnessMediumLow),
+        label = "expense_swipe_offset"
     )
 
-    SwipeToDismissBox(
-        state = dismissState,
+    val triggerThresholdPx = (cardWidthPx * ExpenseSwipePolicy.TRIGGER_WIDTH_FRACTION).coerceAtLeast(1f)
+    val swipeProgress = (abs(animatedOffsetPx) / triggerThresholdPx).coerceIn(0f, 1f)
+    val isRepeat = animatedOffsetPx > 1f
+    val isDelete = animatedOffsetPx < -1f
+    val thresholdReached = cardWidthPx > 0f && abs(animatedOffsetPx) >= triggerThresholdPx
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp),
-        enableDismissFromStartToEnd = onDuplicateExpense != null,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
-            val isRepeat = direction == SwipeToDismissBoxValue.StartToEnd
-            val isDelete = direction == SwipeToDismissBoxValue.EndToStart
+            .padding(horizontal = 16.dp, vertical = 2.dp)
+            .onSizeChanged { size -> cardWidthPx = size.width.toFloat() }
+            .pointerInput(expense.id, horizontalStartSlopPx, verticalCancelSlopPx) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var totalDx = 0f
+                    var totalDy = 0f
+                    var lockedHorizontal = false
+                    var hapticFired = false
+                    var cancelled = false
+                    var finalOffset = 0f
+
+                    try {
+                        while (true) {
+                            val pass = if (lockedHorizontal) PointerEventPass.Initial else PointerEventPass.Main
+                            val event = awaitPointerEvent(pass = pass)
+                            if (event.changes.count { it.pressed } > 1) {
+                                cancelled = true
+                                break
+                            }
+
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: event.changes.firstOrNull()
+                                ?: break
+
+                            if (!change.pressed) {
+                                if (change.isConsumed) {
+                                    cancelled = true
+                                } else if (lockedHorizontal) {
+                                    // Prevent child clickable / IconButton from firing on swipe release
+                                    change.consume()
+                                }
+                                break
+                            }
+
+                            val dx = change.position.x - change.previousPosition.x
+                            val dy = change.position.y - change.previousPosition.y
+
+                            if (!lockedHorizontal) {
+                                if (change.isConsumed) {
+                                    cancelled = true
+                                    break
+                                }
+                                totalDx += dx
+                                totalDy += dy
+
+                                // Yield immediately to vertical LazyColumn scrolling
+                                if (abs(totalDy) > verticalCancelSlopPx) {
+                                    cancelled = true
+                                    break
+                                }
+
+                                if (abs(totalDx) >= horizontalStartSlopPx) {
+                                    val isStrictlyHorizontal =
+                                        abs(totalDx) >= abs(totalDy) * ExpenseSwipePolicy.HORIZONTAL_LOCK_RATIO
+                                    val directionAllowed = totalDx < 0f || canDuplicate
+                                    if (isStrictlyHorizontal && directionAllowed) {
+                                        lockedHorizontal = true
+                                        isHorizontalDragging = true
+                                        change.consume()
+                                        val minOffset = -cardWidthPx
+                                        val maxOffset = if (canDuplicate) cardWidthPx else 0f
+                                        // Start smoothly from 0 so the card never jumps
+                                        rawOffsetPx = dx.coerceIn(minOffset, maxOffset)
+                                    } else {
+                                        cancelled = true
+                                        break
+                                    }
+                                }
+                            } else {
+                                if (dx != 0f || dy != 0f) {
+                                    change.consume()
+                                }
+                                val minOffset = -cardWidthPx
+                                val maxOffset = if (canDuplicate) cardWidthPx else 0f
+                                val nextOffset = (rawOffsetPx + dx).coerceIn(minOffset, maxOffset)
+                                rawOffsetPx = nextOffset
+
+                                val reachedNow = cardWidthPx > 0f &&
+                                    abs(nextOffset) >= cardWidthPx * ExpenseSwipePolicy.TRIGGER_WIDTH_FRACTION
+                                if (reachedNow && !hapticFired) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    hapticFired = true
+                                } else if (!reachedNow) {
+                                    hapticFired = false
+                                }
+                            }
+                        }
+                        finalOffset = rawOffsetPx
+                    } finally {
+                        isHorizontalDragging = false
+                        rawOffsetPx = 0f
+                    }
+
+                    if (lockedHorizontal && !cancelled) {
+                        when (ExpenseSwipePolicy.evaluateAction(finalOffset, cardWidthPx, canDuplicate, wasCancelled = false)) {
+                            ExpenseSwipeAction.DELETE -> currentOnSwipeDelete(currentExpense)
+                            ExpenseSwipeAction.DUPLICATE -> currentOnDuplicate?.invoke(currentExpense)
+                            ExpenseSwipeAction.NONE -> Unit
+                        }
+                    }
+                }
+            }
+    ) {
+        // Reveal background strictly while actively swiped horizontally
+        if (isRepeat || isDelete) {
+            val baseAlpha = if (thresholdReached) 0.24f else (0.08f + 0.12f * swipeProgress)
             val bgColor = when {
-                isRepeat -> Emerald700.copy(alpha = 0.16f)
-                isDelete -> Color(0xFFEF4444).copy(alpha = 0.16f)
-                else -> Color.Transparent
+                isRepeat -> Emerald700.copy(alpha = baseAlpha)
+                else -> Color(0xFFEF4444).copy(alpha = baseAlpha)
             }
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .matchParentSize()
                     .clip(RoundedCornerShape(18.dp))
                     .background(bgColor)
                     .padding(horizontal = 20.dp),
@@ -193,39 +334,39 @@ internal fun ExpenseCardItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ContentCopy,
-                            contentDescription = if (isEn) "Repeat today" else "Επανάληψη σήμερα",
-                            tint = Emerald700,
+                            contentDescription = Localization.tr(lang, "Repeat today", "Επανάληψη σήμερα"),
+                            tint = Emerald700.copy(alpha = if (thresholdReached) 1f else 0.7f),
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
-                            text = if (isEn) "Repeat today" else "Επανάληψη σήμερα",
-                            color = Emerald700,
+                            text = Localization.tr(lang, "Repeat today", "Επανάληψη σήμερα"),
+                            color = Emerald700.copy(alpha = if (thresholdReached) 1f else 0.7f),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
-                } else if (isDelete) {
+                } else {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = if (isEn) "Delete" else "Διαγραφή",
-                            color = Color(0xFFEF4444),
+                            text = Localization.delete(lang),
+                            color = Color(0xFFEF4444).copy(alpha = if (thresholdReached) 1f else 0.7f),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = if (isEn) "Delete" else "Διαγραφή",
-                            tint = Color(0xFFEF4444),
+                            contentDescription = Localization.delete(lang),
+                            tint = Color(0xFFEF4444).copy(alpha = if (thresholdReached) 1f else 0.7f),
                             modifier = Modifier.size(20.dp)
                         )
                     }
                 }
             }
         }
-    ) {
+
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
@@ -233,6 +374,7 @@ internal fun ExpenseCardItem(
         tonalElevation = 1.dp,
         modifier = Modifier
             .fillMaxWidth()
+            .offset { IntOffset(animatedOffsetPx.roundToInt(), 0) }
             .clickable { onEditExpense(expense) }
             .testTag("expense_card_${expense.id}")
     ) {

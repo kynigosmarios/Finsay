@@ -240,7 +240,7 @@ internal fun ManualExpensePayerAndSplitSection(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Share per person" else "Μερίδιο ανά άτομο",
+                            text = Localization.tr(lang, "Share per person", "Μερίδιο ανά άτομο"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -458,7 +458,7 @@ internal fun ManualExpensePayerAndSplitSection(
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-            text = if (lang == Localization.Language.ENGLISH) "Who is this expense for?" else "Σε ποιον αφορά το έξοδο;",
+            text = Localization.tr(lang, "Who is this expense for?", "Σε ποιον αφορά το έξοδο;"),
             fontSize = 13.5.sp,
             fontWeight = FontWeight.SemiBold,
             color = if (beneficiaryError != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -495,7 +495,7 @@ internal fun ManualExpensePayerAndSplitSection(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (lang == Localization.Language.ENGLISH) "All members" else "Όλα τα μέλη",
+                text = Localization.tr(lang, "All members", "Όλα τα μέλη"),
                 fontSize = 13.sp,
                 fontWeight = if (isAllFamily) FontWeight.Bold else FontWeight.Normal
             )
@@ -569,7 +569,7 @@ internal fun ManualExpensePayerAndSplitSection(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH) "Per person" else "Ανά άτομο",
+                    text = Localization.tr(lang, "Per person", "Ανά άτομο"),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -107,7 +107,7 @@ fun QuickActionChooserDialog(
 
                     // Voice Command
                     QuickActionItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Voice Command" else "Φωνητική εντολή",
+                        title = Localization.tr(lang, "Voice Command", "Φωνητική εντολή"),
                         icon = Icons.Default.Mic,
                         iconBgColor = Emerald700,
                         iconTint = Color.White,
@@ -123,7 +123,7 @@ fun QuickActionChooserDialog(
 
                     // Scan Receipt
                     QuickActionItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Scan Receipt" else "Σάρωση Απόδειξης",
+                        title = Localization.tr(lang, "Scan Receipt", "Σάρωση Απόδειξης"),
                         icon = Icons.Default.CameraAlt,
                         iconBgColor = Color(0xFFD97706),
                         iconTint = Color.White,
@@ -139,7 +139,7 @@ fun QuickActionChooserDialog(
 
                     // Add Expense
                     QuickActionItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Add Expense" else "Καταχώρηση Εξόδου",
+                        title = Localization.tr(lang, "Add Expense", "Καταχώρηση Εξόδου"),
                         icon = Icons.Default.FlashOn,
                         iconBgColor = Color(0xFF0284C7),
                         iconTint = Color.White,
@@ -155,7 +155,7 @@ fun QuickActionChooserDialog(
 
                     // Add Income
                     QuickActionItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Add Income" else "Καταχώρηση Εσόδου",
+                        title = Localization.tr(lang, "Add Income", "Καταχώρηση Εσόδου"),
                         icon = Icons.Default.TrendingUp,
                         iconBgColor = Color(0xFF059669),
                         iconTint = Color.White,
@@ -171,7 +171,7 @@ fun QuickActionChooserDialog(
 
                     // Open App
                     QuickActionItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Open App" else "Άνοιγμα εφαρμογής",
+                        title = Localization.tr(lang, "Open App", "Άνοιγμα εφαρμογής"),
                         icon = Icons.Default.Dashboard,
                         iconBgColor = MaterialTheme.colorScheme.surfaceVariant,
                         iconTint = MaterialTheme.colorScheme.onSurface,

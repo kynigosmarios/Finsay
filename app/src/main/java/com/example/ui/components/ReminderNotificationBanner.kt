@@ -70,6 +70,7 @@ import androidx.compose.ui.zIndex
 import com.example.data.entity.RecurringExpense
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
+import com.example.util.Localization
 import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -83,7 +84,7 @@ fun ReminderNotificationBanner(
     modifier: Modifier = Modifier
 ) {
     if (reminders.isEmpty()) return
-    val isGreek = !appLanguage.equals("EN", ignoreCase = true)
+    val lang = Localization.Language.fromCode(appLanguage)
 
     var selectedIndex by remember { mutableIntStateOf(0) }
     LaunchedEffect(reminders.size) {
@@ -176,7 +177,7 @@ fun ReminderNotificationBanner(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = if (isGreek) "Αγνόηση" else "Ignore",
+                                text = Localization.tr(lang, "Ignore", "Αγνόηση"),
                                 color = MaterialTheme.colorScheme.error,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
@@ -270,7 +271,7 @@ fun ReminderNotificationBanner(
                             }
 
                             Text(
-                                text = if (isGreek) "Υπενθύμιση Εξόδου" else "Expense Reminder",
+                                text = Localization.tr(lang, "Expense Reminder", "Υπενθύμιση Εξόδου"),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -292,7 +293,7 @@ fun ReminderNotificationBanner(
                                     ) {
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                            contentDescription = "Previous",
+                                            contentDescription = Localization.tr(lang, "Previous", "Προηγούμενο"),
                                             tint = if (currentIndex > 0) Amber700 else Amber700.copy(alpha = 0.3f),
                                             modifier = Modifier
                                                 .size(16.dp)
@@ -310,7 +311,7 @@ fun ReminderNotificationBanner(
                                         )
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                            contentDescription = "Next",
+                                            contentDescription = Localization.tr(lang, "Next", "Επόμενο"),
                                             tint = if (currentIndex < reminders.size - 1) Amber700 else Amber700.copy(alpha = 0.3f),
                                             modifier = Modifier
                                                 .size(16.dp)
@@ -328,7 +329,7 @@ fun ReminderNotificationBanner(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = if (isGreek) "Αγνόηση" else "Dismiss",
+                                    contentDescription = Localization.tr(lang, "Dismiss", "Αγνόηση"),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -367,7 +368,7 @@ fun ReminderNotificationBanner(
                                         color = Amber700.copy(alpha = 0.14f)
                                     ) {
                                         Text(
-                                            text = if (isGreek) "Πάγιο" else "Due",
+                                            text = Localization.tr(lang, "Due", "Πάγιο"),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = Amber700,
@@ -385,7 +386,7 @@ fun ReminderNotificationBanner(
                                     )
                                     val summary = com.example.util.RecurringScheduleHelper.scheduleSummary(
                                         currentReminder,
-                                        if (isGreek) com.example.util.Localization.Language.GREEK else com.example.util.Localization.Language.ENGLISH
+                                        lang
                                     )
                                     Text(
                                         text = "$summary • $timeFormatted",
@@ -432,7 +433,7 @@ fun ReminderNotificationBanner(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isGreek) "Καταγραφή" else "Record",
+                                    text = Localization.tr(lang, "Record", "Καταγραφή"),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -448,7 +449,7 @@ fun ReminderNotificationBanner(
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                             ) {
                                 Text(
-                                    text = if (isGreek) "Αγνόηση" else "Ignore",
+                                    text = Localization.tr(lang, "Ignore", "Αγνόηση"),
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,

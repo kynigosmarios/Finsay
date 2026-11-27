@@ -14,6 +14,7 @@ import com.example.data.model.UserProfile
 import com.example.data.repository.FirestoreSyncRepository
 import com.example.util.CurrencyFormatter
 import com.example.util.DefaultPayerHelper
+import com.example.util.Localization
 import com.example.util.StartupSafety
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.CancellationException
@@ -164,7 +165,8 @@ internal class OikoNomosHouseholdDelegate(
             .putString("user_household_${effectiveUser.uid}", safeUserHid)
             .putString("last_household_id", safeUserHid)
             .apply()
-        val defaultHouseholdName = if (vm._appLanguage.value == "EL") "Το Εξοδολόγιό μου" else "My Household Book"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
+        val defaultHouseholdName = Localization.myExodologio(lang)
         if (vm._currentHousehold.value == null || !StartupSafety.isHouseholdAllowedForUser(vm._currentHousehold.value?.id.orEmpty(), false, emptySet(), explicitlyKnownHids)) {
             val defaultH = Household(
                 id = safeUserHid,
@@ -211,17 +213,25 @@ internal class OikoNomosHouseholdDelegate(
                 vm.prefs.edit().putString("last_household_id", household.id).apply()
                 vm._currentHousehold.value = household
                 vm.observeHouseholdData(household.id)
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
-                    if (isEn) "Household book created: ${household.name}!"
-                    else "Δημιουργήθηκε το εξοδολόγιο: ${household.name}!"
+                    Localization.trFormat(
+                        lang,
+                        "Household book created: %1\$s!",
+                        "Δημιουργήθηκε το εξοδολόγιο: %1\$s!",
+                        household.name
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
-                    if (isEn) "Creation error: ${e.localizedMessage ?: e.message}"
-                    else "Σφάλμα δημιουργίας: ${e.localizedMessage ?: e.message}"
+                    Localization.trFormat(
+                        lang,
+                        "Creation error: %1\$s",
+                        "Σφάλμα δημιουργίας: %1\$s",
+                        e.localizedMessage ?: e.message.orEmpty()
+                    )
                 )
             } finally {
                 vm._isSyncing.value = false
@@ -236,25 +246,33 @@ internal class OikoNomosHouseholdDelegate(
             vm.trackSyncStart()
             try {
                 vm._isSyncing.value = true
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 val result = vm.firestoreSyncRepo.joinHouseholdByCode(user.uid, code, role)
                 result.onSuccess { h ->
                     vm.prefs.edit().putString("last_household_id", h.id).apply()
                     vm._currentHousehold.value = h
                     vm.observeHouseholdData(h.id)
                     vm.showSnackbar(
-                        if (isEn) "Joined household book: ${h.name}!"
-                        else "Συνδεθήκατε στο εξοδολόγιο: ${h.name}!"
+                        Localization.trFormat(
+                            lang,
+                            "Joined household book: %1\$s!",
+                            "Συνδεθήκατε στο εξοδολόγιο: %1\$s!",
+                            h.name
+                        )
                     )
                 }.onFailure { err ->
-                    vm.showSnackbar(err.message ?: if (isEn) "Failed to join" else "Αποτυχία σύνδεσης")
+                    vm.showSnackbar(err.message ?: Localization.tr(lang, "Failed to join", "Αποτυχία σύνδεσης"))
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
-                    if (isEn) "Connection error: ${e.localizedMessage ?: e.message}"
-                    else "Σφάλμα σύνδεσης: ${e.localizedMessage ?: e.message}"
+                    Localization.trFormat(
+                        lang,
+                        "Connection error: %1\$s",
+                        "Σφάλμα σύνδεσης: %1\$s",
+                        e.localizedMessage ?: e.message.orEmpty()
+                    )
                 )
             } finally {
                 vm._isSyncing.value = false
@@ -276,17 +294,17 @@ internal class OikoNomosHouseholdDelegate(
     fun searchVerifiedUserForSharing(email: String, householdId: String) {
         val user = vm._currentUser.value ?: return
         val cleanEmail = email.trim()
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (cleanEmail.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
             vm._verifiedUserLookupState.value = OikoNomosViewModel.VerifiedUserLookupState.Error(
-                if (isEn) "Enter a valid email" else "Εισάγετε έγκυρο email"
+                Localization.tr(lang, "Enter a valid email", "Εισάγετε έγκυρο email")
             )
             return
         }
         val targetHousehold = vm._userHouseholds.value.find { it.id == householdId } ?: vm._currentHousehold.value
         if (targetHousehold != null && !vm.isUserCreatorOfHousehold(targetHousehold)) {
             vm._verifiedUserLookupState.value = OikoNomosViewModel.VerifiedUserLookupState.Error(
-                if (isEn) "Only the creator can share" else "Μόνο ο δημιουργός μπορεί να κοινοποιήσει"
+                Localization.tr(lang, "Only the creator can share", "Μόνο ο δημιουργός μπορεί να κοινοποιήσει")
             )
             return
         }
@@ -323,7 +341,7 @@ internal class OikoNomosHouseholdDelegate(
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 vm._verifiedUserLookupState.value = OikoNomosViewModel.VerifiedUserLookupState.Error(
-                    if (isEn) "Search error" else "Σφάλμα αναζήτησης"
+                    Localization.tr(lang, "Search error", "Σφάλμα αναζήτησης")
                 )
             }
         }
@@ -331,9 +349,9 @@ internal class OikoNomosHouseholdDelegate(
 
     fun shareHouseholdWithVerifiedUser(householdId: String, targetUser: UserProfile, role: HouseholdRole) {
         val targetHousehold = vm._userHouseholds.value.find { it.id == householdId } ?: vm._currentHousehold.value
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (targetHousehold != null && !vm.isUserCreatorOfHousehold(targetHousehold)) {
-            vm.showSnackbar(if (isEn) "Only the creator can share this household" else "Μόνο ο δημιουργός μπορεί να κοινοποιήσει το εξοδολόγιο")
+            vm.showSnackbar(Localization.tr(lang, "Only the creator can share this household", "Μόνο ο δημιουργός μπορεί να κοινοποιήσει το εξοδολόγιο"))
             return
         }
         val assignedRole = if (role == HouseholdRole.CREATOR) HouseholdRole.REGISTAR else role
@@ -355,10 +373,10 @@ internal class OikoNomosHouseholdDelegate(
                     summaryEn = "Shared with $displayName",
                     householdIdOverride = householdId
                 )
-                vm.showSnackbar(if (isEn) "Added $displayName" else "Προστέθηκε ο χρήστης $displayName")
+                vm.showSnackbar(Localization.trFormat(lang, "Added %1\$s", "Προστέθηκε ο χρήστης %1\$s", displayName))
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar(if (isEn) "Error sharing: ${e.message}" else "Σφάλμα κοινοποίησης: ${e.message}")
+                vm.showSnackbar(Localization.trFormat(lang, "Error sharing: %1\$s", "Σφάλμα κοινοποίησης: %1\$s", e.message.orEmpty()))
             } finally {
                 vm._isSyncing.value = false
                 vm.trackSyncEnd()
@@ -368,9 +386,9 @@ internal class OikoNomosHouseholdDelegate(
 
     fun updateSharedUserRole(householdId: String, targetUid: String, targetEmail: String, newRole: HouseholdRole) {
         val targetHousehold = vm._userHouseholds.value.find { it.id == householdId } ?: vm._currentHousehold.value
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (targetHousehold != null && !vm.isUserCreatorOfHousehold(targetHousehold)) {
-            vm.showSnackbar(if (isEn) "Only the creator can change roles" else "Μόνο ο δημιουργός μπορεί να αλλάξει δικαιώματα")
+            vm.showSnackbar(Localization.tr(lang, "Only the creator can change roles", "Μόνο ο δημιουργός μπορεί να αλλάξει δικαιώματα"))
             return
         }
         if (targetHousehold?.ownerId == targetUid || newRole == HouseholdRole.CREATOR) return
@@ -384,7 +402,7 @@ internal class OikoNomosHouseholdDelegate(
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar(if (isEn) "Error updating role: ${e.message}" else "Σφάλμα αλλαγής ρόλου: ${e.message}")
+                vm.showSnackbar(Localization.trFormat(lang, "Error updating role: %1\$s", "Σφάλμα αλλαγής ρόλου: %1\$s", e.message.orEmpty()))
             } finally {
                 vm.trackSyncEnd()
             }
@@ -393,9 +411,9 @@ internal class OikoNomosHouseholdDelegate(
 
     fun removeSharedUserFromHousehold(householdId: String, targetUid: String, targetEmail: String) {
         val targetHousehold = vm._userHouseholds.value.find { it.id == householdId } ?: vm._currentHousehold.value
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (targetHousehold != null && !vm.isUserCreatorOfHousehold(targetHousehold)) {
-            vm.showSnackbar(if (isEn) "Only the creator can remove users" else "Μόνο ο δημιουργός μπορεί να αφαιρέσει χρήστες")
+            vm.showSnackbar(Localization.tr(lang, "Only the creator can remove users", "Μόνο ο δημιουργός μπορεί να αφαιρέσει χρήστες"))
             return
         }
         if (targetHousehold?.ownerId == targetUid) return
@@ -434,10 +452,10 @@ internal class OikoNomosHouseholdDelegate(
                         }
                     }
                 }
-                vm.showSnackbar(if (isEn) "User removed" else "Ο χρήστης αφαιρέθηκε")
+                vm.showSnackbar(Localization.tr(lang, "User removed", "Ο χρήστης αφαιρέθηκε"))
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar(if (isEn) "Error removing user: ${e.message}" else "Σφάλμα αφαίρεσης: ${e.message}")
+                vm.showSnackbar(Localization.trFormat(lang, "Error removing user: %1\$s", "Σφάλμα αφαίρεσης: %1\$s", e.message.orEmpty()))
             } finally {
                 vm.trackSyncEnd()
             }
@@ -457,12 +475,15 @@ internal class OikoNomosHouseholdDelegate(
         val resolvedHid = householdId.ifBlank { vm._currentHousehold.value?.id.orEmpty() }.trim()
         val targetHousehold = vm._userHouseholds.value.find { it.id == resolvedHid }
             ?: vm._currentHousehold.value?.takeIf { resolvedHid.isBlank() || it.id == resolvedHid }
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
 
         if (!DefaultPayerHelper.canAssignDefaultPayers(targetHousehold, currentUserUid, cleanUid)) {
             vm.showSnackbar(
-                if (isEn) "Only the owner can change another user's default payer"
-                else "Μόνο ο ιδιοκτήτης μπορεί να αλλάξει τον προεπιλεγμένο πληρωτή άλλου χρήστη"
+                Localization.tr(
+                    lang,
+                    "Only the owner can change another user's default payer",
+                    "Μόνο ο ιδιοκτήτης μπορεί να αλλάξει τον προεπιλεγμένο πληρωτή άλλου χρήστη"
+                )
             )
             return
         }
@@ -518,16 +539,16 @@ internal class OikoNomosHouseholdDelegate(
     fun inviteMemberByEmail(email: String, role: String = "REGISTAR", @Suppress("UNUSED_PARAMETER") context: Context? = null, onComplete: ((Boolean, String) -> Unit)? = null) {
         val hid = vm._currentHousehold.value?.id ?: return
         val cleanEmail = email.trim()
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (cleanEmail.isBlank() || !Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
-            val err = if (isEn) "Please enter a valid email address" else "Παρακαλώ εισάγετε έγκυρη διεύθυνση email"
+            val err = Localization.tr(lang, "Please enter a valid email address", "Παρακαλώ εισάγετε έγκυρη διεύθυνση email")
             vm.showSnackbar(err)
             onComplete?.invoke(false, err)
             return
         }
         val targetHousehold = vm._currentHousehold.value
         if (targetHousehold != null && !vm.isUserCreatorOfHousehold(targetHousehold)) {
-            val err = if (isEn) "Only the creator can share this household" else "Μόνο ο δημιουργός μπορεί να κοινοποιήσει το εξοδολόγιο"
+            val err = Localization.tr(lang, "Only the creator can share this household", "Μόνο ο δημιουργός μπορεί να κοινοποιήσει το εξοδολόγιο")
             vm.showSnackbar(err)
             onComplete?.invoke(false, err)
             return
@@ -554,18 +575,25 @@ internal class OikoNomosHouseholdDelegate(
                             if (vm._currentHousehold.value?.id == hid) vm._currentHousehold.value = updated
                         }
                         val displayName = lookup.user.displayName.ifBlank { cleanEmail }
-                        vm.showSnackbar(if (isEn) "Household shared with $displayName!" else "Το εξοδολόγιο κοινοποιήθηκε στον χρήστη $displayName!")
+                        vm.showSnackbar(
+                            Localization.trFormat(
+                                lang,
+                                "Household shared with %1\$s!",
+                                "Το εξοδολόγιο κοινοποιήθηκε στον χρήστη %1\$s!",
+                                displayName
+                            )
+                        )
                         onComplete?.invoke(true, cleanEmail)
                     }
                     else -> {
-                        val notFoundMsg = if (isEn) "Not found" else "Δεν βρέθηκε"
+                        val notFoundMsg = Localization.tr(lang, "Not found", "Δεν βρέθηκε")
                         vm.showSnackbar(notFoundMsg)
                         onComplete?.invoke(false, notFoundMsg)
                     }
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val errMsg = if (isEn) "Error sharing household: ${e.message}" else "Σφάλμα κοινοποίησης: ${e.message}"
+                val errMsg = Localization.trFormat(lang, "Error sharing household: %1\$s", "Σφάλμα κοινοποίησης: %1\$s", e.message.orEmpty())
                 vm.showSnackbar(errMsg)
                 onComplete?.invoke(false, errMsg)
             } finally {
@@ -578,10 +606,10 @@ internal class OikoNomosHouseholdDelegate(
     fun removeMemberByEmail(email: String) {
         val hid = vm._currentHousehold.value?.id ?: return
         val cleanEmail = email.trim()
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val ownerEmail = vm._currentUser.value?.email ?: vm._userProfile.value?.email ?: ""
         if (cleanEmail.equals(ownerEmail, ignoreCase = true)) {
-            vm.showSnackbar(if (isEn) "Cannot remove the household creator" else "Δεν μπορείτε να αφαιρέσετε τον δημιουργό του εξοδολογίου")
+            vm.showSnackbar(Localization.tr(lang, "Cannot remove the household creator", "Δεν μπορείτε να αφαιρέσετε τον δημιουργό του εξοδολογίου"))
             return
         }
         val uidMatch = vm._currentHousehold.value?.memberEmails?.entries?.firstOrNull {
@@ -613,8 +641,9 @@ internal class OikoNomosHouseholdDelegate(
 
     fun deleteHousehold(household: Household) {
         val user = vm._currentUser.value ?: vm.auth.currentUser ?: return
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (!vm.isUserCreatorOfHousehold(household)) {
-            vm.showSnackbar(if (vm._appLanguage.value == "EN") "Only the household creator can delete it" else "Μόνο ο δημιουργός μπορεί να διαγράψει το εξοδολόγιο")
+            vm.showSnackbar(Localization.tr(lang, "Only the household creator can delete it", "Μόνο ο δημιουργός μπορεί να διαγράψει το εξοδολόγιο"))
             return
         }
         markHouseholdAsDeleted(household.id)
@@ -639,7 +668,7 @@ internal class OikoNomosHouseholdDelegate(
                 if (remaining.isNotEmpty()) {
                     if (isCurrent) switchExodologio(remaining.first())
                 } else {
-                    val defaultName = if (vm._appLanguage.value == "EL") "Το Εξοδολόγιό μου" else "My Household Book"
+                    val defaultName = Localization.myExodologio(lang)
                     val newHousehold = vm.firestoreSyncRepo.createHousehold(user.uid, defaultName)
                     vm._userHouseholds.value = listOf(newHousehold)
                     val currentProf = vm._userProfile.value
@@ -650,12 +679,23 @@ internal class OikoNomosHouseholdDelegate(
                     switchExodologio(newHousehold)
                 }
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Household \"${household.name}\" deleted successfully"
-                    else "Το εξοδολόγιο «${household.name}» διαγράφηκε επιτυχώς"
+                    Localization.trFormat(
+                        lang,
+                        "Household \"%1\$s\" deleted successfully",
+                        "Το εξοδολόγιο «%1\$s» διαγράφηκε επιτυχώς",
+                        household.name
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                vm.showSnackbar(if (vm._appLanguage.value == "EN") "Error deleting household: ${e.message}" else "Σφάλμα διαγραφής εξοδολογίου: ${e.message}")
+                vm.showSnackbar(
+                    Localization.trFormat(
+                        lang,
+                        "Error deleting household: %1\$s",
+                        "Σφάλμα διαγραφής εξοδολογίου: %1\$s",
+                        e.message.orEmpty()
+                    )
+                )
             }
         }
     }
@@ -688,26 +728,37 @@ internal class OikoNomosHouseholdDelegate(
     }
 
     fun leaveSharedHousehold(household: Household) {
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         vm.showSnackbar(
-            if (isEn) "Only the household owner can remove users"
-            else "Μόνο ο ιδιοκτήτης μπορεί να αφαιρέσει χρήστες από το εξοδολόγιο"
+            Localization.tr(
+                lang,
+                "Only the household owner can remove users",
+                "Μόνο ο ιδιοκτήτης μπορεί να αφαιρέσει χρήστες από το εξοδολόγιο"
+            )
         )
     }
 
     fun renameHousehold(householdId: String, newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isBlank() || householdId.isBlank()) return
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val target = vm._userHouseholds.value.find { it.id == householdId } ?: vm._currentHousehold.value
         if (target != null && !vm.isUserCreatorOfHousehold(target)) {
-            vm.showSnackbar(if (vm._appLanguage.value == "EN") "Only the creator can rename this household" else "Μόνο ο δημιουργός μπορεί να μετονομάσει το εξοδολόγιο")
+            vm.showSnackbar(Localization.tr(lang, "Only the creator can rename this household", "Μόνο ο δημιουργός μπορεί να μετονομάσει το εξοδολόγιο"))
             return
         }
         val cur = vm._currentHousehold.value
         if (cur?.id == householdId) vm._currentHousehold.value = cur.copy(name = trimmed)
         vm._userHouseholds.value = vm._userHouseholds.value.map { if (it.id == householdId) it.copy(name = trimmed) else it }
         vm.prefs.edit().putString("household_name_$householdId", trimmed).apply()
-        vm.showSnackbar(if (vm._appLanguage.value == "EN") "Household renamed to \"$trimmed\"" else "Το εξοδολόγιο μετονομάστηκε σε «$trimmed»")
+        vm.showSnackbar(
+            Localization.trFormat(
+                lang,
+                "Household renamed to \"%1\$s\"",
+                "Το εξοδολόγιο μετονομάστηκε σε «%1\$s»",
+                trimmed
+            )
+        )
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             try { vm.firestoreSyncRepo.renameHousehold(householdId, trimmed) } catch (_: Exception) {}
         }
@@ -721,12 +772,16 @@ internal class OikoNomosHouseholdDelegate(
     fun updateHouseholdCurrency(householdId: String, currencyCode: String) {
         val cleanCode = CurrencyFormatter.optionForCode(currencyCode).code
         val option = CurrencyFormatter.optionForCode(cleanCode)
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val target = vm._userHouseholds.value.find { it.id == householdId }
             ?: vm._currentHousehold.value?.takeIf { it.id == householdId }
         if (target != null && !vm.isUserCreatorOfHousehold(target)) {
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Only the household creator can change its currency."
-                else "Μόνο ο δημιουργός μπορεί να αλλάξει το νόμισμα του εξοδολογίου."
+                Localization.tr(
+                    lang,
+                    "Only the household creator can change its currency.",
+                    "Μόνο ο δημιουργός μπορεί να αλλάξει το νόμισμα του εξοδολογίου."
+                )
             )
             return
         }
@@ -739,8 +794,13 @@ internal class OikoNomosHouseholdDelegate(
             vm.syncCurrencyFromHousehold(updated)
         }
         vm.showSnackbar(
-            if (vm._appLanguage.value == "EN") "Currency updated to ${option.symbol} (${option.code})"
-            else "Το νόμισμα άλλαξε σε ${option.symbol} (${option.code})"
+            Localization.trFormat(
+                lang,
+                "Currency updated to %1\$s (%2\$s)",
+                "Το νόμισμα άλλαξε σε %1\$s (%2\$s)",
+                option.symbol,
+                option.code
+            )
         )
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             try { vm.firestoreSyncRepo.updateHouseholdCurrency(householdId, cleanCode) } catch (_: Exception) {}
@@ -757,13 +817,13 @@ internal class OikoNomosHouseholdDelegate(
         }
         val cleanCurrency = CurrencyFormatter.optionForCode(currencyCode).code
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             try {
                 val newHousehold = vm.firestoreSyncRepo.createHousehold(user.uid, name, cleanCurrency)
                 vm._userHouseholds.value = vm._userHouseholds.value + newHousehold
-                val isEn = vm._appLanguage.value == "EN"
-                val defaultRole = if (isEn) "Individual" else "Μονοπρόσωπο"
+                val defaultRole = Localization.translateRole("Individual", lang)
                 val profileName = profile.displayName.ifBlank { "${profile.firstName} ${profile.lastName}".trim() }
-                    .ifBlank { user.displayName ?: if (isEn) "User" else "Χρήστης" }
+                    .ifBlank { user.displayName ?: Localization.tr(lang, "User", "Χρήστης") }
                 val defaultMember = FirebaseMember(
                     id = "1",
                     householdId = newHousehold.id,
@@ -776,7 +836,7 @@ internal class OikoNomosHouseholdDelegate(
                     linkedUserUid = user.uid
                 )
                 vm.firestoreSyncRepo.syncMember(newHousehold.id, defaultMember)
-                val defaultExpCats = OikoNomosViewModel.getStandardDefaultCategories(isEn).let { list ->
+                val defaultExpCats = OikoNomosViewModel.getStandardDefaultCategories(lang).let { list ->
                     if (vm.isCurrentUserPro()) list else list.take(OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES)
                 }
                 defaultExpCats.forEach { cat ->
@@ -785,7 +845,7 @@ internal class OikoNomosHouseholdDelegate(
                         FirebaseCategory(cat.id.toString(), newHousehold.id, user.uid, cat.name, cat.iconKey, 0.0, cat.colorHex, cat.voiceKeywords, cat.sortOrder, cat.fontColorHex, false, "EXPENSE")
                     )
                 }
-                val defaultIncCats = OikoNomosViewModel.getStandardDefaultIncomeCategories(isEn).let { list ->
+                val defaultIncCats = OikoNomosViewModel.getStandardDefaultIncomeCategories(lang).let { list ->
                     if (vm.isCurrentUserPro()) list else list.take(OikoNomosViewModel.FREE_MAX_INCOME_CATEGORIES)
                 }
                 defaultIncCats.forEach { cat ->
@@ -796,15 +856,22 @@ internal class OikoNomosHouseholdDelegate(
                 }
                 switchExodologio(newHousehold)
                 vm.showSnackbar(
-                    if (isEn) "Household book \"${newHousehold.name}\" created!"
-                    else "Το εξοδολόγιο «${newHousehold.name}» δημιουργήθηκε!"
+                    Localization.trFormat(
+                        lang,
+                        "Household book \"%1\$s\" created!",
+                        "Το εξοδολόγιο «%1\$s» δημιουργήθηκε!",
+                        newHousehold.name
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val isEn = vm._appLanguage.value == "EN"
                 vm.showSnackbar(
-                    if (isEn) "Creation error: ${e.localizedMessage ?: e.message}"
-                    else "Σφάλμα δημιουργίας: ${e.localizedMessage ?: e.message}"
+                    Localization.trFormat(
+                        lang,
+                        "Creation error: %1\$s",
+                        "Σφάλμα δημιουργίας: %1\$s",
+                        e.localizedMessage ?: e.message.orEmpty()
+                    )
                 )
             }
         }
@@ -870,17 +937,25 @@ internal class OikoNomosHouseholdDelegate(
                 vm.repository.replaceAllRecurringExpenses(emptyList())
                 vm.loadDeletedItems(household.id)
                 vm.observeHouseholdData(household.id)
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
-                    if (isEn) "Active household book: ${household.name}"
-                    else "Ενεργό εξοδολόγιο: ${household.name}"
+                    Localization.trFormat(
+                        lang,
+                        "Active household book: %1\$s",
+                        "Ενεργό εξοδολόγιο: %1\$s",
+                        household.name
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
-                    if (isEn) "Error switching book: ${e.localizedMessage ?: e.message}"
-                    else "Σφάλμα αλλαγής: ${e.localizedMessage ?: e.message}"
+                    Localization.trFormat(
+                        lang,
+                        "Error switching book: %1\$s",
+                        "Σφάλμα αλλαγής: %1\$s",
+                        e.localizedMessage ?: e.message.orEmpty()
+                    )
                 )
             }
         }

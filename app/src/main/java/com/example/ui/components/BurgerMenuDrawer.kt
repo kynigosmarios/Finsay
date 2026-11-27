@@ -241,7 +241,7 @@ fun BurgerMenuDrawer(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = userProfile?.email?.ifBlank { null } ?: currentUser?.email ?: (if (lang == Localization.Language.ENGLISH) "Connected" else "Συνδεδεμένος"),
+                                        text = userProfile?.email?.ifBlank { null } ?: currentUser?.email ?: Localization.tr(lang, "Connected", "Συνδεδεμένος"),
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
@@ -305,13 +305,13 @@ fun BurgerMenuDrawer(
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Sign In / Cloud Sync" else "Σύνδεση / Cloud Sync",
+                                        text = Localization.tr(lang, "Sign In / Cloud Sync", "Σύνδεση / Cloud Sync"),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         color = Emerald700
                                     )
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Connect Google Account" else "Συνδέστε λογαριασμό Google",
+                                        text = Localization.tr(lang, "Connect Google Account", "Συνδέστε λογαριασμό Google"),
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -323,7 +323,7 @@ fun BurgerMenuDrawer(
 
                     // 1. Εξοδολόγια
                     BurgerNavigationItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Households" else "Εξοδολόγια",
+                        title = Localization.tr(lang, "Households", "Εξοδολόγια"),
                         icon = Icons.Default.MenuBook,
                         iconTint = if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7),
                         iconBg = (if (isDark) Color(0xFF38BDF8) else Color(0xFF0284C7)).copy(alpha = if (isDark) 0.20f else 0.12f),
@@ -337,7 +337,7 @@ fun BurgerMenuDrawer(
                     if (onOpenReminders != null) {
                         // 3. Υπενθυμίσεις
                         BurgerNavigationItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Reminders" else "Υπενθυμίσεις",
+                            title = Localization.tr(lang, "Reminders", "Υπενθυμίσεις"),
                             icon = Icons.Default.NotificationsActive,
                             iconTint = if (isDark) Color(0xFFFBBF24) else Amber700,
                             iconBg = (if (isDark) Color(0xFFFBBF24) else Amber700).copy(alpha = if (isDark) 0.20f else 0.12f),
@@ -352,7 +352,7 @@ fun BurgerMenuDrawer(
                     if (onOpenGoals != null) {
                         // 4. Στόχοι
                         BurgerNavigationItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Goals" else "Στόχοι",
+                            title = Localization.tr(lang, "Goals", "Στόχοι"),
                             icon = Icons.Default.Savings,
                             iconTint = if (isDark) Color(0xFF34D399) else Emerald700,
                             iconBg = (if (isDark) Color(0xFF34D399) else Emerald700).copy(alpha = if (isDark) 0.20f else 0.12f),
@@ -366,7 +366,7 @@ fun BurgerMenuDrawer(
 
                     // 5. Ρυθμίσεις
                     BurgerNavigationItem(
-                        title = if (lang == Localization.Language.ENGLISH) "Settings" else "Ρυθμίσεις",
+                        title = Localization.tr(lang, "Settings", "Ρυθμίσεις"),
                         icon = Icons.Default.Settings,
                         iconTint = if (isDark) Color(0xFF94A3B8) else Color(0xFF475569),
                         iconBg = (if (isDark) Color(0xFF94A3B8) else Color(0xFF475569)).copy(alpha = if (isDark) 0.20f else 0.12f),
@@ -421,9 +421,9 @@ fun BurgerMenuDrawer(
                                     )
                                     Text(
                                         text = if (isPro) {
-                                            if (lang == Localization.Language.ENGLISH) "Active subscription" else "Ενεργή συνδρομή"
+                                            Localization.tr(lang, "Active subscription", "Ενεργή συνδρομή")
                                         } else {
-                                            if (lang == Localization.Language.ENGLISH) "Unlock all features" else "Ξεκλειδώστε όλες τις δυνατότητες"
+                                            Localization.tr(lang, "Unlock all features", "Ξεκλειδώστε όλες τις δυνατότητες")
                                         },
                                         fontSize = 11.sp,
                                         color = if (isDark) Color(0xFFFDE68A) else Color(0xFF92400E)
@@ -435,7 +435,7 @@ fun BurgerMenuDrawer(
                                 ) {
                                     Text(
                                         text = if (isPro) {
-                                            if (lang == Localization.Language.ENGLISH) "ACTIVE" else "PRO"
+                                            Localization.tr(lang, "ACTIVE", "PRO")
                                         } else {
                                             "PRO"
                                         },
@@ -452,7 +452,7 @@ fun BurgerMenuDrawer(
                     if (onOpenGuide != null) {
                         // 7. Οδηγίες
                         BurgerNavigationItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Guide" else "Οδηγίες",
+                            title = Localization.tr(lang, "Guide", "Οδηγίες"),
                             icon = Icons.Default.Info,
                             iconTint = if (isDark) Color(0xFFFBBF24) else Color(0xFFD97706),
                             iconBg = (if (isDark) Color(0xFFFBBF24) else Color(0xFFD97706)).copy(alpha = if (isDark) 0.20f else 0.12f),
@@ -518,7 +518,7 @@ fun BurgerMenuDrawer(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Terms of Service" else "Όροι Χρήσης",
+                                text = Localization.tr(lang, "Terms of Service", "Όροι Χρήσης"),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Emerald700,
@@ -536,7 +536,7 @@ fun BurgerMenuDrawer(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             )
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Privacy Policy" else "Πολιτική Απορρήτου",
+                                text = Localization.tr(lang, "Privacy Policy", "Πολιτική Απορρήτου"),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Emerald700,

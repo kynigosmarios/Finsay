@@ -68,7 +68,6 @@ internal fun ManualExpenseReminderScheduleSection(
     onTimeChange: (hour: Int, minute: Int) -> Unit
 ) {
     val context = LocalContext.current
-    val isGreek = lang != Localization.Language.ENGLISH
     var showFreqDropdown by remember { mutableStateOf(false) }
     var showWeekdayDropdown by remember { mutableStateOf(false) }
     var showReminderDayDropdown by remember { mutableStateOf(false) }
@@ -107,7 +106,7 @@ internal fun ManualExpenseReminderScheduleSection(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isGreek) "Συχνότητα, Ημέρα & Ώρα Υπενθύμισης" else "Frequency, Day & Time",
+                    text = Localization.tr(lang, "Frequency, Day & Time", "Συχνότητα, Ημέρα & Ώρα Υπενθύμισης"),
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -234,14 +233,14 @@ internal fun ManualExpenseReminderScheduleSection(
                     ) {
                         Icon(
                             imageVector = Icons.Default.AccessTime,
-                            contentDescription = if (isGreek) "Ώρα υπενθύμισης" else "Reminder time",
+                            contentDescription = Localization.tr(lang, "Reminder time", "Ώρα υπενθύμισης"),
                             tint = Emerald700,
                             modifier = Modifier.size(17.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Column {
                             Text(
-                                text = if (isGreek) "Ώρα" else "Time",
+                                text = Localization.tr(lang, "Time", "Ώρα"),
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1
@@ -370,7 +369,7 @@ internal fun ManualExpenseReminderScheduleSection(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Remove,
-                                        contentDescription = if (isGreek) "Μείωση ημέρας" else "Decrease day",
+                                        contentDescription = Localization.tr(lang, "Decrease day", "Μείωση ημέρας"),
                                         tint = Emerald700,
                                         modifier = Modifier.size(17.dp)
                                     )
@@ -384,13 +383,13 @@ internal fun ManualExpenseReminderScheduleSection(
                                         .testTag("reminder_day_value")
                                 ) {
                                     Text(
-                                        text = if (isGreek) "Ημέρα" else "Day",
+                                        text = Localization.tr(lang, "Day", "Ημέρα"),
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1
                                     )
                                     Text(
-                                        text = if (isGreek) "Κάθε ${dayOfMonth.coerceIn(1, 31)}η" else "Day ${dayOfMonth.coerceIn(1, 31)}",
+                                        text = Localization.trFormat(lang, "Day %1\$d", "Κάθε %1\$dη", dayOfMonth.coerceIn(1, 31)),
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -407,7 +406,7 @@ internal fun ManualExpenseReminderScheduleSection(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Add,
-                                        contentDescription = if (isGreek) "Αύξηση ημέρας" else "Increase day",
+                                        contentDescription = Localization.tr(lang, "Increase day", "Αύξηση ημέρας"),
                                         tint = Emerald700,
                                         modifier = Modifier.size(17.dp)
                                     )
@@ -421,7 +420,7 @@ internal fun ManualExpenseReminderScheduleSection(
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                text = if (isGreek) "Κάθε ${day}η" else "Day $day",
+                                                text = Localization.trFormat(lang, "Day %1\$d", "Κάθε %1\$dη", day),
                                                 fontWeight = if (day == dayOfMonth) FontWeight.Bold else FontWeight.Normal,
                                                 color = if (day == dayOfMonth) Emerald700 else MaterialTheme.colorScheme.onSurface
                                             )
@@ -520,7 +519,7 @@ internal fun ReceiptSourceChooserDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (lang == Localization.Language.ENGLISH) "Scan Receipt" else "Σάρωση Απόδειξης",
+                text = Localization.tr(lang, "Scan Receipt", "Σάρωση Απόδειξης"),
                 fontWeight = FontWeight.Bold,
                 fontSize = 17.sp
             )
@@ -531,7 +530,7 @@ internal fun ReceiptSourceChooserDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH) "Choose how to scan your receipt:" else "Επιλέξτε τρόπο καταχώρησης απόδειξης:",
+                    text = Localization.tr(lang, "Choose how to scan your receipt:", "Επιλέξτε τρόπο καταχώρησης απόδειξης:"),
                     fontSize = 13.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -554,7 +553,7 @@ internal fun ReceiptSourceChooserDialog(
                         Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Camera" else "Κάμερα",
+                            text = Localization.tr(lang, "Camera", "Κάμερα"),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )
@@ -581,7 +580,7 @@ internal fun ReceiptSourceChooserDialog(
                         Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp), tint = Emerald700)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Gallery" else "Συλλογή",
+                            text = Localization.tr(lang, "Gallery", "Συλλογή"),
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )

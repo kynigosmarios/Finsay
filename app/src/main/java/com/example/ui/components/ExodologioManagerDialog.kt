@@ -164,9 +164,9 @@ fun ExodologioManagerDialog(
                             )
                             Text(
                                 text = if (isPremium)
-                                    (if (lang == Localization.Language.ENGLISH) "Pro (Unlimited households)" else "Pro (Απεριόριστα εξοδολόγια)")
+                                    Localization.tr(lang, "Pro (Unlimited households)", "Pro (Απεριόριστα εξοδολόγια)")
                                 else
-                                    (if (lang == Localization.Language.ENGLISH) "Basic (1 household)" else "Βασικό (1 εξοδολόγιο)"),
+                                    Localization.tr(lang, "Basic (1 household)", "Βασικό (1 εξοδολόγιο)"),
                                 fontSize = 11.5.sp,
                                 color = if (isPremium) Amber700 else MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -200,7 +200,6 @@ fun ExodologioManagerDialog(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    val isEn = lang == Localization.Language.ENGLISH
                     val myHouseholds = allHouseholds
 
                     // 1. SECTION: ΤΑ ΕΞΟΔΟΛΟΓΙΑ ΜΟΥ
@@ -220,7 +219,7 @@ fun ExodologioManagerDialog(
                                 modifier = Modifier.size(17.dp)
                             )
                             Text(
-                                text = if (isEn) "MY HOUSEHOLDS" else "ΤΑ ΕΞΟΔΟΛΟΓΙΑ ΜΟΥ",
+                                text = Localization.tr(lang, "MY HOUSEHOLDS", "ΤΑ ΕΞΟΔΟΛΟΓΙΑ ΜΟΥ"),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Emerald700,
@@ -294,9 +293,9 @@ fun ExodologioManagerDialog(
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = if (household.memberUids.size <= 1)
-                                                (if (isEn) "1 member" else "1 μέλος")
+                                                Localization.tr(lang, "1 member", "1 μέλος")
                                             else
-                                                (if (isEn) "${household.memberUids.size} members" else "${household.memberUids.size} μέλη"),
+                                                Localization.trFormat(lang, "%1\$d members", "%1\$d μέλη", household.memberUids.size),
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -315,7 +314,7 @@ fun ExodologioManagerDialog(
                                                 Box(contentAlignment = Alignment.Center) {
                                                     Icon(
                                                         imageVector = Icons.Default.Check,
-                                                        contentDescription = if (isEn) "Selected" else "Επιλεγμένο",
+                                                        contentDescription = Localization.tr(lang, "Selected", "Επιλεγμένο"),
                                                         tint = Color.White,
                                                         modifier = Modifier.size(15.dp)
                                                     )
@@ -335,7 +334,7 @@ fun ExodologioManagerDialog(
                                                 Box(contentAlignment = Alignment.Center) {
                                                     Icon(
                                                         imageVector = Icons.Default.Delete,
-                                                        contentDescription = if (isEn) "Delete Household" else "Διαγραφή Εξοδολογίου",
+                                                        contentDescription = Localization.tr(lang, "Delete Household", "Διαγραφή Εξοδολογίου"),
                                                         tint = Color(0xFFEF4444),
                                                         modifier = Modifier.size(17.dp)
                                                     )
@@ -537,13 +536,13 @@ fun ExodologioManagerDialog(
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
             shape = RoundedCornerShape(20.dp),
-            title = { Text(if (lang == Localization.Language.ENGLISH) "New Household" else "Νέο Εξοδολόγιο", fontWeight = FontWeight.Bold) },
+            title = { Text(Localization.tr(lang, "New Household", "Νέο Εξοδολόγιο"), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = newHouseholdName,
                         onValueChange = { newHouseholdName = it },
-                        placeholder = { Text(if (lang == Localization.Language.ENGLISH) "e.g. Home, Work, Travel" else "π.χ. Σπίτι, Εργασία, Ταξίδι") },
+                        placeholder = { Text(Localization.tr(lang, "e.g. Home, Work, Travel", "π.χ. Σπίτι, Εργασία, Ταξίδι")) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -554,7 +553,7 @@ fun ExodologioManagerDialog(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Currency" else "Νόμισμα",
+                            text = Localization.tr(lang, "Currency", "Νόμισμα"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -584,12 +583,12 @@ fun ExodologioManagerDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = Emerald700, contentColor = Color.White),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text(if (lang == Localization.Language.ENGLISH) "Create" else "Δημιουργία", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(Localization.tr(lang, "Create", "Δημιουργία"), fontWeight = FontWeight.Bold, color = Color.White)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCreateDialog = false }) {
-                    Text(if (lang == Localization.Language.ENGLISH) "Cancel" else "Ακύρωση")
+                    Text(Localization.cancel(lang))
                 }
             }
         )
@@ -635,7 +634,7 @@ fun ExodologioManagerDialog(
                         modifier = Modifier.size(24.dp)
                     )
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Delete Household" else "Διαγραφή Εξοδολογίου",
+                        text = Localization.tr(lang, "Delete Household", "Διαγραφή Εξοδολογίου"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
                     )
@@ -643,17 +642,22 @@ fun ExodologioManagerDialog(
             },
             text = {
                 val isSingle = allHouseholds.size <= 1
+                val displayName = Localization.translateHouseholdName(householdToDelete?.name.orEmpty(), lang)
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH) {
-                        if (isSingle)
-                            "Are you sure you want to delete \"${householdToDelete?.name}\"? All its expenses, incomes, categories and members will be permanently removed, and a fresh new household will be created."
-                        else
-                            "Are you sure you want to delete \"${householdToDelete?.name}\"? All its expenses, incomes, categories and members will be permanently removed."
+                    text = if (isSingle) {
+                        Localization.trFormat(
+                            lang,
+                            "Are you sure you want to delete \"%1\$s\"? All its expenses, incomes, categories and members will be permanently removed, and a fresh new household will be created.",
+                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «%1\$s»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά και θα δημιουργηθεί ένα νέο κενό εξοδολόγιο.",
+                            displayName
+                        )
                     } else {
-                        if (isSingle)
-                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «${householdToDelete?.name}»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά και θα δημιουργηθεί ένα νέο κενό εξοδολόγιο."
-                        else
-                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «${householdToDelete?.name}»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά."
+                        Localization.trFormat(
+                            lang,
+                            "Are you sure you want to delete \"%1\$s\"? All its expenses, incomes, categories and members will be permanently removed.",
+                            "Είστε βέβαιοι ότι θέλετε να διαγράψετε οριστικά το εξοδολόγιο «%1\$s»; Όλα τα έσοδα, έξοδα, κατηγορίες και μέλη του θα διαγραφούν οριστικά.",
+                            displayName
+                        )
                     },
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -673,7 +677,7 @@ fun ExodologioManagerDialog(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Delete" else "Διαγραφή",
+                        text = Localization.delete(lang),
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
@@ -681,7 +685,7 @@ fun ExodologioManagerDialog(
             },
             dismissButton = {
                 TextButton(onClick = { householdToDelete = null }) {
-                    Text(text = if (lang == Localization.Language.ENGLISH) "Cancel" else "Ακύρωση")
+                    Text(text = Localization.cancel(lang))
                 }
             }
         )
@@ -692,6 +696,7 @@ fun ExodologioManagerDialog(
 fun PremiumPaywallDialog(
     reason: String, // "multi_exodologio" or "invite_member" or "profile_upgrade"
     appLanguage: String = "EL",
+    proPlanPrices: com.example.billing.BillingManager.ProPlanPrices = com.example.billing.BillingManager.ProPlanPrices(),
     onUnlockPro: (planId: String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -747,15 +752,15 @@ fun PremiumPaywallDialog(
                 }
 
                 val paywallSubtitle = when (reason) {
-                    "category_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition allows up to 5 expense categories" else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
-                    "income_category_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition allows up to 5 income categories" else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
-                    "voice_limit" -> if (lang == Localization.Language.ENGLISH) "Monthly limit of 15 free voice entries reached" else "Συμπληρώσατε το μηνιαίο όριο των 15 φωνητικών καταχωρήσεων"
-                    "savings_goal_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition supports up to 1 Savings Goal" else "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
-                    "recurring_expense_limit" -> if (lang == Localization.Language.ENGLISH) "Free edition supports up to 2 Recurring Expenses" else "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
-                    "multi_exodologio" -> if (lang == Localization.Language.ENGLISH) "Unlock unlimited independent households" else "Ξεκλειδώστε απεριόριστα ανεξάρτητα εξοδολόγια"
-                    "ocr_receipt" -> if (lang == Localization.Language.ENGLISH) "Camera & Gallery Receipt OCR is a Pro feature" else "Η σάρωση αποδείξεων με Κάμερα & OCR είναι δυνατότητα Pro"
-                    "bank_auto_catcher" -> if (lang == Localization.Language.ENGLISH) "Automatic Bank Reader is a Pro feature" else "Ο Αυτόματος Αναγνώστης Τραπεζών είναι δυνατότητα Pro"
-                    "export_report" -> if (lang == Localization.Language.ENGLISH) "Exporting reports to PDF & CSV is a Pro feature" else "Η εξαγωγή αναφορών σε PDF & CSV είναι δυνατότητα Pro"
+                    "category_limit" -> Localization.tr(lang, "Free edition allows up to 5 expense categories", "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων")
+                    "income_category_limit" -> Localization.tr(lang, "Free edition allows up to 5 income categories", "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων")
+                    "voice_limit" -> Localization.tr(lang, "Monthly limit of 15 free voice entries reached", "Συμπληρώσατε το μηνιαίο όριο των 15 φωνητικών καταχωρήσεων")
+                    "savings_goal_limit" -> Localization.tr(lang, "Free edition supports up to 1 Savings Goal", "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης")
+                    "recurring_expense_limit" -> Localization.tr(lang, "Free edition supports up to 2 Recurring Expenses", "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές")
+                    "multi_exodologio" -> Localization.tr(lang, "Unlock unlimited independent households", "Ξεκλειδώστε απεριόριστα ανεξάρτητα εξοδολόγια")
+                    "ocr_receipt" -> Localization.tr(lang, "Camera & Gallery Receipt OCR is a Pro feature", "Η σάρωση αποδείξεων με Κάμερα & OCR είναι δυνατότητα Pro")
+                    "bank_auto_catcher" -> Localization.tr(lang, "Automatic Bank Reader is a Pro feature", "Ο Αυτόματος Αναγνώστης Τραπεζών είναι δυνατότητα Pro")
+                    "export_report" -> Localization.tr(lang, "Exporting reports to PDF & CSV is a Pro feature", "Η εξαγωγή αναφορών σε PDF & CSV είναι δυνατότητα Pro")
                     else -> null
                 }
 
@@ -800,12 +805,14 @@ fun PremiumPaywallDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Monthly" else "Μηνιαία",
+                                text = Localization.tr(lang, "Monthly", "Μηνιαία"),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.5.sp
                             )
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "2.99€ / month" else "2,99€ / μήνα",
+                                text = proPlanPrices.monthlyPrice?.let {
+                                    "$it / ${Localization.tr(lang, "month", "μήνα")}"
+                                } ?: Localization.tr(lang, "2.99€ / month", "2,99€ / μήνα"),
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 14.sp,
                                 color = Amber700
@@ -836,7 +843,7 @@ fun PremiumPaywallDialog(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Yearly" else "Ετήσια",
+                                    text = Localization.tr(lang, "Yearly", "Ετήσια"),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = Color.White
@@ -847,7 +854,7 @@ fun PremiumPaywallDialog(
                                     color = Color.White.copy(alpha = 0.25f)
                                 ) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "POPULAR" else "ΔΗΜΟΦΙΛΕΣ",
+                                        text = Localization.tr(lang, "POPULAR", "ΔΗΜΟΦΙΛΕΣ"),
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Color.White,
@@ -856,7 +863,9 @@ fun PremiumPaywallDialog(
                                 }
                             }
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "29€ / year" else "29€ / έτος",
+                                text = proPlanPrices.yearlyPrice?.let {
+                                    "$it / ${Localization.tr(lang, "year", "έτος")}"
+                                } ?: Localization.tr(lang, "29€ / year", "29€ / έτος"),
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 14.5.sp,
                                 color = Color.White
@@ -887,12 +896,12 @@ fun PremiumPaywallDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Lifetime",
+                                text = Localization.tr(lang, "Lifetime", "Lifetime"),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.5.sp
                             )
                             Text(
-                                text = "49€",
+                                text = proPlanPrices.lifetimePrice ?: "49€",
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 14.sp,
                                 color = Amber700
@@ -915,32 +924,32 @@ fun PremiumPaywallDialog(
                         verticalArrangement = Arrangement.spacedBy(7.dp)
                     ) {
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "What Pro includes:" else "Τι περιλαμβάνει το Finsay Pro:",
+                            text = Localization.tr(lang, "What Pro includes:", "Τι περιλαμβάνει το Finsay Pro:"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
 
                         BenefitRowItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Unlimited Expense & Income Categories (Free: up to 5 each)" else "Απεριόριστες Κατηγορίες Εξόδων & Εσόδων (Δωρεάν: έως 5)"
+                            title = Localization.tr(lang, "Unlimited Expense & Income Categories (Free: up to 5 each)", "Απεριόριστες Κατηγορίες Εξόδων & Εσόδων (Δωρεάν: έως 5)")
                         )
                         BenefitRowItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Unlimited Voice Entries" else "Απεριόριστη Φωνητική Καταχώρηση"
+                            title = Localization.tr(lang, "Unlimited Voice Entries", "Απεριόριστη Φωνητική Καταχώρηση")
                         )
                         BenefitRowItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Receipt OCR & AADE QR Scanner" else "Σάρωση Αποδείξεων (Κάμερα & OCR)"
+                            title = Localization.tr(lang, "Receipt OCR & AADE QR Scanner", "Σάρωση Αποδείξεων (Κάμερα & OCR)")
                         )
                         BenefitRowItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Bank Notifications Auto-Catcher" else "Αυτόματος Αναγνώστης Τραπεζών"
+                            title = Localization.tr(lang, "Bank Notifications Auto-Catcher", "Αυτόματος Αναγνώστης Τραπεζών")
                         )
                         BenefitRowItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Multiple Households" else "Πολλαπλά Εξοδολόγια"
+                            title = Localization.tr(lang, "Multiple Households", "Πολλαπλά Εξοδολόγια")
                         )
                         BenefitRowItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Unlimited Goals & Recurring Expenses" else "Απεριόριστοι Στόχοι & Πάγιες Εντολές"
+                            title = Localization.tr(lang, "Unlimited Goals & Recurring Expenses", "Απεριόριστοι Στόχοι & Πάγιες Εντολές")
                         )
                         BenefitRowItem(
-                            title = if (lang == Localization.Language.ENGLISH) "Export Reports to PDF & CSV" else "Εξαγωγή Αναφορών σε PDF & CSV"
+                            title = Localization.tr(lang, "Export Reports to PDF & CSV", "Εξαγωγή Αναφορών σε PDF & CSV")
                         )
                     }
                 }
@@ -952,7 +961,7 @@ fun PremiumPaywallDialog(
                     modifier = Modifier.testTag("dismiss_paywall_button")
                 ) {
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Not now" else "Όχι τώρα",
+                        text = Localization.tr(lang, "Not now", "Όχι τώρα"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )

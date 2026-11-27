@@ -6,6 +6,7 @@ import com.example.data.entity.Expense
 import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.Income
+import com.example.data.entity.resolveMembersFromDisplayLabel
 import com.example.data.entity.toFirebaseExpense
 import com.example.data.model.FirebaseIncome
 import com.example.util.BankNotificationHolder
@@ -15,8 +16,10 @@ import com.example.util.CurrencyFormatter
 import com.example.util.DefaultPayerHelper
 import com.example.util.GreekVoiceParser
 import com.example.util.InAppReviewManager
+import com.example.util.Localization
 import com.example.util.MerchantCategoryLearner
 import com.example.util.PendingBankTransaction
+import com.example.util.ResolvedPayerFields
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
@@ -33,16 +36,52 @@ internal class OikoNomosTransactionDelegate(
         pendingBankMerchantForLearning = null
     }
 
+    private fun resolveSafePayerFields(
+        amount: Double,
+        payerMemberId: Long,
+        payerMemberName: String,
+        payerMemberIdsCsv: String,
+        payerAmountsCsv: String
+    ): ResolvedPayerFields {
+        val resolvedDefaults = DefaultPayerHelper.buildEqualPayerFields(vm.resolveDefaultPayerMembers(), amount)
+        val useDefaults = payerMemberId <= 0L && payerMemberIdsCsv.isBlank() && payerMemberName.isBlank()
+        if (useDefaults) return resolvedDefaults
+
+        val finalPayerName = payerMemberName.ifBlank { resolvedDefaults.displayName }
+        if (payerMemberIdsCsv.isBlank() && finalPayerName.isNotBlank()) {
+            val labelMembers = resolveMembersFromDisplayLabel(finalPayerName, vm._allMembers.value)
+            if (labelMembers.size >= 2) {
+                val multi = DefaultPayerHelper.buildEqualPayerFields(labelMembers, amount)
+                return ResolvedPayerFields(
+                    primaryId = multi.primaryId,
+                    displayName = finalPayerName,
+                    idsCsv = multi.idsCsv,
+                    amountsCsv = payerAmountsCsv.ifBlank { multi.amountsCsv }
+                )
+            }
+        }
+
+        val finalPayerId = payerMemberId
+        val finalPayerIdsCsv = payerMemberIdsCsv.ifBlank { if (finalPayerId > 0L) "$finalPayerId" else "" }
+        return ResolvedPayerFields(
+            primaryId = finalPayerId,
+            displayName = finalPayerName,
+            idsCsv = finalPayerIdsCsv,
+            amountsCsv = payerAmountsCsv
+        )
+    }
+
     fun openVoiceInputDialog() {
         val currentUsage = vm.prefs.getInt(vm.getMonthlyVoiceUsageKey(), 0)
         vm._monthlyVoiceUsage.value = currentUsage
         if (!vm.isCurrentUserPro() && currentUsage >= 15) {
             vm.showPremiumPaywall("voice_limit")
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN")
-                    "Monthly voice entry limit reached (15/15). Upgrade to Pro for unlimited entries!"
-                else
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Monthly voice entry limit reached (15/15). Upgrade to Pro for unlimited entries!",
                     "Συμπληρώσατε το όριο 15 φωνητικών καταχωρήσεων για αυτόν τον μήνα. Αναβαθμίστε σε Pro για απεριόριστες!"
+                )
             )
             return
         }
@@ -156,15 +195,16 @@ internal class OikoNomosTransactionDelegate(
         if (!vm.isCurrentUserPro() && currentUsage >= 15) {
             vm.showPremiumPaywall("voice_limit")
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN")
-                    "Monthly voice entry limit reached (15/15). Upgrade to Pro for unlimited entries!"
-                else
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Monthly voice entry limit reached (15/15). Upgrade to Pro for unlimited entries!",
                     "Συμπληρώσατε το όριο 15 φωνητικών καταχωρήσεων για αυτόν τον μήνα. Αναβαθμίστε σε Pro για απεριόριστες!"
+                )
             )
             return
         }
         if (spokenText.isBlank()) {
-            vm.showSnackbar(if (vm._appLanguage.value == "EN") "No speech recognized." else "Δεν αναγνωρίστηκε ομιλία.")
+            vm.showSnackbar(Localization.tr(vm._appLanguage.value, "No speech recognized.", "Δεν αναγνωρίστηκε ομιλία."))
             return
         }
         val categories = vm._allCategories.value
@@ -174,7 +214,8 @@ internal class OikoNomosTransactionDelegate(
             prompt = spokenText,
             categories = categories,
             allMembers = members,
-            preferredDefaultPayers = defaultPayers
+            preferredDefaultPayers = defaultPayers,
+            lang = Localization.Language.fromCode(vm._appLanguage.value)
         )
         val learnedCat = suggestCategoryForMerchant(parsed.title.ifBlank { spokenText })
         val finalParsed = if (learnedCat != null) {
@@ -256,12 +297,17 @@ internal class OikoNomosTransactionDelegate(
         val householdId = vm.getOrEnsureHouseholdId(user)
         val cloudId = UUID.randomUUID().toString()
         val finalSplitMembersCount = if (memberIds.isNotEmpty()) memberIds.size else 1
-        val resolvedDefaults = DefaultPayerHelper.buildEqualPayerFields(vm.resolveDefaultPayerMembers(), amount)
-        val useDefaults = payerMemberId <= 0L && payerMemberIdsCsv.isBlank() && payerMemberName.isBlank()
-        val finalPayerId = if (useDefaults) resolvedDefaults.primaryId else payerMemberId
-        val finalPayerName = if (useDefaults) resolvedDefaults.displayName else payerMemberName.ifBlank { resolvedDefaults.displayName }
-        val finalPayerIdsCsv = if (useDefaults) resolvedDefaults.idsCsv else payerMemberIdsCsv.ifBlank { if (finalPayerId > 0L) "$finalPayerId" else "" }
-        val finalPayerAmountsCsv = if (useDefaults) resolvedDefaults.amountsCsv else payerAmountsCsv
+        val resolvedPayers = resolveSafePayerFields(
+            amount = amount,
+            payerMemberId = payerMemberId,
+            payerMemberName = payerMemberName,
+            payerMemberIdsCsv = payerMemberIdsCsv,
+            payerAmountsCsv = payerAmountsCsv
+        )
+        val finalPayerId = resolvedPayers.primaryId
+        val finalPayerName = resolvedPayers.displayName
+        val finalPayerIdsCsv = resolvedPayers.idsCsv
+        val finalPayerAmountsCsv = resolvedPayers.amountsCsv
 
         val newExpense = Expense(
             cloudId = cloudId,
@@ -320,11 +366,16 @@ internal class OikoNomosTransactionDelegate(
                     amount = amount,
                     householdIdOverride = householdId
                 )
-                val isEn = vm._appLanguage.value == "EN"
                 val curSym = CurrencyFormatter.currentSymbol
                 vm.showSnackbar(
-                    if (isEn) "Added: $label (${String.format(Locale.US, "%.2f", amount)}$curSym)"
-                    else "Καταχωρήθηκε: $label (${String.format(Locale.US, "%.2f", amount)}$curSym)"
+                    Localization.trFormat(
+                        vm._appLanguage.value,
+                        "Added: %1\$s (%2\$s%3\$s)",
+                        "Καταχωρήθηκε: %1\$s (%2\$s%3\$s)",
+                        label,
+                        String.format(Locale.US, "%.2f", amount),
+                        curSym
+                    )
                 )
                 if (InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
                     vm._pendingInAppReviewPrompt.value = true
@@ -359,12 +410,17 @@ internal class OikoNomosTransactionDelegate(
         val householdId = vm.getOrEnsureHouseholdId(user)
         val cloudId = existing?.cloudId?.takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString()
         val finalSplitCount = if (memberIds.isNotEmpty()) memberIds.size else 1
-        val resolvedDefaults = DefaultPayerHelper.buildEqualPayerFields(vm.resolveDefaultPayerMembers(), amount)
-        val useDefaults = payerMemberId <= 0L && payerMemberIdsCsv.isBlank() && payerMemberName.isBlank()
-        val finalPayerId = if (useDefaults) resolvedDefaults.primaryId else payerMemberId
-        val finalPayerName = if (useDefaults) resolvedDefaults.displayName else payerMemberName.ifBlank { resolvedDefaults.displayName }
-        val finalPayerIdsCsv = if (useDefaults) resolvedDefaults.idsCsv else payerMemberIdsCsv.ifBlank { if (finalPayerId > 0L) "$finalPayerId" else "" }
-        val finalPayerAmountsCsv = if (useDefaults) resolvedDefaults.amountsCsv else payerAmountsCsv
+        val resolvedPayers = resolveSafePayerFields(
+            amount = amount,
+            payerMemberId = payerMemberId,
+            payerMemberName = payerMemberName,
+            payerMemberIdsCsv = payerMemberIdsCsv,
+            payerAmountsCsv = payerAmountsCsv
+        )
+        val finalPayerId = resolvedPayers.primaryId
+        val finalPayerName = resolvedPayers.displayName
+        val finalPayerIdsCsv = resolvedPayers.idsCsv
+        val finalPayerAmountsCsv = resolvedPayers.amountsCsv
 
         val targetExpense = Expense(
             id = id,
@@ -433,12 +489,12 @@ internal class OikoNomosTransactionDelegate(
                     amount = amount,
                     householdIdOverride = householdId
                 )
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
                     if (id == 0L) {
-                        if (isEn) "Expense \"$label\" added!" else "Το έξοδο «$label» καταχωρήθηκε!"
+                        Localization.trFormat(lang, "Expense \"%1\$s\" added!", "Το έξοδο «%1\$s» καταχωρήθηκε!", label)
                     } else {
-                        if (isEn) "Expense \"$label\" updated!" else "Το έξοδο «$label» ενημερώθηκε!"
+                        Localization.trFormat(lang, "Expense \"%1\$s\" updated!", "Το έξοδο «%1\$s» ενημερώθηκε!", label)
                     }
                 )
                 if (id == 0L && InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
@@ -576,12 +632,12 @@ internal class OikoNomosTransactionDelegate(
                     amount = amount,
                     householdIdOverride = householdId
                 )
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
                     if (id == 0L) {
-                        if (isEn) "Income \"$label\" added!" else "Το έσοδο «$label» καταχωρήθηκε!"
+                        Localization.trFormat(lang, "Income \"%1\$s\" added!", "Το έσοδο «%1\$s» καταχωρήθηκε!", label)
                     } else {
-                        if (isEn) "Income \"$label\" updated!" else "Το έσοδο «$label» ενημερώθηκε!"
+                        Localization.trFormat(lang, "Income \"%1\$s\" updated!", "Το έσοδο «%1\$s» ενημερώθηκε!", label)
                     }
                 )
                 if (id == 0L && InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
@@ -676,7 +732,7 @@ internal class OikoNomosTransactionDelegate(
         val creatorName = vm._userProfile.value?.displayName?.ifBlank { null }
             ?: user?.displayName?.ifBlank { null }
             ?: "Μέλος"
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
 
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             vm.trackSyncStart()
@@ -738,7 +794,7 @@ internal class OikoNomosTransactionDelegate(
                     )
                 }
                 vm.showSnackbar(
-                    if (isEn) "Restored: ${pending.title}" else "Επαναφέρθηκε: ${pending.title}"
+                    Localization.trFormat(lang, "Restored: %1\$s", "Επαναφέρθηκε: %1\$s", pending.title)
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -759,7 +815,7 @@ internal class OikoNomosTransactionDelegate(
         if (amount <= 0.0) return
         val user = vm._currentUser.value
         val householdId = vm.getOrEnsureHouseholdId(user)
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val categories = vm._allCategories.value
         val otherCat = categories.find {
             it.name.contains("Χρωστούμενα", ignoreCase = true) ||
@@ -770,12 +826,14 @@ internal class OikoNomosTransactionDelegate(
         } ?: categories.lastOrNull()
 
         val cloudId = UUID.randomUUID().toString()
-        val settlementTitle = if (isEn) {
-            "Settlement: ${fromMember.name} → ${toMember.name}"
-        } else {
-            "Εξόφληση: ${fromMember.name} → ${toMember.name}"
-        }
-        val settlementNote = if (isEn) "Debt settlement transfer" else "Εξόφληση οφειλής"
+        val settlementTitle = Localization.trFormat(
+            lang,
+            "Settlement: %1\$s → %2\$s",
+            "Εξόφληση: %1\$s → %2\$s",
+            fromMember.name,
+            toMember.name
+        )
+        val settlementNote = Localization.tr(lang, "Debt settlement transfer", "Εξόφληση οφειλής")
         val payerCsv = "${fromMember.id}:${String.format(Locale.US, "%.2f", amount)}"
 
         val settlementExpense = Expense(
@@ -822,11 +880,15 @@ internal class OikoNomosTransactionDelegate(
                 )
                 val curSym = CurrencyFormatter.currentSymbol
                 vm.showSnackbar(
-                    if (isEn) {
-                        "Settled ${String.format(Locale.US, "%.2f", amount)}$curSym (${fromMember.name} → ${toMember.name})"
-                    } else {
-                        "Καταχωρήθηκε εξόφληση ${String.format(Locale.US, "%.2f", amount)}$curSym (${fromMember.name} → ${toMember.name})"
-                    }
+                    Localization.trFormat(
+                        lang,
+                        "Settled %1\$s%2\$s (%3\$s → %4\$s)",
+                        "Καταχωρήθηκε εξόφληση %1\$s%2\$s (%3\$s → %4\$s)",
+                        String.format(Locale.US, "%.2f", amount),
+                        curSym,
+                        fromMember.name,
+                        toMember.name
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -880,11 +942,16 @@ internal class OikoNomosTransactionDelegate(
                     amount = saved.amount,
                     householdIdOverride = householdId
                 )
-                val isEn = vm._appLanguage.value == "EN"
                 val curSym = CurrencyFormatter.currentSymbol
                 vm.showSnackbar(
-                    if (isEn) "Repeated today: $label (${String.format(Locale.US, "%.2f", saved.amount)}$curSym)"
-                    else "Επαναλήφθηκε σήμερα: $label (${String.format(Locale.US, "%.2f", saved.amount)}$curSym)"
+                    Localization.trFormat(
+                        vm._appLanguage.value,
+                        "Repeated today: %1\$s (%2\$s%3\$s)",
+                        "Επαναλήφθηκε σήμερα: %1\$s (%2\$s%3\$s)",
+                        label,
+                        String.format(Locale.US, "%.2f", saved.amount),
+                        curSym
+                    )
                 )
                 if (InAppReviewManager.recordEntryLoggedAndCheckEligible(vm.getApplication())) {
                     vm._pendingInAppReviewPrompt.value = true

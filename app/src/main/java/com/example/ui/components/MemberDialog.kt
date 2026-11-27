@@ -107,7 +107,6 @@ fun MemberDialog(
     var hasShownVoiceKeywordsHint by remember { mutableStateOf(false) }
 
     if (showVoiceKeywordsHint) {
-        val isEnglish = lang == Localization.Language.ENGLISH
         AlertDialog(
             onDismissRequest = { showVoiceKeywordsHint = false },
             icon = {
@@ -120,18 +119,18 @@ fun MemberDialog(
             },
             title = {
                 Text(
-                    text = if (isEnglish) "Voice Keywords" else "Φωνητικές Λέξεις",
+                    text = Localization.tr(lang, "Voice Keywords", "Φωνητικές Λέξεις"),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = if (isEnglish) {
-                        "Enter nicknames or alternative names separated by commas (e.g. mom, Helen, wife). When using voice entry, Finsay automatically recognizes this member whenever it hears any of these words."
-                    } else {
+                    text = Localization.tr(
+                        lang,
+                        "Enter nicknames or alternative names separated by commas (e.g. mom, Helen, wife). When using voice entry, Finsay automatically recognizes this member whenever it hears any of these words.",
                         "Γράψτε υποκοριστικά ή λέξεις χωρισμένες με κόμμα (π.χ. μαμά, Ελένη, γυναίκα). Στη φωνητική καταχώρηση, το Finsay αναγνωρίζει αυτόματα αυτό το μέλος μόλις ακούσει κάποια από αυτές."
-                    },
+                    ),
                     fontSize = 13.5.sp,
                     lineHeight = 19.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -143,7 +142,7 @@ fun MemberDialog(
                     modifier = Modifier.testTag("member_voice_hint_ok_btn")
                 ) {
                     Text(
-                        text = if (isEnglish) "Got it" else "Κατάλαβα",
+                        text = Localization.tr(lang, "Got it", "Κατάλαβα"),
                         fontWeight = FontWeight.Bold,
                         color = Emerald700
                     )
@@ -274,7 +273,7 @@ fun MemberDialog(
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         Text(
-                            text = if (showColorPalette) (if (lang == Localization.Language.ENGLISH) "Hide" else "Απόκρυψη") else Localization.changeAction(lang),
+                            text = if (showColorPalette) Localization.tr(lang, "Hide", "Απόκρυψη") else Localization.changeAction(lang),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = Emerald700
@@ -347,7 +346,7 @@ fun MemberDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.HelpOutline,
-                                    contentDescription = if (lang == Localization.Language.ENGLISH) "Voice keywords help" else "Οδηγίες φωνητικών λέξεων",
+                                    contentDescription = Localization.tr(lang, "Voice keywords help", "Οδηγίες φωνητικών λέξεων"),
                                     tint = Emerald700,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -447,7 +446,7 @@ fun MemberDialog(
                     Button(
                         onClick = {
                             if (name.isBlank()) {
-                                errorText = if (lang == Localization.Language.ENGLISH) "Please enter member name" else "Συμπληρώστε όνομα μέλους"
+                                errorText = Localization.tr(lang, "Please enter member name", "Συμπληρώστε όνομα μέλους")
                                 return@Button
                             }
                             onSave(

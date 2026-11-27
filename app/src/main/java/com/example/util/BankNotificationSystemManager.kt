@@ -65,15 +65,30 @@ object BankNotificationSystemManager {
         return isProEntitled(context) && isAutoCatcherEnabled(context)
     }
 
+    private fun resolveAppLanguage(context: Context): Localization.Language {
+        val code = try {
+            context.getSharedPreferences("oikonomos_app_prefs", Context.MODE_PRIVATE)
+                .getString("app_language", Localization.Language.ENGLISH.code)
+        } catch (_: Throwable) {
+            Localization.Language.ENGLISH.code
+        }
+        return Localization.Language.fromCode(code)
+    }
+
     fun createNotificationChannel(context: Context) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val lang = resolveAppLanguage(context)
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    "Εντοπισμός Τραπεζικών Συναλλαγών",
+                    Localization.tr(lang, "Bank Transaction Detection", "Εντοπισμός Τραπεζικών Συναλλαγών"),
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Ειδοποιήσεις όταν εντοπίζονται νέες τραπεζικές συναλλαγές για άμεση καταχώρηση"
+                    description = Localization.tr(
+                        lang,
+                        "Alerts when new bank transactions are detected for quick logging",
+                        "Ειδοποιήσεις όταν εντοπίζονται νέες τραπεζικές συναλλαγές για άμεση καταχώρηση"
+                    )
                     enableVibration(true)
                     enableLights(true)
                     setShowBadge(true)
@@ -131,10 +146,11 @@ object BankNotificationSystemManager {
                 flags
             )
 
+            val lang = resolveAppLanguage(context)
             val title = if (tx.isIncome) {
-                "Εντοπίστηκε έσοδο: ${tx.bankName}"
+                "${Localization.tr(lang, "Income detected", "Εντοπίστηκε έσοδο")}: ${tx.bankName}"
             } else {
-                "Εντοπίστηκε έξοδο: ${tx.bankName}"
+                "${Localization.tr(lang, "Expense detected", "Εντοπίστηκε έξοδο")}: ${tx.bankName}"
             }
             val curSymbol = CurrencyFormatter.currentSymbol
             val signPrefix = if (tx.isIncome) "+" else "-"

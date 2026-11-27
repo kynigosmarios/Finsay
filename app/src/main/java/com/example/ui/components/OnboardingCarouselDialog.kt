@@ -73,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.Emerald700
+import com.example.util.Localization
 
 @Composable
 fun OnboardingCarouselDialog(
@@ -85,12 +86,12 @@ fun OnboardingCarouselDialog(
     onOpenProPaywall: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val isEnglish = appLanguage.equals("EN", ignoreCase = true)
+    val lang = Localization.Language.fromCode(appLanguage)
     var selectedSection by remember { mutableIntStateOf(0) } // 0 = Quick Start, 1 = Per Tab, 2 = Features
 
-    val quickStartSteps = remember(isEnglish) { GuideContentData.buildQuickStartSteps(isEnglish) }
-    val tabSections = remember(isEnglish) { GuideContentData.buildTabGuideSections(isEnglish) }
-    val smartFeatures = remember(isEnglish) { GuideContentData.buildSmartFeatureItems(isEnglish) }
+    val quickStartSteps = remember(lang) { GuideContentData.buildQuickStartSteps(lang) }
+    val tabSections = remember(lang) { GuideContentData.buildTabGuideSections(lang) }
+    val smartFeatures = remember(lang) { GuideContentData.buildSmartFeatureItems(lang) }
 
     // All items start collapsed so the Guide page stays calm and scannable
     val expandedSteps = remember { mutableStateMapOf<Int, Boolean>() }
@@ -127,7 +128,7 @@ fun OnboardingCarouselDialog(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (isEnglish) "Back" else "Επιστροφή",
+                        contentDescription = Localization.tr(lang, "Back", "Επιστροφή"),
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -147,7 +148,7 @@ fun OnboardingCarouselDialog(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = if (isEnglish) "App Guide" else "Οδηγίες",
+                    text = Localization.tr(lang, "App Guide", "Οδηγίες"),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -174,7 +175,7 @@ fun OnboardingCarouselDialog(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 GuideSegmentPill(
-                    label = if (isEnglish) "Start" else "1α Βήματα",
+                    label = Localization.tr(lang, "Start", "1α Βήματα"),
                     icon = Icons.Default.PlayArrow,
                     selected = selectedSection == 0,
                     onClick = { selectedSection = 0 },
@@ -182,7 +183,7 @@ fun OnboardingCarouselDialog(
                     modifier = Modifier.weight(1f)
                 )
                 GuideSegmentPill(
-                    label = if (isEnglish) "By Tab" else "Καρτέλες",
+                    label = Localization.tr(lang, "By Tab", "Καρτέλες"),
                     icon = Icons.Default.Dashboard,
                     selected = selectedSection == 1,
                     onClick = { selectedSection = 1 },
@@ -190,7 +191,7 @@ fun OnboardingCarouselDialog(
                     modifier = Modifier.weight(1f)
                 )
                 GuideSegmentPill(
-                    label = if (isEnglish) "Features" else "Λειτουργίες",
+                    label = Localization.tr(lang, "Features", "Λειτουργίες"),
                     icon = Icons.Default.AutoAwesome,
                     selected = selectedSection == 2,
                     onClick = { selectedSection = 2 },
@@ -223,13 +224,13 @@ fun OnboardingCarouselDialog(
                 when (sectionIndex) {
                     0 -> {
                         item(key = "qs_hero", contentType = "hero") {
-                            GuideWelcomeHeroCard(isEnglish = isEnglish)
+                            GuideWelcomeHeroCard(lang = lang)
                         }
                         item(key = "qs_toggle_all", contentType = "intro") {
                             val allStepsExpanded = quickStartSteps.isNotEmpty() && quickStartSteps.all { expandedSteps[it.number] == true }
                             GuideExpandCollapseAllRow(
                                 allExpanded = allStepsExpanded,
-                                isEnglish = isEnglish,
+                                lang = lang,
                                 onToggleAll = {
                                     val nextState = !allStepsExpanded
                                     quickStartSteps.forEach { expandedSteps[it.number] = nextState }
@@ -241,7 +242,7 @@ fun OnboardingCarouselDialog(
                                 step = step,
                                 isExpanded = expandedSteps[step.number] == true,
                                 onToggle = { expandedSteps[step.number] = !(expandedSteps[step.number] == true) },
-                                isEnglish = isEnglish,
+                                lang = lang,
                                 onAddMember = onAddMember,
                                 onAddCategory = onAddCategory,
                                 onSeedCategories = onSeedCategories
@@ -259,7 +260,7 @@ fun OnboardingCarouselDialog(
                                         .testTag("guide_explore_tabs_button")
                                 ) {
                                     Text(
-                                        text = if (isEnglish) "Explore what each tab does" else "Δείτε τι κάνει κάθε καρτέλα",
+                                        text = Localization.tr(lang, "Explore what each tab does", "Δείτε τι κάνει κάθε καρτέλα"),
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.5.sp,
                                         color = Emerald700
@@ -290,7 +291,7 @@ fun OnboardingCarouselDialog(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (isEnglish) "Get Started in Finsay" else "Ξεκινήστε στην εφαρμογή",
+                                        text = Localization.tr(lang, "Get Started in Finsay", "Ξεκινήστε στην εφαρμογή"),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.5.sp,
                                         color = Color.White
@@ -305,7 +306,7 @@ fun OnboardingCarouselDialog(
                             val allExpanded = tabSections.isNotEmpty() && tabSections.all { expandedTabs[it.id] == true }
                             GuideExpandCollapseAllRow(
                                 allExpanded = allExpanded,
-                                isEnglish = isEnglish,
+                                lang = lang,
                                 onToggleAll = {
                                     val nextState = !allExpanded
                                     tabSections.forEach { expandedTabs[it.id] = nextState }
@@ -318,7 +319,7 @@ fun OnboardingCarouselDialog(
                                 section = section,
                                 isExpanded = expandedTabs[section.id] == true,
                                 onToggle = { expandedTabs[section.id] = !(expandedTabs[section.id] == true) },
-                                isEnglish = isEnglish,
+                                lang = lang,
                                 showProCta = section.id == "finsay_pro" && !isPro && onOpenProPaywall != null,
                                 onOpenProPaywall = onOpenProPaywall
                             )
@@ -330,7 +331,7 @@ fun OnboardingCarouselDialog(
                             val allFeaturesExpanded = smartFeatures.isNotEmpty() && smartFeatures.all { expandedFeatures[it.id] == true }
                             GuideExpandCollapseAllRow(
                                 allExpanded = allFeaturesExpanded,
-                                isEnglish = isEnglish,
+                                lang = lang,
                                 onToggleAll = {
                                     val nextState = !allFeaturesExpanded
                                     smartFeatures.forEach { expandedFeatures[it.id] = nextState }
@@ -342,7 +343,7 @@ fun OnboardingCarouselDialog(
                                 feature = feature,
                                 isExpanded = expandedFeatures[feature.id] == true,
                                 onToggle = { expandedFeatures[feature.id] = !(expandedFeatures[feature.id] == true) },
-                                isEnglish = isEnglish,
+                                lang = lang,
                                 showProCta = feature.id == "finsay_pro" && !isPro && onOpenProPaywall != null,
                                 onOpenProPaywall = onOpenProPaywall
                             )
@@ -409,7 +410,7 @@ private fun GuideSegmentPill(
 }
 
 @Composable
-private fun GuideWelcomeHeroCard(isEnglish: Boolean) {
+private fun GuideWelcomeHeroCard(lang: Localization.Language) {
     Card(
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -427,17 +428,17 @@ private fun GuideWelcomeHeroCard(isEnglish: Boolean) {
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = if (isEnglish) "Welcome to Finsay!" else "Καλώς ήρθατε στο Finsay!",
+                    text = Localization.tr(lang, "Welcome to Finsay!", "Καλώς ήρθατε στο Finsay!"),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color.White
                 )
                 Text(
-                    text = if (isEnglish) {
-                        "Follow these 5 simple steps as soon as you sign in so your household budget, voice entry, reminders, and statistics work effortlessly from day one."
-                    } else {
+                    text = Localization.tr(
+                        lang,
+                        "Follow these 5 simple steps as soon as you sign in so your household budget, voice entry, reminders, and statistics work effortlessly from day one.",
                         "Ακολουθήστε αυτά τα 5 απλά βήματα με το που μπείτε στην εφαρμογή, ώστε οι καταχωρήσεις, η φωνητική αναγνώριση, οι στόχοι και τα στατιστικά να δουλεύουν άψογα από την πρώτη μέρα."
-                    },
+                    ),
                     fontSize = 12.5.sp,
                     lineHeight = 18.sp,
                     color = Color.White.copy(alpha = 0.92f)
@@ -450,7 +451,7 @@ private fun GuideWelcomeHeroCard(isEnglish: Boolean) {
 @Composable
 private fun GuideExpandCollapseAllRow(
     allExpanded: Boolean,
-    isEnglish: Boolean,
+    lang: Localization.Language,
     onToggleAll: () -> Unit
 ) {
     Row(
@@ -469,9 +470,9 @@ private fun GuideExpandCollapseAllRow(
         ) {
             Text(
                 text = if (allExpanded) {
-                    if (isEnglish) "Collapse all" else "Σύμπτυξη όλων"
+                    Localization.tr(lang, "Collapse all", "Σύμπτυξη όλων")
                 } else {
-                    if (isEnglish) "Expand all" else "Ανάπτυξη όλων"
+                    Localization.tr(lang, "Expand all", "Ανάπτυξη όλων")
                 },
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.Bold,
@@ -488,7 +489,7 @@ private fun QuickStartStepCard(
     step: QuickStartStep,
     isExpanded: Boolean,
     onToggle: () -> Unit,
-    isEnglish: Boolean,
+    lang: Localization.Language,
     onAddMember: (() -> Unit)?,
     onAddCategory: (() -> Unit)?,
     onSeedCategories: (() -> Unit)?
@@ -607,7 +608,7 @@ private fun QuickStartStepCard(
                                 modifier = Modifier.height(36.dp)
                             ) {
                                 Text(
-                                    text = if (isEnglish) "+ Add Member Now" else "+ Προσθήκη Μέλους τώρα",
+                                    text = Localization.tr(lang, "+ Add Member Now", "+ Προσθήκη Μέλους τώρα"),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = step.accentColor
@@ -628,7 +629,7 @@ private fun QuickStartStepCard(
                                         modifier = Modifier.height(36.dp)
                                     ) {
                                         Text(
-                                            text = if (isEnglish) "Add Standard Categories" else "Προσθήκη Βασικών Κατηγοριών",
+                                            text = Localization.tr(lang, "Add Standard Categories", "Προσθήκη Βασικών Κατηγοριών"),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White
@@ -644,7 +645,7 @@ private fun QuickStartStepCard(
                                         modifier = Modifier.height(36.dp)
                                     ) {
                                         Text(
-                                            text = if (isEnglish) "+ New Category" else "+ Νέα Κατηγορία",
+                                            text = Localization.tr(lang, "+ New Category", "+ Νέα Κατηγορία"),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = step.accentColor
@@ -665,7 +666,7 @@ private fun TabGuideAccordionCard(
     section: TabGuideSection,
     isExpanded: Boolean,
     onToggle: () -> Unit,
-    isEnglish: Boolean = false,
+    lang: Localization.Language = Localization.Language.GREEK,
     showProCta: Boolean = false,
     onOpenProPaywall: (() -> Unit)? = null
 ) {
@@ -789,7 +790,7 @@ private fun TabGuideAccordionCard(
                                 .testTag("guide_tab_upgrade_pro_button")
                         ) {
                             Text(
-                                text = if (isEnglish) "View Finsay Pro Plans" else "Δείτε τα πακέτα Finsay Pro",
+                                text = Localization.tr(lang, "View Finsay Pro Plans", "Δείτε τα πακέτα Finsay Pro"),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -807,7 +808,7 @@ private fun SmartFeatureGuideCard(
     feature: SmartFeatureItem,
     isExpanded: Boolean,
     onToggle: () -> Unit,
-    isEnglish: Boolean = false,
+    lang: Localization.Language = Localization.Language.GREEK,
     showProCta: Boolean = false,
     onOpenProPaywall: (() -> Unit)? = null
 ) {
@@ -956,7 +957,7 @@ private fun SmartFeatureGuideCard(
                                 .testTag("guide_feature_upgrade_pro_button")
                         ) {
                             Text(
-                                text = if (isEnglish) "View Finsay Pro Plans" else "Δείτε τα πακέτα Finsay Pro",
+                                text = Localization.tr(lang, "View Finsay Pro Plans", "Δείτε τα πακέτα Finsay Pro"),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

@@ -79,11 +79,13 @@ internal class FirestoreHouseholdDelegate(
                 Log.w(TAG, "getAllUserHouseholds memberUids error: ${t.message}")
             }
 
+            var existingProfileHouseholdIds: Set<String> = emptySet()
             try {
                 val uDoc = db.collection("users").document(uid).get().await()
                 if (uDoc.exists()) {
                     val hid = uDoc.safeString("householdId")
                     val hids = uDoc.safeStringList("householdIds") ?: emptyList()
+                    existingProfileHouseholdIds = hids.filter { it.isNotBlank() }.toSet()
                     val allProfileHids = (listOfNotNull(hid) + hids)
                         .filter { it.isNotBlank() && !excludedHouseholdIds.contains(it) }
                         .distinct()
@@ -100,24 +102,34 @@ internal class FirestoreHouseholdDelegate(
                 if (t is CancellationException) throw t
                 Log.w(TAG, "getAllUserHouseholds user profile error: ${t.message}")
             }
-        }
 
-        val resultList = foundMap.values.toList()
-
-        if (uid.isNotBlank() && resultList.isNotEmpty()) {
-            try {
-                val validIds = resultList.map { it.id }.filter { it.isNotBlank() }.distinct()
-                db.collection("users").document(uid).set(
-                    mapOf("householdIds" to FieldValue.arrayUnion(*validIds.toTypedArray())),
-                    SetOptions.merge()
-                ).await()
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.w(TAG, "getAllUserHouseholds profile arrayUnion notice: ${e.message}")
+            val resultList = foundMap.values.toList()
+            resultList.forEach { h ->
+                if (h.id.isNotBlank() && h.memberUids.contains(uid)) {
+                    ensuredHouseholdsCache["${h.id}:$uid"] = h
+                }
             }
+
+            if (resultList.isNotEmpty()) {
+                val validIds = resultList.map { it.id }.filter { it.isNotBlank() }.distinct()
+                val hasMissingIds = validIds.any { it !in existingProfileHouseholdIds }
+                if (hasMissingIds) {
+                    try {
+                        db.collection("users").document(uid).set(
+                            mapOf("householdIds" to FieldValue.arrayUnion(*validIds.toTypedArray())),
+                            SetOptions.merge()
+                        ).await()
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        Log.w(TAG, "getAllUserHouseholds profile arrayUnion notice: ${e.message}")
+                    }
+                }
+            }
+
+            return resultList
         }
 
-        return resultList
+        return foundMap.values.toList()
     }
 
     suspend fun discoverUserHouseholds(
@@ -189,6 +201,8 @@ internal class FirestoreHouseholdDelegate(
         return household
     }
 
+    private val ensuredHouseholdsCache = java.util.concurrent.ConcurrentHashMap<String, Household>()
+
     suspend fun ensureHouseholdExists(
         householdId: String,
         ownerUid: String,
@@ -197,9 +211,20 @@ internal class FirestoreHouseholdDelegate(
         if (householdId.isBlank() || ownerUid.isBlank()) {
             return Household(id = householdId, name = householdName, ownerId = ownerUid, memberUids = listOf(ownerUid))
         }
+        val cacheKey = "$householdId:$ownerUid"
+        ensuredHouseholdsCache[cacheKey]?.let { return it }
+
         val docRef = db.collection("households").document(householdId)
-        val snapshot = try { docRef.get().await() } catch (_: Throwable) { null }
-        if (snapshot != null && snapshot.exists()) {
+        val snapshot = try {
+            docRef.get().await()
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            // CRITICAL: Never treat a transient network/auth error as "household missing"
+            // or we would overwrite name, memberUids, memberRoles, and inviteCode in Firestore!
+            Log.w(TAG, "ensureHouseholdExists read failed for $householdId (skipping write): ${t.message}")
+            return Household(id = householdId, name = householdName, ownerId = ownerUid, memberUids = listOf(ownerUid))
+        }
+        if (snapshot.exists()) {
             val existing = try { snapshot.toSafeHousehold() } catch (_: Throwable) {
                 Household(id = householdId, name = householdName, ownerId = ownerUid, memberUids = listOf(ownerUid))
             }
@@ -208,6 +233,7 @@ internal class FirestoreHouseholdDelegate(
                     docRef.update("memberUids", FieldValue.arrayUnion(ownerUid)).await()
                 } catch (_: Throwable) {}
             }
+            ensuredHouseholdsCache[cacheKey] = existing
             return existing
         }
 
@@ -353,18 +379,19 @@ internal class FirestoreHouseholdDelegate(
                 }
             }
             .catch { t ->
-                Log.w(TAG, "observeHousehold flow error: ${t.message}")
-                emit(null)
+                Log.w(TAG, "observeHousehold flow error (preserving current state): ${t.message}")
             }
     }
 
     fun observeUserHouseholds(uid: String, email: String): Flow<List<Household>> {
         if (uid.isBlank()) return flowOf(emptyList())
 
+        var memberEmitted = false
         val memberFlow = db.collection("households")
             .whereArrayContains("memberUids", uid)
             .snapshots()
             .map { snap ->
+                memberEmitted = true
                 snap.documents.mapNotNull { doc ->
                     try {
                         val deletedFor = doc.safeStringList("deletedForUsers") ?: emptyList()
@@ -381,13 +408,15 @@ internal class FirestoreHouseholdDelegate(
             }
             .catch { t ->
                 Log.w(TAG, "observeUserHouseholds memberFlow error: ${t.message}")
-                emit(emptyList())
+                if (!memberEmitted) emit(emptyList())
             }
 
+        var ownerEmitted = false
         val ownerFlow = db.collection("households")
             .whereEqualTo("ownerId", uid)
             .snapshots()
             .map { snap ->
+                ownerEmitted = true
                 snap.documents.mapNotNull { doc ->
                     try {
                         val deletedFor = doc.safeStringList("deletedForUsers") ?: emptyList()
@@ -404,14 +433,13 @@ internal class FirestoreHouseholdDelegate(
             }
             .catch { t ->
                 Log.w(TAG, "observeUserHouseholds ownerFlow error: ${t.message}")
-                emit(emptyList())
+                if (!ownerEmitted) emit(emptyList())
             }
 
         return combine(memberFlow, ownerFlow) { mList, oList ->
             (oList + mList).distinctBy { it.id }
         }.catch { t ->
-            Log.w(TAG, "observeUserHouseholds combined flow error: ${t.message}")
-            emit(emptyList())
+            Log.w(TAG, "observeUserHouseholds combined flow error (preserving current state): ${t.message}")
         }
     }
 
@@ -679,6 +707,7 @@ internal class FirestoreHouseholdDelegate(
             db.collection("users").document(userId).delete().await()
 
             for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+                ensuredHouseholdsCache.remove("$hId:$userId")
                 try {
                     val hRef = db.collection("households").document(hId)
                     val hDoc = hRef.get().await()
@@ -686,7 +715,7 @@ internal class FirestoreHouseholdDelegate(
                         val ownerId = hDoc.getString("ownerId") ?: ""
                         val members = (hDoc.get("memberUids") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
                         if (ownerId == userId && (members.isEmpty() || members == listOf(userId))) {
-                            val hSubs = listOf("expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses", "activities")
+                            val hSubs = listOf("expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses", "activity")
                             for (sub in hSubs) {
                                 try {
                                     val docs = hRef.collection(sub).get().await()
@@ -697,8 +726,17 @@ internal class FirestoreHouseholdDelegate(
                                 }
                             }
                             hRef.delete().await()
-                        } else {
-                            hRef.update("memberUids", FieldValue.arrayRemove(userId)).await()
+                        } else if (ownerId != userId && members.contains(userId)) {
+                            hRef.update(
+                                mapOf(
+                                    "memberUids" to FieldValue.arrayRemove(userId),
+                                    "memberRoles.$userId" to FieldValue.delete(),
+                                    "memberEmails.$userId" to FieldValue.delete(),
+                                    "memberNames.$userId" to FieldValue.delete(),
+                                    "memberDefaultPayers.$userId" to FieldValue.delete(),
+                                    "updatedAt" to Timestamp.now()
+                                )
+                            ).await()
                         }
                     }
                 } catch (e: Exception) {

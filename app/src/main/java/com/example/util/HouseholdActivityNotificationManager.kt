@@ -22,20 +22,21 @@ object HouseholdActivityNotificationManager {
     private const val CHANNEL_ID = "finsay_shared_activity_channel"
     private const val TAG = "HouseholdActivityNotif"
 
-    fun createChannel(context: Context, isGreek: Boolean = true) {
+    fun createChannel(context: Context, isGreek: Boolean = true, lang: Localization.Language? = null) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val resolvedLang = lang ?: if (isGreek) Localization.Language.GREEK else Localization.Language.ENGLISH
         try {
             val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                if (isGreek) "Κοινή Δραστηριότητα Εξοδολογίου" else "Shared Household Activity",
+                Localization.tr(resolvedLang, "Shared Household Activity", "Κοινή Δραστηριότητα Εξοδολογίου"),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = if (isGreek) {
+                description = Localization.tr(
+                    resolvedLang,
+                    "Updates when other members log or edit shared transactions",
                     "Ενημερώσεις όταν άλλα μέλη καταχωρούν ή τροποποιούν συναλλαγές"
-                } else {
-                    "Updates when other members log or edit shared transactions"
-                }
+                )
                 setShowBadge(true)
             }
             nm.createNotificationChannel(channel)
@@ -50,7 +51,8 @@ object HouseholdActivityNotificationManager {
         actorName: String,
         summaryText: String,
         notificationId: Int,
-        isGreek: Boolean = true
+        isGreek: Boolean = true,
+        lang: Localization.Language? = null
     ) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -59,7 +61,7 @@ object HouseholdActivityNotificationManager {
                 return
             }
 
-            createChannel(context, isGreek)
+            createChannel(context, isGreek, lang)
             val tapIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra(EXTRA_OPEN_HOUSEHOLD_ACTIVITY, true)

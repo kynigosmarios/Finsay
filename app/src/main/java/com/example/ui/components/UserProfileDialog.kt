@@ -130,7 +130,6 @@ fun UserProfileDialog(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEnglish = lang == Localization.Language.ENGLISH
     var isEditingProfile by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showDeleteReauthDialog by remember { mutableStateOf(false) }
@@ -258,7 +257,7 @@ fun UserProfileDialog(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (lang == Localization.Language.ENGLISH) "Back" else "Επιστροφή",
+                        contentDescription = Localization.tr(lang, "Back", "Επιστροφή"),
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -280,7 +279,7 @@ fun UserProfileDialog(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = if (isEditingProfile) {
-                            if (lang == Localization.Language.ENGLISH) "Edit Profile" else "Επεξεργασία Προφίλ"
+                            Localization.tr(lang, "Edit Profile", "Επεξεργασία Προφίλ")
                         } else {
                             Localization.myProfile(lang)
                         },
@@ -353,7 +352,7 @@ fun UserProfileDialog(
                                         Box(contentAlignment = Alignment.Center) {
                                             Icon(
                                                 imageVector = Icons.Default.PhotoCamera,
-                                                contentDescription = "Change photo",
+                                                contentDescription = Localization.tr(lang, "Change photo", "Αλλαγή φωτογραφίας"),
                                                 tint = Color.White,
                                                 modifier = Modifier.size(14.dp)
                                             )
@@ -380,7 +379,11 @@ fun UserProfileDialog(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = if (isPro) "Finsay Pro Member ★" else "Finsay Free Account",
+                                        text = if (isPro) {
+                                            Localization.tr(lang, "Finsay Pro Member ★", "Finsay Pro Member ★")
+                                        } else {
+                                            Localization.tr(lang, "Finsay Free Account", "Finsay Free Account")
+                                        },
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = if (isPro) Amber700 else Emerald700
@@ -420,7 +423,7 @@ fun UserProfileDialog(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "Change Avatar" else "Αλλαγή Avatar",
+                                            text = Localization.tr(lang, "Change Avatar", "Αλλαγή Avatar"),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Emerald700
@@ -471,7 +474,7 @@ fun UserProfileDialog(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Delete,
-                                                contentDescription = "Remove avatar",
+                                                contentDescription = Localization.tr(lang, "Remove avatar", "Αφαίρεση avatar"),
                                                 tint = MaterialTheme.colorScheme.error,
                                                 modifier = Modifier.size(15.dp)
                                             )
@@ -512,7 +515,7 @@ fun UserProfileDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Personal Information" else "Προσωπικά Στοιχεία",
+                                        text = Localization.tr(lang, "Personal Information", "Προσωπικά Στοιχεία"),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -522,7 +525,7 @@ fun UserProfileDialog(
                                         color = Emerald700.copy(alpha = 0.12f)
                                     ) {
                                         Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "EDITING" else "ΕΠΕΞΕΡΓΑΣΙΑ",
+                                            text = Localization.tr(lang, "EDITING", "ΕΠΕΞΕΡΓΑΣΙΑ"),
                                             color = Emerald700,
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
@@ -535,7 +538,7 @@ fun UserProfileDialog(
                                 OutlinedTextField(
                                     value = editedFirstName,
                                     onValueChange = { editedFirstName = it },
-                                    label = { Text(if (lang == Localization.Language.ENGLISH) "First Name" else "Όνομα") },
+                                    label = { Text(Localization.tr(lang, "First Name", "Όνομα")) },
                                     leadingIcon = {
                                         Icon(Icons.Default.Person, contentDescription = null, tint = Emerald700, modifier = Modifier.size(20.dp))
                                     },
@@ -553,7 +556,7 @@ fun UserProfileDialog(
                                 OutlinedTextField(
                                     value = editedLastName,
                                     onValueChange = { editedLastName = it },
-                                    label = { Text(if (lang == Localization.Language.ENGLISH) "Last Name" else "Επίθετο") },
+                                    label = { Text(Localization.tr(lang, "Last Name", "Επίθετο")) },
                                     leadingIcon = {
                                         Icon(Icons.Default.Badge, contentDescription = null, tint = Emerald700, modifier = Modifier.size(20.dp))
                                     },
@@ -583,7 +586,7 @@ fun UserProfileDialog(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = if (lang == Localization.Language.ENGLISH) "Date of Birth (DD / MM / YYYY)" else "Ημερομηνία Γέννησης (ΗΗ / ΜΜ / ΕΕΕΕ)",
+                                                text = Localization.tr(lang, "Date of Birth (DD / MM / YYYY)", "Ημερομηνία Γέννησης (ΗΗ / ΜΜ / ΕΕΕΕ)"),
                                                 fontSize = 12.5.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = MaterialTheme.colorScheme.onSurface
@@ -620,8 +623,8 @@ fun UserProfileDialog(
                                                     "$dStr/$mStr/$birthYearText"
                                                 } else ""
                                             },
-                                            label = { Text(if (isEnglish) "Day" else "Ημέρα", fontSize = 11.5.sp) },
-                                            placeholder = { Text(if (isEnglish) "DD" else "ΗΗ", fontSize = 12.sp) },
+                                            label = { Text(Localization.tr(lang, "Day", "Ημέρα"), fontSize = 11.5.sp) },
+                                            placeholder = { Text(Localization.tr(lang, "DD", "ΗΗ"), fontSize = 12.sp) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             shape = RoundedCornerShape(12.dp),
@@ -644,8 +647,8 @@ fun UserProfileDialog(
                                                     "$dStr/$mStr/$birthYearText"
                                                 } else ""
                                             },
-                                            label = { Text(if (isEnglish) "Month" else "Μήνας", fontSize = 11.5.sp) },
-                                            placeholder = { Text(if (isEnglish) "MM" else "ΜΜ", fontSize = 12.sp) },
+                                            label = { Text(Localization.tr(lang, "Month", "Μήνας"), fontSize = 11.5.sp) },
+                                            placeholder = { Text(Localization.tr(lang, "MM", "ΜΜ"), fontSize = 12.sp) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             shape = RoundedCornerShape(12.dp),
@@ -668,8 +671,8 @@ fun UserProfileDialog(
                                                     "$dStr/$mStr/$birthYearText"
                                                 } else ""
                                             },
-                                            label = { Text(if (isEnglish) "Year" else "Έτος", fontSize = 11.5.sp) },
-                                            placeholder = { Text(if (isEnglish) "YYYY" else "ΕΕΕΕ", fontSize = 12.sp) },
+                                            label = { Text(Localization.tr(lang, "Year", "Έτος"), fontSize = 11.5.sp) },
+                                            placeholder = { Text(Localization.tr(lang, "YYYY", "ΕΕΕΕ"), fontSize = 12.sp) },
                                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                             singleLine = true,
                                             shape = RoundedCornerShape(12.dp),
@@ -687,7 +690,7 @@ fun UserProfileDialog(
                                 OutlinedTextField(
                                     value = editedPhone,
                                     onValueChange = { editedPhone = it },
-                                    label = { Text(if (lang == Localization.Language.ENGLISH) "Mobile Phone" else "Κινητό Τηλέφωνο") },
+                                    label = { Text(Localization.tr(lang, "Mobile Phone", "Κινητό Τηλέφωνο")) },
                                     placeholder = { Text("69XXXXXXXX") },
                                     leadingIcon = {
                                         Icon(Icons.Default.Phone, contentDescription = null, tint = Emerald700, modifier = Modifier.size(20.dp))
@@ -707,7 +710,7 @@ fun UserProfileDialog(
                                 OutlinedTextField(
                                     value = editedOccupation,
                                     onValueChange = { editedOccupation = it },
-                                    label = { Text(if (lang == Localization.Language.ENGLISH) "Occupation" else "Επάγγελμα") },
+                                    label = { Text(Localization.tr(lang, "Occupation", "Επάγγελμα")) },
                                     leadingIcon = {
                                         Icon(Icons.Default.Work, contentDescription = null, tint = Emerald700, modifier = Modifier.size(20.dp))
                                     },
@@ -725,7 +728,7 @@ fun UserProfileDialog(
                                 OutlinedTextField(
                                     value = editedCity,
                                     onValueChange = { editedCity = it },
-                                    label = { Text(if (lang == Localization.Language.ENGLISH) "City" else "Πόλη") },
+                                    label = { Text(Localization.tr(lang, "City", "Πόλη")) },
                                     leadingIcon = {
                                         Icon(Icons.Default.LocationCity, contentDescription = null, tint = Emerald700, modifier = Modifier.size(20.dp))
                                     },
@@ -836,7 +839,7 @@ fun UserProfileDialog(
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Personal Information" else "Προσωπικά Στοιχεία",
+                                        text = Localization.tr(lang, "Personal Information", "Προσωπικά Στοιχεία"),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -871,44 +874,59 @@ fun UserProfileDialog(
                                 Spacer(modifier = Modifier.height(14.dp))
 
                                 // Information Rows - beautifully structured without squishing
+                                val notSetLabel = Localization.tr(lang, "Not set", "Δεν έχει οριστεί")
+                                val resolvedFullName = if (editedFirstName.isNotBlank() || editedLastName.isNotBlank()) {
+                                    "$editedFirstName $editedLastName".trim()
+                                } else {
+                                    userProfile?.displayName?.ifBlank { null }.orEmpty()
+                                }
+                                val resolvedBirthDate = userProfile?.birthDate?.ifBlank { null } ?: editedBirthDate
+                                val resolvedPhone = userProfile?.phoneNumber?.ifBlank { null } ?: editedPhone
+                                val resolvedOccupation = userProfile?.occupation?.ifBlank { null } ?: editedOccupation
+                                val resolvedCity = userProfile?.city?.ifBlank { null } ?: editedCity
+                                val resolvedEmail = currentUser?.email ?: userProfile?.email.orEmpty()
+
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     ProfileInfoRow(
                                         icon = Icons.Default.Person,
-                                        label = if (lang == Localization.Language.ENGLISH) "Full Name" else "Ονοματεπώνυμο",
-                                        value = if (editedFirstName.isNotBlank() || editedLastName.isNotBlank())
-                                            "$editedFirstName $editedLastName".trim()
-                                        else
-                                            (userProfile?.displayName?.ifBlank { null } ?: if (lang == Localization.Language.ENGLISH) "Not set" else "Δεν έχει οριστεί")
+                                        label = Localization.tr(lang, "Full Name", "Ονοματεπώνυμο"),
+                                        value = resolvedFullName.ifBlank { notSetLabel },
+                                        isUnset = resolvedFullName.isBlank()
                                     )
 
                                     ProfileInfoRow(
                                         icon = Icons.Default.CalendarMonth,
-                                        label = if (lang == Localization.Language.ENGLISH) "Date of Birth" else "Ημερομηνία Γέννησης",
-                                        value = (userProfile?.birthDate?.ifBlank { null } ?: editedBirthDate).ifBlank { if (lang == Localization.Language.ENGLISH) "Not set" else "Δεν έχει οριστεί" }
+                                        label = Localization.tr(lang, "Date of Birth", "Ημερομηνία Γέννησης"),
+                                        value = resolvedBirthDate.ifBlank { notSetLabel },
+                                        isUnset = resolvedBirthDate.isBlank()
                                     )
 
                                     ProfileInfoRow(
                                         icon = Icons.Default.Phone,
-                                        label = if (lang == Localization.Language.ENGLISH) "Mobile Phone" else "Κινητό Τηλέφωνο",
-                                        value = (userProfile?.phoneNumber?.ifBlank { null } ?: editedPhone).ifBlank { if (lang == Localization.Language.ENGLISH) "Not set" else "Δεν έχει οριστεί" }
+                                        label = Localization.tr(lang, "Mobile Phone", "Κινητό Τηλέφωνο"),
+                                        value = resolvedPhone.ifBlank { notSetLabel },
+                                        isUnset = resolvedPhone.isBlank()
                                     )
 
                                     ProfileInfoRow(
                                         icon = Icons.Default.Work,
-                                        label = if (lang == Localization.Language.ENGLISH) "Occupation" else "Επάγγελμα",
-                                        value = (userProfile?.occupation?.ifBlank { null } ?: editedOccupation).ifBlank { if (lang == Localization.Language.ENGLISH) "Not set" else "Δεν έχει οριστεί" }
+                                        label = Localization.tr(lang, "Occupation", "Επάγγελμα"),
+                                        value = resolvedOccupation.ifBlank { notSetLabel },
+                                        isUnset = resolvedOccupation.isBlank()
                                     )
 
                                     ProfileInfoRow(
                                         icon = Icons.Default.LocationCity,
-                                        label = if (lang == Localization.Language.ENGLISH) "City" else "Πόλη",
-                                        value = (userProfile?.city?.ifBlank { null } ?: editedCity).ifBlank { if (lang == Localization.Language.ENGLISH) "Not set" else "Δεν έχει οριστεί" }
+                                        label = Localization.tr(lang, "City", "Πόλη"),
+                                        value = resolvedCity.ifBlank { notSetLabel },
+                                        isUnset = resolvedCity.isBlank()
                                     )
 
                                     ProfileInfoRow(
                                         icon = Icons.Default.Email,
-                                        label = if (lang == Localization.Language.ENGLISH) "Account Email" else "Email Λογαριασμού",
-                                        value = currentUser?.email ?: (userProfile?.email ?: (if (lang == Localization.Language.ENGLISH) "Not set" else "Δεν έχει οριστεί"))
+                                        label = Localization.tr(lang, "Account Email", "Email Λογαριασμού"),
+                                        value = resolvedEmail.ifBlank { notSetLabel },
+                                        isUnset = resolvedEmail.isBlank()
                                     )
                                 }
                             }
@@ -957,7 +975,7 @@ fun UserProfileDialog(
                                         )
                                         Text(
                                             text = if (isPro)
-                                                (if (lang == Localization.Language.ENGLISH) "Unlimited households & members" else "Απεριόριστα εξοδολόγια & μέλη")
+                                                Localization.tr(lang, "Unlimited households & members", "Απεριόριστα εξοδολόγια & μέλη")
                                             else
                                                 Localization.activeHouseholdCount(lang, 1),
                                             fontSize = 12.sp,
@@ -972,7 +990,7 @@ fun UserProfileDialog(
                                         color = Amber700.copy(alpha = 0.15f)
                                     ) {
                                         Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "ACTIVE" else "ΕΝΕΡΓΟ",
+                                            text = Localization.tr(lang, "ACTIVE", "ΕΝΕΡΓΟ"),
                                             color = Amber700,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.ExtraBold,
@@ -1173,7 +1191,7 @@ fun UserProfileDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text(
-                        text = if (isEnglish) "Continue" else "Συνέχεια",
+                        text = Localization.tr(lang, "Continue", "Συνέχεια"),
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -1231,9 +1249,9 @@ fun UserProfileDialog(
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
                             text = if (hasPasswordProvider) {
-                                if (isEnglish) "Confirm Your Password" else "Επιβεβαίωση Κωδικού"
+                                Localization.tr(lang, "Confirm Your Password", "Επιβεβαίωση Κωδικού")
                             } else {
-                                if (isEnglish) "Verify Your Account" else "Επαλήθευση Λογαριασμού"
+                                Localization.tr(lang, "Verify Your Account", "Επαλήθευση Λογαριασμού")
                             },
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
@@ -1245,17 +1263,17 @@ fun UserProfileDialog(
 
                     Text(
                         text = if (hasPasswordProvider) {
-                            if (isEnglish) {
-                                "For your security, please enter your account password to permanently delete your account and all associated data."
-                            } else {
+                            Localization.tr(
+                                lang,
+                                "For your security, please enter your account password to permanently delete your account and all associated data.",
                                 "Για λόγους ασφαλείας, πληκτρολογήστε τον κωδικό πρόσβασής σας για να ολοκληρωθεί η οριστική διαγραφή του λογαριασμού και των δεδομένων σας."
-                            }
+                            )
                         } else {
-                            if (isEnglish) {
-                                "For your security, please confirm your Google account identity before your account and all data are permanently deleted."
-                            } else {
+                            Localization.tr(
+                                lang,
+                                "For your security, please confirm your Google account identity before your account and all data are permanently deleted.",
                                 "Για λόγους ασφαλείας, επιβεβαιώστε την ταυτότητα του λογαριασμού σας Google πριν διαγραφούν οριστικά ο λογαριασμός και τα δεδομένα σας."
-                            }
+                            )
                         },
                         fontSize = 13.5.sp,
                         lineHeight = 19.sp,
@@ -1271,7 +1289,7 @@ fun UserProfileDialog(
                                 deleteReauthError = null
                             },
                             enabled = !deleteReauthLoading,
-                            label = { Text(if (isEnglish) "Account Password" else "Κωδικός Πρόσβασης") },
+                            label = { Text(Localization.tr(lang, "Account Password", "Κωδικός Πρόσβασης")) },
                             singleLine = true,
                             visualTransformation = if (deletePasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -1282,7 +1300,7 @@ fun UserProfileDialog(
                                 ) {
                                     Icon(
                                         imageVector = if (deletePasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isEnglish) "Toggle password visibility" else "Εμφάνιση ή απόκρυψη κωδικού"
+                                        contentDescription = Localization.tr(lang, "Toggle password visibility", "Εμφάνιση ή απόκρυψη κωδικού")
                                     )
                                 }
                             },
@@ -1337,11 +1355,11 @@ fun UserProfileDialog(
                             onClick = {
                                 if (hasPasswordProvider && onDeleteAccountWithPassword != null) {
                                     if (deletePasswordInput.isBlank()) {
-                                        deleteReauthError = if (isEnglish) {
-                                            "Please enter your password."
-                                        } else {
+                                        deleteReauthError = Localization.tr(
+                                            lang,
+                                            "Please enter your password.",
                                             "Παρακαλούμε πληκτρολογήστε τον κωδικό σας."
-                                        }
+                                        )
                                         return@Button
                                     }
                                     deleteReauthLoading = true
@@ -1363,11 +1381,11 @@ fun UserProfileDialog(
                                     val serverClientId = try {
                                         context.getString(R.string.default_web_client_id)
                                     } catch (_: Exception) {
-                                        deleteReauthError = if (isEnglish) {
-                                            "Google verification configuration missing."
-                                        } else {
+                                        deleteReauthError = Localization.tr(
+                                            lang,
+                                            "Google verification configuration missing.",
                                             "Λείπει η ρύθμιση επαλήθευσης Google."
-                                        }
+                                        )
                                         return@Button
                                     }
                                     deleteReauthLoading = true
@@ -1397,17 +1415,19 @@ fun UserProfileDialog(
                                                 )
                                             } else {
                                                 deleteReauthLoading = false
-                                                deleteReauthError = if (isEnglish) "Invalid Google credential." else "Μη έγκυρο διαπιστευτήριο Google."
+                                                deleteReauthError = Localization.tr(lang, "Invalid Google credential.", "Μη έγκυρο διαπιστευτήριο Google.")
                                             }
                                         } catch (_: GetCredentialCancellationException) {
                                             deleteReauthLoading = false
                                         } catch (e: Exception) {
                                             deleteReauthLoading = false
-                                            deleteReauthError = if (isEnglish) {
-                                                "Google verification failed: ${e.localizedMessage ?: "please try again"}"
-                                            } else {
-                                                "Η επαλήθευση Google απέτυχε: ${e.localizedMessage ?: "δοκιμάστε ξανά"}"
-                                            }
+                                            val reason = e.localizedMessage ?: Localization.tr(lang, "please try again", "δοκιμάστε ξανά")
+                                            deleteReauthError = Localization.trFormat(
+                                                lang,
+                                                "Google verification failed: %1\$s",
+                                                "Η επαλήθευση Google απέτυχε: %1\$s",
+                                                reason
+                                            )
                                         }
                                     }
                                 }
@@ -1426,9 +1446,9 @@ fun UserProfileDialog(
                             } else {
                                 Text(
                                     text = if (hasPasswordProvider) {
-                                        if (isEnglish) "Delete Forever" else "Οριστική Διαγραφή"
+                                        Localization.tr(lang, "Delete Forever", "Οριστική Διαγραφή")
                                     } else {
-                                        if (isEnglish) "Verify & Delete" else "Επαλήθευση & Διαγραφή"
+                                        Localization.tr(lang, "Verify & Delete", "Επαλήθευση & Διαγραφή")
                                     },
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -1487,7 +1507,7 @@ fun UserProfileDialog(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Select Date of Birth" else "Επιλογή Ημερομηνίας Γέννησης",
+                            text = Localization.tr(lang, "Select Date of Birth", "Επιλογή Ημερομηνίας Γέννησης"),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1505,8 +1525,8 @@ fun UserProfileDialog(
                             onValueChange = { input ->
                                 dialogDayText = input.filter { it.isDigit() }.take(2)
                             },
-                            label = { Text(if (isEnglish) "Day" else "Ημέρα") },
-                            placeholder = { Text(if (isEnglish) "DD" else "ΗΗ") },
+                            label = { Text(Localization.tr(lang, "Day", "Ημέρα")) },
+                            placeholder = { Text(Localization.tr(lang, "DD", "ΗΗ")) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -1518,8 +1538,8 @@ fun UserProfileDialog(
                             onValueChange = { input ->
                                 dialogMonthText = input.filter { it.isDigit() }.take(2)
                             },
-                            label = { Text(if (isEnglish) "Month" else "Μήνας") },
-                            placeholder = { Text(if (isEnglish) "MM" else "ΜΜ") },
+                            label = { Text(Localization.tr(lang, "Month", "Μήνας")) },
+                            placeholder = { Text(Localization.tr(lang, "MM", "ΜΜ")) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -1531,8 +1551,8 @@ fun UserProfileDialog(
                             onValueChange = { input ->
                                 dialogYearText = input.filter { it.isDigit() }.take(4)
                             },
-                            label = { Text(if (isEnglish) "Year" else "Έτος") },
-                            placeholder = { Text(if (isEnglish) "YYYY" else "ΕΕΕΕ") },
+                            label = { Text(Localization.tr(lang, "Year", "Έτος")) },
+                            placeholder = { Text(Localization.tr(lang, "YYYY", "ΕΕΕΕ")) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -1547,7 +1567,7 @@ fun UserProfileDialog(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showDatePickerDialog = false }) {
-                            Text(text = if (lang == Localization.Language.ENGLISH) "Cancel" else "Άκυρο", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = Localization.cancel(lang), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -1566,7 +1586,7 @@ fun UserProfileDialog(
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Emerald700)
                         ) {
-                            Text(text = if (lang == Localization.Language.ENGLISH) "Confirm" else "Επιβεβαίωση", color = Color.White)
+                            Text(text = Localization.tr(lang, "Confirm", "Επιβεβαίωση"), color = Color.White)
                         }
                     }
                 }
@@ -1583,9 +1603,9 @@ fun UserProfileDialog(
 private fun ProfileInfoRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    value: String
+    value: String,
+    isUnset: Boolean = false
 ) {
-    val isUnset = value == "Δεν έχει οριστεί" || value == "Not set"
 
     Surface(
         shape = RoundedCornerShape(14.dp),

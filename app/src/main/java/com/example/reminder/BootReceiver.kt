@@ -8,8 +8,12 @@ import kotlinx.coroutines.launch
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            Log.d("BootReceiver", "Device reboot completed. Rescheduling daily and bill reminders if enabled.")
+        val action = intent?.action
+        if (action == Intent.ACTION_BOOT_COMPLETED ||
+            action == Intent.ACTION_MY_PACKAGE_REPLACED ||
+            action == "android.intent.action.QUICKBOOT_POWERON"
+        ) {
+            Log.d("BootReceiver", "System event ($action) received. Rescheduling daily and bill reminders if enabled.")
             if (DailyReminderManager.isReminderEnabled(context)) {
                 val hour = DailyReminderManager.getReminderHour(context)
                 val minute = DailyReminderManager.getReminderMinute(context)

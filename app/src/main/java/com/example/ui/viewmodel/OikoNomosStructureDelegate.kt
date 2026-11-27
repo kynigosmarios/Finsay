@@ -12,6 +12,7 @@ import com.example.reminder.DailyReminderManager
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.BankNotificationSystemManager
 import com.example.util.HomeDrillDownRequest
+import com.example.util.Localization
 import com.example.util.StartupSafety
 import com.google.firebase.auth.FirebaseUser
 import java.util.Locale
@@ -62,6 +63,61 @@ internal class OikoNomosStructureDelegate(
         }.toSet()
         val fromList = vm._deletedCategories.value.map { categoryTrashNameKey(it.categoryType, it.name) }.toSet()
         return normalizedPrefs + fromList
+    }
+
+    /**
+     * Allocates a strictly collision-free member ID that never reuses an active, soft-deleted,
+     * cloud-known, or historically referenced expense/income member ID.
+     */
+    suspend fun allocateNextSafeMemberId(): Long {
+        val hid = vm._currentHousehold.value?.id.orEmpty()
+        val used = HashSet<Long>()
+        vm._allMembers.value.forEach { if (it.id > 0L) used.add(it.id) }
+        vm._deletedMembers.value.forEach { if (it.id > 0L) used.add(it.id) }
+        if (hid.isNotBlank()) {
+            getDeletedMemberIds(hid).forEach { it.toLongOrNull()?.takeIf { id -> id > 0L }?.let(used::add) }
+        }
+        try {
+            vm.repository.getAllMembersList().forEach { if (it.id > 0L) used.add(it.id) }
+        } catch (_: Exception) {}
+        vm.lastHouseholdMembers.forEach { fm ->
+            fm.id.toLongOrNull()?.takeIf { it > 0L }?.let(used::add)
+        }
+        vm._allExpenses.value.forEach { exp ->
+            if (exp.payerMemberId > 0L) used.add(exp.payerMemberId)
+            exp.payerMemberIdsCsv.split(",").forEach { it.trim().toLongOrNull()?.takeIf { id -> id > 0L }?.let(used::add) }
+            exp.memberIdsCsv.split(",").forEach { it.trim().toLongOrNull()?.takeIf { id -> id > 0L }?.let(used::add) }
+            exp.payerAmountsCsv.split(",").forEach { entry ->
+                entry.substringBefore(":").trim().toLongOrNull()?.takeIf { id -> id > 0L }?.let(used::add)
+            }
+        }
+        vm._allIncomes.value.forEach { inc ->
+            if (inc.memberId > 0L) used.add(inc.memberId)
+        }
+        return StartupSafety.allocateNextSafeId(used)
+    }
+
+    /**
+     * Allocates a strictly collision-free category ID that never reuses an active, soft-deleted,
+     * cloud-known, or historically referenced expense/income category ID.
+     */
+    suspend fun allocateNextSafeCategoryId(): Long {
+        val hid = vm._currentHousehold.value?.id.orEmpty()
+        val used = HashSet<Long>()
+        vm._allCategories.value.forEach { if (it.id > 0L) used.add(it.id) }
+        vm._incomeCategories.value.forEach { if (it.id > 0L) used.add(it.id) }
+        vm._deletedCategories.value.forEach { if (it.id > 0L) used.add(it.id) }
+        if (hid.isNotBlank()) {
+            getDeletedCategoryIds(hid).forEach { it.toLongOrNull()?.takeIf { id -> id > 0L }?.let(used::add) }
+        }
+        try {
+            vm.repository.getAllCategoriesList().forEach { if (it.id > 0L) used.add(it.id) }
+        } catch (_: Exception) {}
+        vm.lastHouseholdCategories.forEach { fc ->
+            fc.id.toLongOrNull()?.takeIf { it > 0L }?.let(used::add)
+        }
+        vm._allExpenses.value.forEach { exp -> if (exp.categoryId > 0L) used.add(exp.categoryId) }
+        return StartupSafety.allocateNextSafeId(used)
     }
 
     fun loadDeletedItems(householdId: String) {
@@ -255,7 +311,8 @@ internal class OikoNomosStructureDelegate(
 
             val localExisting = vm.repository.getAllMembersList()
             val areDifferent = localExisting.size != mapped.size || localExisting.zip(mapped).any { (e, m) ->
-                e.name != m.name || e.role != m.role || e.avatarColorHex != m.avatarColorHex ||
+                e.id != m.id || e.name != m.name || e.role != m.role || e.avatarColorHex != m.avatarColorHex ||
+                    e.voiceKeywords != m.voiceKeywords || e.isDefault != m.isDefault ||
                     e.sortOrder != m.sortOrder || e.linkedUserUid != m.linkedUserUid
             }
             if (areDifferent) {
@@ -270,40 +327,49 @@ internal class OikoNomosStructureDelegate(
             if (currentLocal.isNotEmpty() && !currentLocal.all { it.name == "Εγώ" }) {
                 currentLocal
             } else {
-                val u = explicitUser ?: vm._currentUser.value ?: vm.auth.currentUser
-                val p = explicitProfile ?: vm._userProfile.value
-                val profileName = p?.displayName?.ifBlank { null }
-                    ?: "${p?.firstName ?: ""} ${p?.lastName ?: ""}".trim().ifBlank { null }
-                    ?: u?.displayName?.ifBlank { null }
-                    ?: u?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() }
-                    ?: "Εγώ"
+                val serverHasMembers = if (currentHouseholdId.isNotBlank()) {
+                    vm.firestoreSyncRepo.hasAnyMemberDocsOnServer(currentHouseholdId)
+                } else null
+                if (serverHasMembers != false && currentLocal.isNotEmpty()) {
+                    currentLocal
+                } else {
+                    val u = explicitUser ?: vm._currentUser.value ?: vm.auth.currentUser
+                    val p = explicitProfile ?: vm._userProfile.value
+                    val profileName = p?.displayName?.ifBlank { null }
+                        ?: "${p?.firstName ?: ""} ${p?.lastName ?: ""}".trim().ifBlank { null }
+                        ?: u?.displayName?.ifBlank { null }
+                        ?: u?.email?.substringBefore("@")?.replaceFirstChar { it.uppercase() }
+                        ?: "Εγώ"
 
-                val defaultMember = FamilyMember(
-                    id = 1L,
-                    name = profileName,
-                    role = "Μονοπρόσωπο",
-                    avatarColorHex = 0xFF059669,
-                    voiceKeywords = profileName.lowercase(),
-                    isDefault = true,
-                    sortOrder = 0,
-                    linkedUserUid = uid
-                )
-                val list = listOf(defaultMember)
-                vm.repository.replaceAllMembers(list)
-                val canWriteStructure = StartupSafety.canSafelyWriteRemoteStructure(
-                    targetHousehold = vm._currentHousehold.value,
-                    userUid = uid,
-                    userEmail = userEmail,
-                    isMarios = false,
-                    mariosDefaultIds = emptySet()
-                )
-                if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && canWriteStructure) {
-                    vm.firestoreSyncRepo.syncMember(
-                        currentHouseholdId,
-                        FirebaseMember("1", currentHouseholdId, uid, defaultMember.name, defaultMember.role, defaultMember.avatarColorHex, defaultMember.voiceKeywords, true, 0, false, uid)
+                    val defaultMember = FamilyMember(
+                        id = 1L,
+                        name = profileName,
+                        role = "Μονοπρόσωπο",
+                        avatarColorHex = 0xFF059669,
+                        voiceKeywords = profileName.lowercase(),
+                        isDefault = true,
+                        sortOrder = 0,
+                        linkedUserUid = uid
                     )
+                    val list = listOf(defaultMember)
+                    vm.repository.replaceAllMembers(list)
+                    val canWriteStructure = StartupSafety.canSafelyWriteRemoteStructure(
+                        targetHousehold = vm._currentHousehold.value,
+                        userUid = uid,
+                        userEmail = userEmail,
+                        isMarios = false,
+                        mariosDefaultIds = emptySet()
+                    )
+                    // CRITICAL: Only seed default member "1" to Firestore when server definitively
+                    // confirmed 0 member documents exist (serverHasMembers == false).
+                    if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && canWriteStructure && serverHasMembers == false) {
+                        vm.firestoreSyncRepo.syncMember(
+                            currentHouseholdId,
+                            FirebaseMember("1", currentHouseholdId, uid, defaultMember.name, defaultMember.role, defaultMember.avatarColorHex, defaultMember.voiceKeywords, true, 0, false, uid)
+                        )
+                    }
+                    list
                 }
-                list
             }
         }
         vm._allMembers.value = finalMembers
@@ -390,45 +456,54 @@ internal class OikoNomosStructureDelegate(
                 .sortedWith(compareBy<ExpenseCategory> { it.sortOrder }.thenBy { it.id })
         }
 
-        val isEnglish = vm._appLanguage.value == "EN"
+        val currentLang = Localization.Language.fromCode(vm._appLanguage.value)
+        val existingLocalAll = vm.repository.getAllCategoriesList()
         val finalExpenseCats: List<ExpenseCategory> = when {
             activeExpenseIncoming.isNotEmpty() -> mapGroup(activeExpenseIncoming, "EXPENSE")
             remoteDeletedExpense.isNotEmpty() -> emptyList()
             else -> {
-                val standardDefaults = OikoNomosViewModel.getStandardDefaultCategories(isEnglish)
-                val baseDefaults = if (vm.isCurrentUserPro()) {
-                    standardDefaults
+                val localExpense = existingLocalAll.filter { !it.isIncomeCategory }
+                val serverHasExpense = if (currentHouseholdId.isNotBlank()) {
+                    vm.firestoreSyncRepo.hasAnyCategoryDocsOnServer(currentHouseholdId, "EXPENSE")
+                } else null
+                if (serverHasExpense != false && localExpense.isNotEmpty()) {
+                    localExpense
                 } else {
-                    standardDefaults.take(OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES)
-                }
-                val seedList = baseDefaults
-                    .map { it.copy(monthlyBudget = 0.0, categoryType = "EXPENSE") }
-                    .filter {
-                        !deletedIds.contains(it.id.toString()) &&
-                            !deletedNameKeys.contains(categoryTrashNameKey("EXPENSE", it.name))
+                    val standardDefaults = OikoNomosViewModel.getStandardDefaultCategories(currentLang)
+                    val baseDefaults = if (vm.isCurrentUserPro()) {
+                        standardDefaults
+                    } else {
+                        standardDefaults.take(OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES)
                     }
-                if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && vm.hasOwnerPermissions()) {
-                    seedList.forEach { cat ->
-                        vm.firestoreSyncRepo.syncCategory(
-                            currentHouseholdId,
-                            FirebaseCategory(
-                                id = cat.id.toString(),
-                                householdId = currentHouseholdId,
-                                userId = uid,
-                                name = cat.name,
-                                iconKey = cat.iconKey,
-                                monthlyBudget = cat.monthlyBudget,
-                                colorHex = cat.colorHex,
-                                voiceKeywords = cat.voiceKeywords,
-                                sortOrder = cat.sortOrder,
-                                fontColorHex = cat.fontColorHex,
-                                isDeleted = false,
-                                categoryType = "EXPENSE"
+                    val seedList = baseDefaults
+                        .map { it.copy(monthlyBudget = 0.0, categoryType = "EXPENSE") }
+                        .filter {
+                            !deletedIds.contains(it.id.toString()) &&
+                                !deletedNameKeys.contains(categoryTrashNameKey("EXPENSE", it.name))
+                        }
+                    if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && vm.hasOwnerPermissions() && serverHasExpense == false) {
+                        seedList.forEach { cat ->
+                            vm.firestoreSyncRepo.syncCategory(
+                                currentHouseholdId,
+                                FirebaseCategory(
+                                    id = cat.id.toString(),
+                                    householdId = currentHouseholdId,
+                                    userId = uid,
+                                    name = cat.name,
+                                    iconKey = cat.iconKey,
+                                    monthlyBudget = cat.monthlyBudget,
+                                    colorHex = cat.colorHex,
+                                    voiceKeywords = cat.voiceKeywords,
+                                    sortOrder = cat.sortOrder,
+                                    fontColorHex = cat.fontColorHex,
+                                    isDeleted = false,
+                                    categoryType = "EXPENSE"
+                                )
                             )
-                        )
+                        }
                     }
+                    seedList
                 }
-                seedList
             }
         }
 
@@ -436,39 +511,47 @@ internal class OikoNomosStructureDelegate(
             activeIncomeIncoming.isNotEmpty() -> mapGroup(activeIncomeIncoming, "INCOME")
             remoteDeletedIncome.isNotEmpty() -> emptyList()
             else -> {
-                val standardIncomeDefaults = OikoNomosViewModel.getStandardDefaultIncomeCategories(isEnglish)
-                val baseIncomeDefaults = if (vm.isCurrentUserPro()) {
-                    standardIncomeDefaults
+                val localIncome = existingLocalAll.filter { it.isIncomeCategory }
+                val serverHasIncome = if (currentHouseholdId.isNotBlank()) {
+                    vm.firestoreSyncRepo.hasAnyCategoryDocsOnServer(currentHouseholdId, "INCOME")
+                } else null
+                if (serverHasIncome != false && localIncome.isNotEmpty()) {
+                    localIncome
                 } else {
-                    standardIncomeDefaults.take(OikoNomosViewModel.FREE_MAX_INCOME_CATEGORIES)
-                }
-                val seedIncomeList = baseIncomeDefaults
-                    .filter {
-                        !deletedIds.contains(it.id.toString()) &&
-                            !deletedNameKeys.contains(categoryTrashNameKey("INCOME", it.name))
+                    val standardIncomeDefaults = OikoNomosViewModel.getStandardDefaultIncomeCategories(currentLang)
+                    val baseIncomeDefaults = if (vm.isCurrentUserPro()) {
+                        standardIncomeDefaults
+                    } else {
+                        standardIncomeDefaults.take(OikoNomosViewModel.FREE_MAX_INCOME_CATEGORIES)
                     }
-                if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && vm.hasOwnerPermissions()) {
-                    seedIncomeList.forEach { cat ->
-                        vm.firestoreSyncRepo.syncCategory(
-                            currentHouseholdId,
-                            FirebaseCategory(
-                                id = cat.id.toString(),
-                                householdId = currentHouseholdId,
-                                userId = uid,
-                                name = cat.name,
-                                iconKey = cat.iconKey,
-                                monthlyBudget = 0.0,
-                                colorHex = cat.colorHex,
-                                voiceKeywords = cat.voiceKeywords,
-                                sortOrder = cat.sortOrder,
-                                fontColorHex = cat.fontColorHex,
-                                isDeleted = false,
-                                categoryType = "INCOME"
+                    val seedIncomeList = baseIncomeDefaults
+                        .filter {
+                            !deletedIds.contains(it.id.toString()) &&
+                                !deletedNameKeys.contains(categoryTrashNameKey("INCOME", it.name))
+                        }
+                    if (currentHouseholdId.isNotBlank() && uid.isNotBlank() && vm.hasOwnerPermissions() && serverHasIncome == false) {
+                        seedIncomeList.forEach { cat ->
+                            vm.firestoreSyncRepo.syncCategory(
+                                currentHouseholdId,
+                                FirebaseCategory(
+                                    id = cat.id.toString(),
+                                    householdId = currentHouseholdId,
+                                    userId = uid,
+                                    name = cat.name,
+                                    iconKey = cat.iconKey,
+                                    monthlyBudget = 0.0,
+                                    colorHex = cat.colorHex,
+                                    voiceKeywords = cat.voiceKeywords,
+                                    sortOrder = cat.sortOrder,
+                                    fontColorHex = cat.fontColorHex,
+                                    isDeleted = false,
+                                    categoryType = "INCOME"
+                                )
                             )
-                        )
+                        }
                     }
+                    seedIncomeList
                 }
-                seedIncomeList
             }
         }
 
@@ -491,32 +574,38 @@ internal class OikoNomosStructureDelegate(
         if (!vm.hasOwnerPermissions()) return
         val isIncome = categoryType.equals("INCOME", ignoreCase = true)
         if (!vm.isCurrentUserPro()) {
-            val isEn = vm._appLanguage.value == "EN"
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             if (!isIncome && vm._allCategories.value.size >= OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES) {
                 vm.showPremiumPaywall("category_limit")
                 vm.showSnackbar(
-                    if (isEn) "Free edition allows up to 5 expense categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 expense categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    )
                 )
                 return
             }
             if (isIncome && vm._incomeCategories.value.size >= OikoNomosViewModel.FREE_MAX_INCOME_CATEGORIES) {
                 vm.showPremiumPaywall("income_category_limit")
                 vm.showSnackbar(
-                    if (isEn) "Free edition allows up to 5 income categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 income categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    )
                 )
                 return
             }
         }
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            val isEn = vm._appLanguage.value == "EN"
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             if (isIncome) {
                 val cap = if (vm.isCurrentUserPro()) null else OikoNomosViewModel.FREE_MAX_INCOME_CATEGORIES
-                vm.repository.seedStandardIncomeCategories(cap, isEnglish = isEn)
+                vm.repository.seedStandardIncomeCategories(cap, lang = lang)
             } else {
                 val cap = if (vm.isCurrentUserPro()) null else OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES
-                vm.repository.seedStandardCategories(cap, isEnglish = isEn)
+                vm.repository.seedStandardCategories(cap, lang = lang)
             }
             val allList = vm.repository.getAllCategoriesList()
             val expenseList = allList.filter { !it.isIncomeCategory }
@@ -565,18 +654,25 @@ internal class OikoNomosStructureDelegate(
     }
 
     fun openMemberDialog(member: FamilyMember? = null) {
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (!vm.hasOwnerPermissions()) {
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Only Creators or Editors can manage members"
-                else "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να επεξεργαστεί μέλη"
+                Localization.tr(
+                    lang,
+                    "Only Creators or Editors can manage members",
+                    "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να επεξεργαστεί μέλη"
+                )
             )
             return
         }
         if (member == null && !vm.isCurrentUserPro() && vm._allMembers.value.size >= 4) {
             vm.showPremiumPaywall("member_limit")
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Free edition supports up to 4 Members"
-                else "Η δωρεάν έκδοση υποστηρίζει έως 4 Μέλη"
+                Localization.tr(
+                    lang,
+                    "Free edition supports up to 4 Members",
+                    "Η δωρεάν έκδοση υποστηρίζει έως 4 Μέλη"
+                )
             )
             return
         }
@@ -594,8 +690,11 @@ internal class OikoNomosStructureDelegate(
     ) {
         if (!vm.hasOwnerPermissions()) {
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Only Creators or Editors can save members"
-                else "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να αποθηκεύσει μέλη"
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Only Creators or Editors can save members",
+                    "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να αποθηκεύσει μέλη"
+                )
             )
             return
         }
@@ -606,8 +705,9 @@ internal class OikoNomosStructureDelegate(
             val existingById = if (id != 0L) currentList.find { it.id == id } else null
             val sortOrder = existingById?.sortOrder ?: ((currentList.maxOfOrNull { it.sortOrder } ?: -1) + 1)
 
+            val resolvedMemberId = if (id == 0L) allocateNextSafeMemberId() else id
             val member = FamilyMember(
-                id = id,
+                id = resolvedMemberId,
                 name = name.trim(),
                 role = role,
                 avatarColorHex = avatarColorHex,
@@ -618,6 +718,7 @@ internal class OikoNomosStructureDelegate(
             )
             val savedId = if (id == 0L) {
                 vm.repository.insertMember(member)
+                resolvedMemberId
             } else {
                 vm.repository.updateMember(member)
                 id
@@ -643,7 +744,8 @@ internal class OikoNomosStructureDelegate(
             vm._allMembers.value = newList.sortedWith(compareBy<FamilyMember> { it.sortOrder }.thenBy { it.id })
             val user = vm._currentUser.value
             val householdId = vm.getOrEnsureHouseholdId(user)
-            val userHouseholds = vm._userHouseholds.value.map { it.id }.ifEmpty { listOf(householdId).filter { it.isNotBlank() } }
+            // Strict active-household scoping: NEVER fan out writes to other households!
+            val activeHouseholdScope = listOf(householdId).filter { it.isNotBlank() }
 
             if (user != null || householdId.isNotBlank()) {
                 val fbMember = FirebaseMember(
@@ -658,7 +760,7 @@ internal class OikoNomosStructureDelegate(
                     sortOrder = finalSaved.sortOrder,
                     linkedUserUid = finalSaved.linkedUserUid
                 )
-                vm.firestoreSyncRepo.syncAndCleanMember(userHouseholds, user?.uid ?: "", fbMember, existingById?.name ?: "")
+                vm.firestoreSyncRepo.syncAndCleanMember(activeHouseholdScope, user?.uid ?: "", fbMember, existingById?.name ?: "")
                 unlinkedOthers.forEach { other ->
                     vm.firestoreSyncRepo.syncMember(
                         householdId,
@@ -684,12 +786,12 @@ internal class OikoNomosStructureDelegate(
                 summaryEn = if (id == 0L) "New member: ${finalSaved.name}" else "Updated member: ${finalSaved.name}",
                 householdIdOverride = householdId
             )
-            val isEn = vm._appLanguage.value == "EN"
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             vm.showSnackbar(
                 if (id == 0L) {
-                    if (isEn) "Member \"${finalSaved.name}\" added!" else "Το μέλος «${finalSaved.name}» προστέθηκε!"
+                    Localization.trFormat(lang, "Member \"%1\$s\" added!", "Το μέλος «%1\$s» προστέθηκε!", finalSaved.name)
                 } else {
-                    if (isEn) "Member \"${finalSaved.name}\" updated!" else "Το μέλος «${finalSaved.name}» ενημερώθηκε!"
+                    Localization.trFormat(lang, "Member \"%1\$s\" updated!", "Το μέλος «%1\$s» ενημερώθηκε!", finalSaved.name)
                 }
             )
         }
@@ -713,18 +815,24 @@ internal class OikoNomosStructureDelegate(
     }
 
     fun softDeleteMember(member: FamilyMember) {
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (!vm.hasOwnerPermissions()) {
             vm.showSnackbar(
-                if (isEn) "Only Creators or Editors can delete members"
-                else "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να διαγράψει μέλη"
+                Localization.tr(
+                    lang,
+                    "Only Creators or Editors can delete members",
+                    "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να διαγράψει μέλη"
+                )
             )
             return
         }
         if (vm._allMembers.value.size <= 1) {
             vm.showSnackbar(
-                if (isEn) "There must be at least one member in the household"
-                else "Πρέπει να υπάρχει τουλάχιστον ένα μέλος στην οικογένεια"
+                Localization.tr(
+                    lang,
+                    "There must be at least one member in the household",
+                    "Πρέπει να υπάρχει τουλάχιστον ένα μέλος στην οικογένεια"
+                )
             )
             return
         }
@@ -754,8 +862,12 @@ internal class OikoNomosStructureDelegate(
                 }
             }
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Member \"${member.name}\" moved to trash"
-                else "Το μέλος «${member.name}» μεταφέρθηκε στον κάδο"
+                Localization.trFormat(
+                    vm._appLanguage.value,
+                    "Member \"%1\$s\" moved to trash",
+                    "Το μέλος «%1\$s» μεταφέρθηκε στον κάδο",
+                    member.name
+                )
             )
         }
     }
@@ -768,8 +880,9 @@ internal class OikoNomosStructureDelegate(
         persistDeletedMembers(householdId, remainingTrash)
 
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            val insertedId = vm.repository.insertMember(member)
-            val restored = member.copy(id = insertedId)
+            val preservedId = if (member.id > 0L) member.id else allocateNextSafeMemberId()
+            val restored = member.copy(id = preservedId)
+            vm.repository.insertMember(restored)
             vm._allMembers.value = (vm._allMembers.value + restored).distinctBy { it.id }.sortedWith(compareBy<FamilyMember> { it.sortOrder }.thenBy { it.id })
             if (householdId.isNotBlank()) {
                 vm.firestoreSyncRepo.syncMember(
@@ -778,8 +891,12 @@ internal class OikoNomosStructureDelegate(
                 )
             }
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Member \"${member.name}\" restored!"
-                else "Το μέλος «${member.name}» επανήλθε!"
+                Localization.trFormat(
+                    vm._appLanguage.value,
+                    "Member \"%1\$s\" restored!",
+                    "Το μέλος «%1\$s» επανήλθε!",
+                    member.name
+                )
             )
         }
     }
@@ -799,10 +916,14 @@ internal class OikoNomosStructureDelegate(
 
     fun openCategoryDialog(category: ExpenseCategory? = null, categoryType: String = category?.categoryType ?: "EXPENSE") {
         val normalizedType = if (categoryType.equals("INCOME", ignoreCase = true)) "INCOME" else "EXPENSE"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (!vm.hasOwnerPermissions()) {
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Only Creators or Editors can manage categories"
-                else "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να διαχειριστεί κατηγορίες"
+                Localization.tr(
+                    lang,
+                    "Only Creators or Editors can manage categories",
+                    "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να διαχειριστεί κατηγορίες"
+                )
             )
             return
         }
@@ -810,16 +931,22 @@ internal class OikoNomosStructureDelegate(
             if (normalizedType == "EXPENSE" && vm._allCategories.value.size >= OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES) {
                 vm.showPremiumPaywall("category_limit")
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Free edition allows up to 5 expense categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 expense categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    )
                 )
                 return
             }
             if (normalizedType == "INCOME" && vm._incomeCategories.value.size >= OikoNomosViewModel.FREE_MAX_INCOME_CATEGORIES) {
                 vm.showPremiumPaywall("income_category_limit")
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Free edition allows up to 5 income categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 income categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    )
                 )
                 return
             }
@@ -842,13 +969,17 @@ internal class OikoNomosStructureDelegate(
         if (!vm.hasOwnerPermissions()) return
         val normalizedType = if (categoryType.equals("INCOME", ignoreCase = true)) "INCOME" else "EXPENSE"
         val isIncome = normalizedType == "INCOME"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (id == 0L && !vm.isCurrentUserPro()) {
             if (!isIncome && vm._allCategories.value.size >= OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES) {
                 vm.dismissCategoryDialog()
                 vm.showPremiumPaywall("category_limit")
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Free edition allows up to 5 expense categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 expense categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    )
                 )
                 return
             }
@@ -856,8 +987,11 @@ internal class OikoNomosStructureDelegate(
                 vm.dismissCategoryDialog()
                 vm.showPremiumPaywall("income_category_limit")
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Free edition allows up to 5 income categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 income categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    )
                 )
                 return
             }
@@ -868,8 +1002,9 @@ internal class OikoNomosStructureDelegate(
             val existingById = if (id != 0L) currentList.find { it.id == id } else null
             val sortOrder = existingById?.sortOrder ?: ((currentList.maxOfOrNull { it.sortOrder } ?: -1) + 1)
 
+            val resolvedCategoryId = if (id == 0L) allocateNextSafeCategoryId() else id
             val cat = ExpenseCategory(
-                id = id,
+                id = resolvedCategoryId,
                 name = name.trim(),
                 iconKey = iconKey,
                 monthlyBudget = if (isIncome) 0.0 else monthlyBudget,
@@ -879,7 +1014,10 @@ internal class OikoNomosStructureDelegate(
                 fontColorHex = fontColorHex,
                 categoryType = normalizedType
             )
-            val savedId = if (id == 0L) vm.repository.insertCategory(cat) else {
+            val savedId = if (id == 0L) {
+                vm.repository.insertCategory(cat)
+                resolvedCategoryId
+            } else {
                 vm.repository.updateCategory(cat)
                 id
             }
@@ -904,7 +1042,8 @@ internal class OikoNomosStructureDelegate(
                 vm._allCategories.value = updatedList
             }
 
-            val userHouseholds = vm._userHouseholds.value.map { it.id }.ifEmpty { listOf(householdId).filter { it.isNotBlank() } }
+            // Strict active-household scoping: NEVER fan out writes to other households!
+            val activeHouseholdScope = listOf(householdId).filter { it.isNotBlank() }
             val fbCat = FirebaseCategory(
                 id = finalSaved.id.toString(),
                 householdId = householdId,
@@ -919,7 +1058,7 @@ internal class OikoNomosStructureDelegate(
                 isDeleted = false,
                 categoryType = finalSaved.categoryType
             )
-            vm.firestoreSyncRepo.syncAndCleanCategory(userHouseholds, user?.uid ?: "", fbCat, existingById?.name ?: "")
+            vm.firestoreSyncRepo.syncAndCleanCategory(activeHouseholdScope, user?.uid ?: "", fbCat, existingById?.name ?: "")
 
             vm.logHouseholdActivity(
                 actionType = if (id == 0L) "CATEGORY_ADDED" else "CATEGORY_UPDATED",
@@ -928,12 +1067,12 @@ internal class OikoNomosStructureDelegate(
                 summaryEn = if (id == 0L) "New category: ${finalSaved.name}" else "Updated category: ${finalSaved.name}",
                 householdIdOverride = householdId
             )
-            val isEn = vm._appLanguage.value == "EN"
+            val snackbarLang = Localization.Language.fromCode(vm._appLanguage.value)
             vm.showSnackbar(
                 if (id == 0L) {
-                    if (isEn) "Category \"${finalSaved.name}\" created!" else "Η κατηγορία «${finalSaved.name}» δημιουργήθηκε!"
+                    Localization.trFormat(snackbarLang, "Category \"%1\$s\" created!", "Η κατηγορία «%1\$s» δημιουργήθηκε!", finalSaved.name)
                 } else {
-                    if (isEn) "Category \"${finalSaved.name}\" updated!" else "Η κατηγορία «${finalSaved.name}» ενημερώθηκε!"
+                    Localization.trFormat(snackbarLang, "Category \"%1\$s\" updated!", "Η κατηγορία «%1\$s» ενημερώθηκε!", finalSaved.name)
                 }
             )
         }
@@ -942,8 +1081,11 @@ internal class OikoNomosStructureDelegate(
     fun softDeleteCategory(category: ExpenseCategory) {
         if (!vm.hasOwnerPermissions()) {
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Only Creators or Editors can delete categories"
-                else "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να διαγράψει κατηγορίες"
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Only Creators or Editors can delete categories",
+                    "Μόνο ο Δημιουργός ή Συντάκτης μπορεί να διαγράψει κατηγορίες"
+                )
             )
             return
         }
@@ -969,28 +1111,39 @@ internal class OikoNomosStructureDelegate(
                 )
             }
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Category \"${category.name}\" moved to trash"
-                else "Η κατηγορία «${category.name}» μεταφέρθηκε στον κάδο"
+                Localization.trFormat(
+                    vm._appLanguage.value,
+                    "Category \"%1\$s\" moved to trash",
+                    "Η κατηγορία «%1\$s» μεταφέρθηκε στον κάδο",
+                    category.name
+                )
             )
         }
     }
 
     fun restoreCategory(category: ExpenseCategory) {
         if (!vm.hasOwnerPermissions()) return
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (!vm.isCurrentUserPro()) {
             if (!category.isIncomeCategory && vm._allCategories.value.size >= OikoNomosViewModel.FREE_MAX_EXPENSE_CATEGORIES) {
                 vm.showPremiumPaywall("category_limit")
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Free edition allows up to 5 expense categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 expense categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εξόδων"
+                    )
                 )
                 return
             }
             if (category.isIncomeCategory && vm._incomeCategories.value.size >= OikoNomosViewModel.FREE_MAX_INCOME_CATEGORIES) {
                 vm.showPremiumPaywall("income_category_limit")
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Free edition allows up to 5 income categories"
-                    else "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    Localization.tr(
+                        lang,
+                        "Free edition allows up to 5 income categories",
+                        "Η δωρεάν έκδοση επιτρέπει έως 5 κατηγορίες εσόδων"
+                    )
                 )
                 return
             }
@@ -1004,8 +1157,9 @@ internal class OikoNomosStructureDelegate(
         persistDeletedCategories(householdId, remainingTrash)
 
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            val insertedId = vm.repository.insertCategory(category)
-            val restored = category.copy(id = insertedId)
+            val preservedId = if (category.id > 0L) category.id else allocateNextSafeCategoryId()
+            val restored = category.copy(id = preservedId)
+            vm.repository.insertCategory(restored)
             if (restored.isIncomeCategory) {
                 vm._incomeCategories.value = (vm._incomeCategories.value + restored)
                     .distinctBy { it.id }
@@ -1037,8 +1191,12 @@ internal class OikoNomosStructureDelegate(
                 )
             }
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Category \"${category.name}\" restored!"
-                else "Η κατηγορία «${category.name}» επανήλθε!"
+                Localization.trFormat(
+                    vm._appLanguage.value,
+                    "Category \"%1\$s\" restored!",
+                    "Η κατηγορία «%1\$s» επανήλθε!",
+                    category.name
+                )
             )
         }
     }
@@ -1094,11 +1252,11 @@ internal class OikoNomosStructureDelegate(
             vm.repository.updateMembers(reordered)
             val householdId = vm._currentHousehold.value?.id.orEmpty()
             val uid = vm._currentUser.value?.uid.orEmpty()
-            val householdIds = vm._userHouseholds.value.map { it.id }.ifEmpty { listOf(householdId).filter { it.isNotBlank() } }
+            val activeHouseholdScope = listOf(householdId).filter { it.isNotBlank() }
             val fbList = reordered.map { m ->
                 FirebaseMember(m.id.toString(), householdId, uid, m.name, m.role, m.avatarColorHex, m.voiceKeywords, m.isDefault, m.sortOrder, false, m.linkedUserUid)
             }
-            vm.firestoreSyncRepo.batchUpdateMemberSortOrder(householdIds, uid, fbList)
+            vm.firestoreSyncRepo.batchUpdateMemberSortOrder(activeHouseholdScope, uid, fbList)
         }
     }
 
@@ -1137,21 +1295,25 @@ internal class OikoNomosStructureDelegate(
             vm.repository.updateCategories(reordered)
             val householdId = vm._currentHousehold.value?.id.orEmpty()
             val uid = vm._currentUser.value?.uid.orEmpty()
-            val householdIds = vm._userHouseholds.value.map { it.id }.ifEmpty { listOf(householdId).filter { it.isNotBlank() } }
+            val activeHouseholdScope = listOf(householdId).filter { it.isNotBlank() }
             val fbList = reordered.map { c ->
                 FirebaseCategory(c.id.toString(), householdId, uid, c.name, c.iconKey, c.monthlyBudget, c.colorHex, c.voiceKeywords, c.sortOrder, c.fontColorHex, false, c.categoryType)
             }
-            vm.firestoreSyncRepo.batchUpdateCategorySortOrder(householdIds, uid, fbList)
+            vm.firestoreSyncRepo.batchUpdateCategorySortOrder(activeHouseholdScope, uid, fbList)
         }
     }
 
     fun clearCurrentExodologioExpenses() {
         val household = vm._currentHousehold.value
         val uid = vm._currentUser.value?.uid ?: ""
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (household != null && !vm.isUserCreatorOfHousehold(household)) {
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Only the creator can clear all expenses"
-                else "Μόνο ο δημιουργός μπορεί να διαγράψει όλα τα έξοδα"
+                Localization.tr(
+                    lang,
+                    "Only the creator can clear all expenses",
+                    "Μόνο ο δημιουργός μπορεί να διαγράψει όλα τα έξοδα"
+                )
             )
             return
         }
@@ -1162,7 +1324,7 @@ internal class OikoNomosStructureDelegate(
                 vm.firestoreSyncRepo.clearAllExpenses(household.id, uid)
             }
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "All expenses cleared" else "Όλα τα έξοδα διαγράφηκαν"
+                Localization.tr(lang, "All expenses cleared", "Όλα τα έξοδα διαγράφηκαν")
             )
         }
     }
@@ -1170,17 +1332,20 @@ internal class OikoNomosStructureDelegate(
     fun clearCurrentHouseholdAllData() {
         val household = vm._currentHousehold.value
         val uid = vm._currentUser.value?.uid ?: vm.auth.currentUser?.uid ?: ""
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (household == null || household.id.isBlank()) {
             vm.showSnackbar(
-                if (isEn) "No active household selected" else "Δεν βρέθηκε ενεργό εξοδολόγιο"
+                Localization.tr(lang, "No active household selected", "Δεν βρέθηκε ενεργό εξοδολόγιο")
             )
             return
         }
         if (!vm.isUserCreatorOfHousehold(household)) {
             vm.showSnackbar(
-                if (isEn) "Only the household owner can clear all household data"
-                else "Μόνο ο ιδιοκτήτης μπορεί να εκκαθαρίσει όλα τα δεδομένα του εξοδολογίου"
+                Localization.tr(
+                    lang,
+                    "Only the household owner can clear all household data",
+                    "Μόνο ο ιδιοκτήτης μπορεί να εκκαθαρίσει όλα τα δεδομένα του εξοδολογίου"
+                )
             )
             return
         }
@@ -1252,14 +1417,21 @@ internal class OikoNomosStructureDelegate(
                 )
 
                 vm.showSnackbar(
-                    if (isEn) "Household data cleared (safely archived in Firebase)"
-                    else "Τα δεδομένα του εξοδολογίου εκκαθαρίστηκαν (διατηρούνται στο Firebase)"
+                    Localization.tr(
+                        lang,
+                        "Household data cleared (safely archived in Firebase)",
+                        "Τα δεδομένα του εξοδολογίου εκκαθαρίστηκαν (διατηρούνται στο Firebase)"
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 vm.showSnackbar(
-                    if (isEn) "Could not clear household data: ${e.message ?: "Error"}"
-                    else "Αποτυχία εκκαθάρισης δεδομένων εξοδολογίου"
+                    Localization.trFormat(
+                        lang,
+                        "Could not clear household data: %1\$s",
+                        "Αποτυχία εκκαθάρισης δεδομένων εξοδολογίου (%1\$s)",
+                        e.message ?: Localization.tr(lang, "Error", "Σφάλμα")
+                    )
                 )
             } finally {
                 vm._isSyncing.value = false
@@ -1329,41 +1501,19 @@ internal class OikoNomosStructureDelegate(
             vm._premiumPaywallReason.value = null
             if (!wasPro && allowWelcomeSnackbar && hadPaywallOpen) {
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "🎉 Welcome to Finsay Pro!"
-                    else "🎉 Καλώς ήρθατε στο Finsay Pro!"
+                    Localization.tr(vm._appLanguage.value, "🎉 Welcome to Finsay Pro!", "🎉 Καλώς ήρθατε στο Finsay Pro!")
                 )
             }
         }
     }
 
-    fun activateProFromBilling() {
-        val wasPro = vm._isProUser.value
-        val hadPaywallOpen = vm._premiumPaywallReason.value != null
-        vm._isProUser.value = true
-        vm.syncBankCatcherProEntitlement()
-        vm._premiumPaywallReason.value = null
-        if (!wasPro && hadPaywallOpen) {
-            vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "🎉 Welcome to Finsay Pro!"
-                else "🎉 Καλώς ήρθατε στο Finsay Pro!"
-            )
-        }
-    }
-
-    fun unlockPro() {
-        activateProFromBilling()
-    }
-
-    fun revokePro() {
-        vm._isProUser.value = false
-        vm.syncBankCatcherProEntitlement()
-    }
-
     fun onPurchasePending() {
-        val isEn = vm._appLanguage.value == "EN"
         vm.showSnackbar(
-            if (isEn) "Your payment is pending confirmation from Google Play. Pro features will unlock automatically once approved."
-            else "Η πληρωμή σας εκκρεμεί επιβεβαίωσης από το Google Play. Οι λειτουργίες Pro θα ξεκλειδωθούν αυτόματα μόλις εγκριθεί."
+            Localization.tr(
+                vm._appLanguage.value,
+                "Your payment is pending confirmation from Google Play. Pro features will unlock automatically once approved.",
+                "Η πληρωμή σας εκκρεμεί επιβεβαίωσης από το Google Play. Οι λειτουργίες Pro θα ξεκλειδωθούν αυτόματα μόλις εγκριθεί."
+            )
         )
     }
 
@@ -1380,19 +1530,20 @@ internal class OikoNomosStructureDelegate(
     }
 
     fun setAppLanguage(lang: String, syncToCloud: Boolean = true) {
-        vm._appLanguage.value = lang
+        val resolved = Localization.Language.fromCode(lang)
+        vm._appLanguage.value = resolved.code
         try {
-            vm.auth.setLanguageCode(if (lang == "EN") "en" else "el")
+            vm.auth.setLanguageCode(resolved.firebaseCode)
         } catch (_: Throwable) {}
         val uid = vm._currentUser.value?.uid ?: vm.auth.currentUser?.uid
         if (uid != null) {
             vm.prefs.edit()
-                .putString("app_language", lang)
+                .putString("app_language", resolved.code)
                 .apply()
             if (syncToCloud) {
-                vm._userProfile.value = vm._userProfile.value?.copy(appLanguage = lang)
+                vm._userProfile.value = vm._userProfile.value?.copy(appLanguage = resolved.code)
                 vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-                    vm.firestoreSyncRepo.updateUserProfilePreferences(uid, appLanguage = lang)
+                    vm.firestoreSyncRepo.updateUserProfilePreferences(uid, appLanguage = resolved.code)
                 }
             }
         }
@@ -1462,12 +1613,12 @@ internal class OikoNomosStructureDelegate(
         BankNotificationSystemManager.setProEntitled(vm.getApplication(), vm.isCurrentUserPro())
         BankNotificationSystemManager.setAutoCatcherEnabled(vm.getApplication(), enabled)
         vm._bankAutoCatcherEnabled.value = enabled && vm.isCurrentUserPro()
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         vm.showSnackbar(
             if (enabled) {
-                if (isEn) "Automatic bank notifications enabled" else "Ενεργοποιήθηκαν οι αυτόματες τραπεζικές ειδοποιήσεις"
+                Localization.tr(lang, "Automatic bank notifications enabled", "Ενεργοποιήθηκαν οι αυτόματες τραπεζικές ειδοποιήσεις")
             } else {
-                if (isEn) "Automatic bank notifications paused" else "Απενεργοποιήθηκαν οι αυτόματες τραπεζικές ειδοποιήσεις"
+                Localization.tr(lang, "Automatic bank notifications paused", "Απενεργοποιήθηκαν οι αυτόματες τραπεζικές ειδοποιήσεις")
             }
         )
     }

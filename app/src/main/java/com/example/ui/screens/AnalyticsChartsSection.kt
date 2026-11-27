@@ -409,9 +409,9 @@ internal fun AnalyticsPeriodSelectorCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val scopes = listOf(
-                    Triple("MONTH", if (lang == Localization.Language.ENGLISH) "Month" else "Μήνας", Icons.Default.CalendarMonth),
-                    Triple("YEAR", if (lang == Localization.Language.ENGLISH) "Year" else "Χρονιά", Icons.Default.DateRange),
-                    Triple("ALL", if (lang == Localization.Language.ENGLISH) "Total" else "Σύνολο", Icons.Default.AllInclusive)
+                    Triple("MONTH", Localization.tr(lang, "Month", "Μήνας"), Icons.Default.CalendarMonth),
+                    Triple("YEAR", Localization.tr(lang, "Year", "Χρονιά"), Icons.Default.DateRange),
+                    Triple("ALL", Localization.tr(lang, "Total", "Σύνολο"), Icons.Default.AllInclusive)
                 )
 
                 scopes.forEach { (scopeKey, label, icon) ->
@@ -452,7 +452,10 @@ internal fun AnalyticsPeriodSelectorCard(
                                 text = label,
                                 fontSize = 13.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = pillContent
+                                color = pillContent,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -632,7 +635,7 @@ internal fun AnalyticsPeriodSelectorCard(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Year $selectedYearKey" else "Έτος $selectedYearKey",
+                                        text = Localization.trFormat(lang, "Year %1\$s", "Έτος %1\$s", selectedYearKey),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -658,7 +661,7 @@ internal fun AnalyticsPeriodSelectorCard(
                                         },
                                         text = {
                                             Text(
-                                                text = if (lang == Localization.Language.ENGLISH) "Year $year" else "Έτος $year",
+                                                text = Localization.trFormat(lang, "Year %1\$s", "Έτος %1\$s", year),
                                                 fontWeight = if (selectedYearKey == year) FontWeight.Bold else FontWeight.Normal
                                             )
                                         },
@@ -706,10 +709,7 @@ internal fun AnalyticsPeriodSelectorCard(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH)
-                                    "$periodExpensesCount expenses • $periodIncomesCount incomes"
-                                else
-                                    "$periodExpensesCount έξοδα • $periodIncomesCount έσοδα",
+                                text = Localization.trFormat(lang, "%1\$d expenses • %2\$d incomes", "%1\$d έξοδα • %2\$d έσοδα", periodExpensesCount, periodIncomesCount),
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Emerald700

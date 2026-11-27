@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,7 +63,9 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.RecurringExpense
+import com.example.data.entity.resolveMembersFromDisplayLabel
 import com.example.ui.theme.Emerald700
+import com.example.util.DefaultPayerHelper
 import com.example.util.Localization
 import com.example.util.RecurringScheduleHelper
 
@@ -73,6 +76,7 @@ fun RecurringExpenseDialog(
     categories: List<ExpenseCategory>,
     members: List<FamilyMember> = emptyList(),
     defaultPayerMember: FamilyMember? = null,
+    defaultPayerMembers: List<FamilyMember> = listOfNotNull(defaultPayerMember),
     appLanguage: String = "EL",
     onDismiss: () -> Unit,
     onSave: (
@@ -85,12 +89,13 @@ fun RecurringExpenseDialog(
         note: String,
         payerMemberId: Long,
         payerMemberName: String,
+        payerMemberIdsCsv: String,
+        payerAmountsCsv: String,
         frequency: String,
         anchorMonth: Int
     ) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEn = lang == Localization.Language.ENGLISH
 
     var title by remember { mutableStateOf(recurringToEdit?.title ?: "") }
     var amountText by remember { mutableStateOf(recurringToEdit?.let { String.format(java.util.Locale.US, "%.2f", it.amount) } ?: "") }
@@ -102,26 +107,42 @@ fun RecurringExpenseDialog(
         mutableIntStateOf((recurringToEdit?.anchorMonth ?: java.util.Calendar.getInstance().get(java.util.Calendar.MONTH)).coerceIn(0, 11))
     }
     var selectedCategoryId by remember { mutableLongStateOf(recurringToEdit?.categoryId ?: categories.firstOrNull()?.id ?: 1L) }
-    var selectedCategoryName by remember { mutableStateOf(recurringToEdit?.categoryName ?: categories.firstOrNull()?.name ?: "Σπίτι") }
+    var selectedCategoryName by remember { mutableStateOf(recurringToEdit?.categoryName ?: categories.firstOrNull()?.name ?: Localization.translateCategory("Σπίτι", lang)) }
     var note by remember {
         mutableStateOf(
-            recurringToEdit?.note ?: (if (isEn) "Standing order" else "Πάγια εντολή")
+            recurringToEdit?.note ?: Localization.tr(lang, "Standing order", "Πάγια εντολή")
         )
     }
 
-    val defaultPayer = remember(recurringToEdit, members, defaultPayerMember) {
-        if (recurringToEdit != null && recurringToEdit.payerMemberId != 0L) {
-            members.find { it.id == recurringToEdit.payerMemberId }
-        } else if (recurringToEdit != null && recurringToEdit.payerMemberName.isNotBlank()) {
-            members.find { it.name.equals(recurringToEdit.payerMemberName, ignoreCase = true) }
-        } else {
-            defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } }
-                ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
-                ?: members.firstOrNull()
+    val initialPayerIds = remember(recurringToEdit, members, defaultPayerMembers, defaultPayerMember) {
+        val activeIds = members.map { it.id }.toSet()
+        val resolved = linkedSetOf<Long>()
+        if (recurringToEdit != null) {
+            recurringToEdit.payerMemberIdsCsv.split(",")
+                .mapNotNull { it.trim().toLongOrNull() }
+                .filter { it in activeIds }
+                .forEach { resolved.add(it) }
+            val labelMatched = resolveMembersFromDisplayLabel(recurringToEdit.payerMemberName, members)
+            if (labelMatched.size > resolved.size) {
+                labelMatched.forEach { resolved.add(it.id) }
+            }
+            if (resolved.isEmpty() && recurringToEdit.payerMemberId in activeIds) {
+                resolved.add(recurringToEdit.payerMemberId)
+            }
         }
+        if (resolved.isEmpty()) {
+            defaultPayerMembers.filter { it.id in activeIds }.forEach { resolved.add(it.id) }
+        }
+        if (resolved.isEmpty()) {
+            val single = defaultPayerMember?.takeIf { it.id in activeIds }
+                ?: members.firstOrNull { Localization.canonicalRoleKey(it.role) == "PARENT" }
+                ?: members.firstOrNull()
+            if (single != null) resolved.add(single.id)
+        }
+        resolved.toList()
     }
-    var selectedPayerId by remember(recurringToEdit, members, defaultPayerMember) {
-        mutableLongStateOf(defaultPayer?.id ?: members.firstOrNull()?.id ?: 0L)
+    val selectedPayerIds = remember(recurringToEdit, members, defaultPayerMembers, defaultPayerMember) {
+        mutableStateListOf<Long>().apply { addAll(initialPayerIds) }
     }
 
     var categoryDropdownExpanded by remember { mutableStateOf(false) }
@@ -248,7 +269,7 @@ fun RecurringExpenseDialog(
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = { amountText = it },
-                        label = { Text(if (isEn) "Amount ($currencySymbol)" else "Ποσό ($currencySymbol)") },
+                        label = { Text(Localization.trFormat(lang, "Amount (%1\$s)", "Ποσό (%1\$s)", currencySymbol)) },
                         placeholder = { Text("0,00") },
                         trailingIcon = { Text(currencySymbol, fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -262,7 +283,7 @@ fun RecurringExpenseDialog(
                         OutlinedTextField(
                             value = dayOfMonth.coerceIn(1, 31).toString(),
                             onValueChange = { dayOfMonth = it.toIntOrNull()?.coerceIn(1, 31) ?: 1 },
-                            label = { Text(if (isEn) "Day (1-31)" else "Ημέρα (1-31)") },
+                            label = { Text(Localization.tr(lang, "Day (1-31)", "Ημέρα (1-31)")) },
                             leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = Emerald700, modifier = Modifier.size(17.dp)) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
@@ -416,7 +437,7 @@ fun RecurringExpenseDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isEn) "Payer:" else "Μέλος που πληρώνει:",
+                            text = Localization.tr(lang, "Payer:", "Μέλος που πληρώνει:"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -430,10 +451,16 @@ fun RecurringExpenseDialog(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         members.forEach { member ->
-                            val isPayer = member.id == selectedPayerId
+                            val isPayer = selectedPayerIds.contains(member.id)
                             FilterChip(
                                 selected = isPayer,
-                                onClick = { selectedPayerId = member.id },
+                                onClick = {
+                                    if (isPayer) {
+                                        if (selectedPayerIds.size > 1) selectedPayerIds.remove(member.id)
+                                    } else {
+                                        selectedPayerIds.add(member.id)
+                                    }
+                                },
                                 label = { Text(member.name, fontSize = 12.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = Emerald700.copy(alpha = 0.15f),
@@ -465,12 +492,13 @@ fun RecurringExpenseDialog(
                     onClick = {
                         val amount = amountText.replace(',', '.').toDoubleOrNull() ?: 0.0
                         if (amount > 0.0 && title.isNotBlank()) {
-                            val payerMember = members.find { it.id == selectedPayerId }
-                                ?: defaultPayer
-                                ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
-                                ?: members.firstOrNull()
-                            val payerId = payerMember?.id ?: 0L
-                            val payerName = payerMember?.name ?: ""
+                            val chosenPayers = members.filter { selectedPayerIds.contains(it.id) }.ifEmpty {
+                                listOfNotNull(
+                                    members.firstOrNull { Localization.canonicalRoleKey(it.role) == "PARENT" }
+                                        ?: members.firstOrNull()
+                                )
+                            }
+                            val payerFields = DefaultPayerHelper.buildEqualPayerFields(chosenPayers, amount, fallbackLabel = "")
                             val resolvedDay = if (isWeeklyMode) dayOfMonth.coerceIn(1, 7) else dayOfMonth.coerceIn(1, 31)
                             onSave(
                                 recurringToEdit?.id ?: 0L,
@@ -480,8 +508,10 @@ fun RecurringExpenseDialog(
                                 selectedCategoryName,
                                 resolvedDay,
                                 note,
-                                payerId,
-                                payerName,
+                                payerFields.primaryId,
+                                payerFields.displayName,
+                                payerFields.idsCsv,
+                                payerFields.amountsCsv,
                                 frequency,
                                 anchorMonth
                             )

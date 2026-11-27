@@ -23,10 +23,13 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.abs
 
 object ExpenseReportExporter {
     private const val TAG = "ExpenseReportExporter"
+
+    private fun resolveLanguage(lang: Localization.Language?, isEnglish: Boolean): Localization.Language {
+        return lang ?: if (isEnglish) Localization.Language.ENGLISH else Localization.Language.GREEK
+    }
 
     private fun csvEscape(value: String): String {
         val clean = value.replace("\"", "\"\"").replace("\r", " ").replace("\n", " ")
@@ -52,8 +55,10 @@ object ExpenseReportExporter {
         members: List<FamilyMember> = emptyList(),
         currencySymbol: String = CurrencyFormatter.currentSymbol,
         householdName: String = "",
-        isEnglish: Boolean = false
+        isEnglish: Boolean = false,
+        lang: Localization.Language? = null
     ): String {
+        val resolvedLang = resolveLanguage(lang, isEnglish)
         val totalExpenses = expenses.sumOf { it.amount }
         val totalIncomes = incomes.sumOf { it.amount }
         val netBalance = totalIncomes - totalExpenses
@@ -62,30 +67,33 @@ object ExpenseReportExporter {
         val headerTitle = if (householdName.isNotBlank()) "FINSAY - $householdName ($periodTitle)" else "FINSAY - $periodTitle"
         val dateSdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
         val sb = StringBuilder()
-        // UTF-8 BOM so Excel opens Greek characters cleanly
+        // UTF-8 BOM so Excel opens international characters cleanly
         sb.append('\uFEFF')
         sb.append("${csvEscape(headerTitle)}\n\n")
 
         // 1. Financial Summary
-        sb.append(if (isEnglish) "FINANCIAL SUMMARY\n" else "ΟΙΚΟΝΟΜΙΚΗ ΣΥΝΟΨΗ\n")
-        sb.append(if (isEnglish) "Metric,Amount ($currencySymbol)\n" else "Δείκτης,Ποσό ($currencySymbol)\n")
-        sb.append("${csvEscape(if (isEnglish) "Total Income" else "Σύνολο Εσόδων")},${String.format(Locale.US, "%.2f", totalIncomes)}\n")
-        sb.append("${csvEscape(if (isEnglish) "Total Expenses" else "Σύνολο Εξόδων")},${String.format(Locale.US, "%.2f", totalExpenses)}\n")
-        sb.append("${csvEscape(if (isEnglish) "Net Balance" else "Καθαρό Υπόλοιπο")},${String.format(Locale.US, "%.2f", netBalance)}\n")
+        sb.append("${Localization.tr(resolvedLang, "FINANCIAL SUMMARY", "ΟΙΚΟΝΟΜΙΚΗ ΣΥΝΟΨΗ")}\n")
+        sb.append("${Localization.tr(resolvedLang, "Metric", "Δείκτης")},${Localization.tr(resolvedLang, "Amount", "Ποσό")} ($currencySymbol)\n")
+        sb.append("${csvEscape(Localization.tr(resolvedLang, "Total Income", "Σύνολο Εσόδων"))},${String.format(Locale.US, "%.2f", totalIncomes)}\n")
+        sb.append("${csvEscape(Localization.tr(resolvedLang, "Total Expenses", "Σύνολο Εξόδων"))},${String.format(Locale.US, "%.2f", totalExpenses)}\n")
+        sb.append("${csvEscape(Localization.tr(resolvedLang, "Net Balance", "Καθαρό Υπόλοιπο"))},${String.format(Locale.US, "%.2f", netBalance)}\n")
         if (savingsRate != null) {
-            sb.append("${csvEscape(if (isEnglish) "Savings Rate" else "Ποσοστό Αποταμίευσης")},${String.format(Locale.US, "%.1f%%", savingsRate)}\n")
+            sb.append("${csvEscape(Localization.tr(resolvedLang, "Savings Rate", "Ποσοστό Αποταμίευσης"))},${String.format(Locale.US, "%.1f%%", savingsRate)}\n")
         }
         sb.append("\n")
 
         // 2. Expenses Section
-        sb.append(if (isEnglish) "EXPENSES (${expenses.size})\n" else "ΕΞΟΔΑ (${expenses.size})\n")
-        sb.append(
-            if (isEnglish) {
-                "Date,Title,Category,Payer,Members,Amount ($currencySymbol),Note\n"
-            } else {
-                "Ημερομηνία,Τίτλος,Κατηγορία,Πληρωτής,Μέλη,Ποσό ($currencySymbol),Σημείωση\n"
-            }
-        )
+        val dateCol = Localization.tr(resolvedLang, "Date", "Ημερομηνία")
+        val titleCol = Localization.tr(resolvedLang, "Title", "Τίτλος")
+        val catCol = Localization.tr(resolvedLang, "Category", "Κατηγορία")
+        val payerCol = Localization.tr(resolvedLang, "Payer", "Πληρωτής")
+        val membersCol = Localization.tr(resolvedLang, "Members", "Μέλη")
+        val memberCol = Localization.tr(resolvedLang, "Member", "Μέλος")
+        val amountCol = Localization.tr(resolvedLang, "Amount", "Ποσό")
+        val noteCol = Localization.tr(resolvedLang, "Note", "Σημείωση")
+
+        sb.append("${Localization.tr(resolvedLang, "EXPENSES", "ΕΞΟΔΑ")} (${expenses.size})\n")
+        sb.append("$dateCol,$titleCol,$catCol,$payerCol,$membersCol,$amountCol ($currencySymbol),$noteCol\n")
         for (expense in expenses) {
             val date = dateSdf.format(Date(expense.timestamp))
             val amount = String.format(Locale.US, "%.2f", expense.amount)
@@ -95,19 +103,13 @@ object ExpenseReportExporter {
                     "${csvEscape(payer)},${csvEscape(expense.memberNamesDisplay)},$amount,${csvEscape(expense.note)}\n"
             )
         }
-        sb.append("${if (isEnglish) "TOTAL EXPENSES" else "ΣΥΝΟΛΟ ΕΞΟΔΩΝ"},,,,,${String.format(Locale.US, "%.2f", totalExpenses)},\n")
+        sb.append("${Localization.tr(resolvedLang, "TOTAL EXPENSES", "ΣΥΝΟΛΟ ΕΞΟΔΩΝ")},,,,,${String.format(Locale.US, "%.2f", totalExpenses)},\n")
 
         // 3. Incomes Section (when present)
         if (incomes.isNotEmpty()) {
             sb.append("\n")
-            sb.append(if (isEnglish) "INCOMES (${incomes.size})\n" else "ΕΣΟΔΑ (${incomes.size})\n")
-            sb.append(
-                if (isEnglish) {
-                    "Date,Title,Category,Member,Amount ($currencySymbol),Note\n"
-                } else {
-                    "Ημερομηνία,Τίτλος,Κατηγορία,Μέλος,Ποσό ($currencySymbol),Σημείωση\n"
-                }
-            )
+            sb.append("${Localization.tr(resolvedLang, "INCOMES", "ΕΣΟΔΑ")} (${incomes.size})\n")
+            sb.append("$dateCol,$titleCol,$catCol,$memberCol,$amountCol ($currencySymbol),$noteCol\n")
             for (income in incomes) {
                 val date = dateSdf.format(Date(income.timestamp))
                 val amount = String.format(Locale.US, "%.2f", income.amount)
@@ -117,21 +119,18 @@ object ExpenseReportExporter {
                         "${csvEscape(memberName)},$amount,${csvEscape(income.note)}\n"
                 )
             }
-            sb.append("${if (isEnglish) "TOTAL INCOMES" else "ΣΥΝΟΛΟ ΕΣΟΔΩΝ"},,,,${String.format(Locale.US, "%.2f", totalIncomes)},\n")
+            sb.append("${Localization.tr(resolvedLang, "TOTAL INCOMES", "ΣΥΝΟΛΟ ΕΣΟΔΩΝ")},,,,${String.format(Locale.US, "%.2f", totalIncomes)},\n")
         }
 
         // 4. Member Settlement / Settle-Up Section (when multi-member & expenses exist)
         if (members.size > 1 && expenses.isNotEmpty()) {
             val settleResult = SettleUpCalculator.calculate(expenses, members)
+            val paidCol = Localization.tr(resolvedLang, "Paid", "Πλήρωσε")
+            val shareCol = Localization.tr(resolvedLang, "Fair Share", "Μερίδιο")
+            val balanceCol = Localization.tr(resolvedLang, "Net Balance", "Υπόλοιπο")
             sb.append("\n")
-            sb.append(if (isEnglish) "MEMBER SETTLEMENT (SETTLE UP)\n" else "ΕΚΚΑΘΑΡΙΣΗ ΜΕΛΩΝ\n")
-            sb.append(
-                if (isEnglish) {
-                    "Member,Paid ($currencySymbol),Fair Share ($currencySymbol),Net Balance ($currencySymbol)\n"
-                } else {
-                    "Μέλος,Πλήρωσε ($currencySymbol),Μερίδιο ($currencySymbol),Υπόλοιπο ($currencySymbol)\n"
-                }
-            )
+            sb.append("${Localization.tr(resolvedLang, "MEMBER SETTLEMENT (SETTLE UP)", "ΕΚΚΑΘΑΡΙΣΗ ΜΕΛΩΝ")}\n")
+            sb.append("$memberCol,$paidCol ($currencySymbol),$shareCol ($currencySymbol),$balanceCol ($currencySymbol)\n")
             for (s in settleResult.memberSummaries) {
                 sb.append(
                     "${csvEscape(s.member.name)},${String.format(Locale.US, "%.2f", s.totalPaid)}," +
@@ -139,11 +138,13 @@ object ExpenseReportExporter {
                 )
             }
             sb.append("\n")
-            sb.append(if (isEnglish) "RECOMMENDED TRANSFERS\n" else "ΠΡΟΤΕΙΝΟΜΕΝΕΣ ΜΕΤΑΦΟΡΕΣ\n")
+            sb.append("${Localization.tr(resolvedLang, "RECOMMENDED TRANSFERS", "ΠΡΟΤΕΙΝΟΜΕΝΕΣ ΜΕΤΑΦΟΡΕΣ")}\n")
             if (settleResult.transfers.isEmpty()) {
-                sb.append("${csvEscape(if (isEnglish) "All balances are settled up!" else "Όλοι οι λογαριασμοί είναι ισοσκελισμένοι!")}\n")
+                sb.append("${csvEscape(Localization.tr(resolvedLang, "All balances are settled up!", "Όλοι οι λογαριασμοί είναι ισοσκελισμένοι!"))}\n")
             } else {
-                sb.append(if (isEnglish) "From,To,Amount ($currencySymbol)\n" else "Από,Προς,Ποσό ($currencySymbol)\n")
+                val fromCol = Localization.tr(resolvedLang, "From", "Από")
+                val toCol = Localization.tr(resolvedLang, "To", "Προς")
+                sb.append("$fromCol,$toCol,$amountCol ($currencySymbol)\n")
                 for (t in settleResult.transfers) {
                     sb.append("${csvEscape(t.fromMember.name)},${csvEscape(t.toMember.name)},${String.format(Locale.US, "%.2f", t.amount)}\n")
                 }
@@ -189,8 +190,10 @@ object ExpenseReportExporter {
         members: List<FamilyMember> = emptyList(),
         currencySymbol: String = CurrencyFormatter.currentSymbol,
         householdName: String = "",
-        isEnglish: Boolean = false
+        isEnglish: Boolean = false,
+        lang: Localization.Language? = null
     ) {
+        val resolvedLang = resolveLanguage(lang, isEnglish)
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val dateRange = buildDateRangeFileSuffix(expenses, incomes, startDateMillis, endDateMillis)
@@ -202,19 +205,26 @@ object ExpenseReportExporter {
                 members = members,
                 currencySymbol = currencySymbol,
                 householdName = householdName,
-                isEnglish = isEnglish
+                lang = resolvedLang
             )
             file.writeBytes(csvContent.toByteArray(Charsets.UTF_8))
-            val shareTitle = if (isEnglish) {
-                "Finsay Financial Report (CSV) - $periodTitle"
-            } else {
-                "Οικονομική Αναφορά Finsay (CSV) - $periodTitle"
-            }
-            shareFile(context, file, "text/csv", shareTitle, isEnglish)
+            val shareTitle = Localization.trFormat(
+                resolvedLang,
+                "Finsay Financial Report (CSV) - %1\$s",
+                "Οικονομική Αναφορά Finsay (CSV) - %1\$s",
+                periodTitle
+            )
+            shareFile(context, file, "text/csv", shareTitle, resolvedLang)
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting CSV: ${e.message}", e)
             Handler(Looper.getMainLooper()).post {
-                val msg = if (isEnglish) "CSV export error: ${e.localizedMessage ?: "unknown"}" else "Σφάλμα εξαγωγής CSV: ${e.localizedMessage ?: "άγνωστο"}"
+                val unknown = Localization.tr(resolvedLang, "unknown", "άγνωστο")
+                val msg = Localization.trFormat(
+                    resolvedLang,
+                    "CSV export error: %1\$s",
+                    "Σφάλμα εξαγωγής CSV: %1\$s",
+                    e.localizedMessage ?: unknown
+                )
                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
         }
@@ -230,8 +240,10 @@ object ExpenseReportExporter {
         members: List<FamilyMember> = emptyList(),
         currencySymbol: String = CurrencyFormatter.currentSymbol,
         householdName: String = "",
-        isEnglish: Boolean = false
+        isEnglish: Boolean = false,
+        lang: Localization.Language? = null
     ) {
+        val resolvedLang = resolveLanguage(lang, isEnglish)
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val dateRange = buildDateRangeFileSuffix(expenses, incomes, startDateMillis, endDateMillis)
@@ -242,6 +254,16 @@ object ExpenseReportExporter {
             val netBalance = totalIncomes - totalExpenses
             val savingsRate = if (totalIncomes > 0.0) ((netBalance / totalIncomes) * 100.0) else null
             val headerTitle = if (householdName.isNotBlank()) "FINSAY - ${htmlEscape(householdName)} (${htmlEscape(periodTitle)})" else "FINSAY - ${htmlEscape(periodTitle)}"
+
+            val dateCol = htmlEscape(Localization.tr(resolvedLang, "Date", "Ημερομηνία"))
+            val titleCol = htmlEscape(Localization.tr(resolvedLang, "Title", "Τίτλος"))
+            val catCol = htmlEscape(Localization.tr(resolvedLang, "Category", "Κατηγορία"))
+            val payerCol = htmlEscape(Localization.tr(resolvedLang, "Payer", "Πληρωτής"))
+            val membersCol = htmlEscape(Localization.tr(resolvedLang, "Members", "Μέλη"))
+            val memberCol = htmlEscape(Localization.tr(resolvedLang, "Member", "Μέλος"))
+            val amountCol = htmlEscape(Localization.tr(resolvedLang, "Amount", "Ποσό"))
+            val noteCol = htmlEscape(Localization.tr(resolvedLang, "Note", "Σημείωση"))
+            val safeCurr = htmlEscape(currencySymbol)
 
             val sb = StringBuilder()
             sb.append("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
@@ -264,26 +286,22 @@ object ExpenseReportExporter {
             sb.append("<h2>$headerTitle</h2>\n")
 
             // 1. Financial Summary Table
-            sb.append("<h3>${if (isEnglish) "Financial Summary" else "Οικονομική Σύνοψη"}</h3>\n")
-            sb.append("<table><thead><tr><th>${if (isEnglish) "Metric" else "Δείκτης"}</th><th class=\"amount\">${if (isEnglish) "Amount ($currencySymbol)" else "Ποσό ($currencySymbol)"}</th></tr></thead><tbody>\n")
-            sb.append("<tr><td>${if (isEnglish) "Total Income" else "Σύνολο Εσόδων"}</td><td class=\"amount pos\">${htmlEscape(formatAmount(totalIncomes, currencySymbol))}</td></tr>\n")
-            sb.append("<tr><td>${if (isEnglish) "Total Expenses" else "Σύνολο Εξόδων"}</td><td class=\"amount neg\">${htmlEscape(formatAmount(totalExpenses, currencySymbol))}</td></tr>\n")
+            sb.append("<h3>${htmlEscape(Localization.tr(resolvedLang, "Financial Summary", "Οικονομική Σύνοψη"))}</h3>\n")
+            sb.append("<table><thead><tr><th>${htmlEscape(Localization.tr(resolvedLang, "Metric", "Δείκτης"))}</th><th class=\"amount\">$amountCol ($safeCurr)</th></tr></thead><tbody>\n")
+            sb.append("<tr><td>${htmlEscape(Localization.tr(resolvedLang, "Total Income", "Σύνολο Εσόδων"))}</td><td class=\"amount pos\">${htmlEscape(formatAmount(totalIncomes, currencySymbol))}</td></tr>\n")
+            sb.append("<tr><td>${htmlEscape(Localization.tr(resolvedLang, "Total Expenses", "Σύνολο Εξόδων"))}</td><td class=\"amount neg\">${htmlEscape(formatAmount(totalExpenses, currencySymbol))}</td></tr>\n")
             val netClass = if (netBalance >= 0.0) "pos" else "neg"
             val netPrefix = if (netBalance > 0.0) "+" else ""
-            sb.append("<tr class=\"total\"><td>${if (isEnglish) "Net Balance" else "Καθαρό Υπόλοιπο"}</td><td class=\"amount $netClass\">$netPrefix${htmlEscape(formatAmount(netBalance, currencySymbol))}</td></tr>\n")
+            sb.append("<tr class=\"total\"><td>${htmlEscape(Localization.tr(resolvedLang, "Net Balance", "Καθαρό Υπόλοιπο"))}</td><td class=\"amount $netClass\">$netPrefix${htmlEscape(formatAmount(netBalance, currencySymbol))}</td></tr>\n")
             if (savingsRate != null) {
-                sb.append("<tr><td>${if (isEnglish) "Savings Rate" else "Ποσοστό Αποταμίευσης"}</td><td class=\"amount\">${String.format(Locale.US, "%.1f%%", savingsRate)}</td></tr>\n")
+                sb.append("<tr><td>${htmlEscape(Localization.tr(resolvedLang, "Savings Rate", "Ποσοστό Αποταμίευσης"))}</td><td class=\"amount\">${String.format(Locale.US, "%.1f%%", savingsRate)}</td></tr>\n")
             }
             sb.append("</tbody></table>\n")
 
             // 2. Expenses Table
-            sb.append("<h3>${if (isEnglish) "Expenses (${expenses.size})" else "Έξοδα (${expenses.size})"}</h3>\n")
+            sb.append("<h3>${htmlEscape(Localization.tr(resolvedLang, "Expenses", "Έξοδα"))} (${expenses.size})</h3>\n")
             sb.append("<table>\n<thead><tr>")
-            if (isEnglish) {
-                sb.append("<th>Date</th><th>Title</th><th>Category</th><th>Payer</th><th>Members</th><th class=\"amount\">Amount ($currencySymbol)</th><th>Note</th>")
-            } else {
-                sb.append("<th>Ημερομηνία</th><th>Τίτλος</th><th>Κατηγορία</th><th>Πληρωτής</th><th>Μέλη</th><th class=\"amount\">Ποσό ($currencySymbol)</th><th>Σημείωση</th>")
-            }
+            sb.append("<th>$dateCol</th><th>$titleCol</th><th>$catCol</th><th>$payerCol</th><th>$membersCol</th><th class=\"amount\">$amountCol ($safeCurr)</th><th>$noteCol</th>")
             sb.append("</tr></thead>\n<tbody>\n")
 
             for (expense in expenses) {
@@ -297,20 +315,16 @@ object ExpenseReportExporter {
                 )
             }
             sb.append(
-                "<tr class=\"total\"><td colspan=\"5\">${if (isEnglish) "TOTAL EXPENSES" else "ΣΥΝΟΛΟ ΕΞΟΔΩΝ"}</td>" +
+                "<tr class=\"total\"><td colspan=\"5\">${htmlEscape(Localization.tr(resolvedLang, "TOTAL EXPENSES", "ΣΥΝΟΛΟ ΕΞΟΔΩΝ"))}</td>" +
                     "<td class=\"amount\">${htmlEscape(formatAmount(totalExpenses, currencySymbol))}</td><td></td></tr>\n"
             )
             sb.append("</tbody></table>\n")
 
             // 3. Incomes Table
             if (incomes.isNotEmpty()) {
-                sb.append("<h3>${if (isEnglish) "Incomes (${incomes.size})" else "Έσοδα (${incomes.size})"}</h3>\n")
+                sb.append("<h3>${htmlEscape(Localization.tr(resolvedLang, "Incomes", "Έσοδα"))} (${incomes.size})</h3>\n")
                 sb.append("<table>\n<thead><tr>")
-                if (isEnglish) {
-                    sb.append("<th class=\"income\">Date</th><th class=\"income\">Title</th><th class=\"income\">Category</th><th class=\"income\">Member</th><th class=\"income amount\">Amount ($currencySymbol)</th><th class=\"income\">Note</th>")
-                } else {
-                    sb.append("<th class=\"income\">Ημερομηνία</th><th class=\"income\">Τίτλος</th><th class=\"income\">Κατηγορία</th><th class=\"income\">Μέλος</th><th class=\"income amount\">Ποσό ($currencySymbol)</th><th class=\"income\">Σημείωση</th>")
-                }
+                sb.append("<th class=\"income\">$dateCol</th><th class=\"income\">$titleCol</th><th class=\"income\">$catCol</th><th class=\"income\">$memberCol</th><th class=\"income amount\">$amountCol ($safeCurr)</th><th class=\"income\">$noteCol</th>")
                 sb.append("</tr></thead>\n<tbody>\n")
                 for (income in incomes) {
                     val date = dateSdf.format(Date(income.timestamp))
@@ -322,7 +336,7 @@ object ExpenseReportExporter {
                     )
                 }
                 sb.append(
-                    "<tr class=\"total\"><td colspan=\"4\">${if (isEnglish) "TOTAL INCOMES" else "ΣΥΝΟΛΟ ΕΣΟΔΩΝ"}</td>" +
+                    "<tr class=\"total\"><td colspan=\"4\">${htmlEscape(Localization.tr(resolvedLang, "TOTAL INCOMES", "ΣΥΝΟΛΟ ΕΣΟΔΩΝ"))}</td>" +
                         "<td class=\"amount pos\">${htmlEscape(formatAmount(totalIncomes, currencySymbol))}</td><td></td></tr>\n"
                 )
                 sb.append("</tbody></table>\n")
@@ -331,13 +345,12 @@ object ExpenseReportExporter {
             // 4. Member Settlement / Settle-Up Section
             if (members.size > 1 && expenses.isNotEmpty()) {
                 val settleResult = SettleUpCalculator.calculate(expenses, members)
-                sb.append("<h3>${if (isEnglish) "Member Settlement (Settle Up)" else "Εκκαθάριση Μελών"}</h3>\n")
+                val paidCol = htmlEscape(Localization.tr(resolvedLang, "Paid", "Πλήρωσε"))
+                val shareCol = htmlEscape(Localization.tr(resolvedLang, "Fair Share", "Μερίδιο"))
+                val balanceCol = htmlEscape(Localization.tr(resolvedLang, "Net Balance", "Υπόλοιπο"))
+                sb.append("<h3>${htmlEscape(Localization.tr(resolvedLang, "Member Settlement (Settle Up)", "Εκκαθάριση Μελών"))}</h3>\n")
                 sb.append("<table><thead><tr>")
-                if (isEnglish) {
-                    sb.append("<th class=\"settle\">Member</th><th class=\"settle amount\">Paid ($currencySymbol)</th><th class=\"settle amount\">Fair Share ($currencySymbol)</th><th class=\"settle amount\">Net Balance ($currencySymbol)</th>")
-                } else {
-                    sb.append("<th class=\"settle\">Μέλος</th><th class=\"settle amount\">Πλήρωσε ($currencySymbol)</th><th class=\"settle amount\">Μερίδιο ($currencySymbol)</th><th class=\"settle amount\">Υπόλοιπο ($currencySymbol)</th>")
-                }
+                sb.append("<th class=\"settle\">$memberCol</th><th class=\"settle amount\">$paidCol ($safeCurr)</th><th class=\"settle amount\">$shareCol ($safeCurr)</th><th class=\"settle amount\">$balanceCol ($safeCurr)</th>")
                 sb.append("</tr></thead><tbody>\n")
                 for (s in settleResult.memberSummaries) {
                     val cls = when {
@@ -354,11 +367,13 @@ object ExpenseReportExporter {
                 }
                 sb.append("</tbody></table>\n")
 
-                sb.append("<h3>${if (isEnglish) "Recommended Transfers" else "Προτεινόμενες Μεταφορές"}</h3>\n")
+                sb.append("<h3>${htmlEscape(Localization.tr(resolvedLang, "Recommended Transfers", "Προτεινόμενες Μεταφορές"))}</h3>\n")
                 if (settleResult.transfers.isEmpty()) {
-                    sb.append("<p class=\"pos\">${if (isEnglish) "All balances are settled up!" else "Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!"}</p>\n")
+                    sb.append("<p class=\"pos\">${htmlEscape(Localization.tr(resolvedLang, "All balances are settled up!", "Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!"))}</p>\n")
                 } else {
-                    sb.append("<table><thead><tr><th class=\"settle\">${if (isEnglish) "From" else "Από"}</th><th class=\"settle\">${if (isEnglish) "To" else "Προς"}</th><th class=\"settle amount\">${if (isEnglish) "Amount ($currencySymbol)" else "Ποσό ($currencySymbol)"}</th></tr></thead><tbody>\n")
+                    val fromCol = htmlEscape(Localization.tr(resolvedLang, "From", "Από"))
+                    val toCol = htmlEscape(Localization.tr(resolvedLang, "To", "Προς"))
+                    sb.append("<table><thead><tr><th class=\"settle\">$fromCol</th><th class=\"settle\">$toCol</th><th class=\"settle amount\">$amountCol ($safeCurr)</th></tr></thead><tbody>\n")
                     for (t in settleResult.transfers) {
                         sb.append("<tr><td>${htmlEscape(t.fromMember.name)}</td><td>${htmlEscape(t.toMember.name)}</td><td class=\"amount\"><b>${htmlEscape(formatAmount(t.amount, currencySymbol))}</b></td></tr>\n")
                     }
@@ -369,16 +384,23 @@ object ExpenseReportExporter {
             sb.append("</body></html>")
 
             file.writeBytes(sb.toString().toByteArray(Charsets.UTF_8))
-            val shareTitle = if (isEnglish) {
-                "Finsay Financial Report (Excel) - $periodTitle"
-            } else {
-                "Οικονομική Αναφορά Finsay (Excel) - $periodTitle"
-            }
-            shareFile(context, file, "application/vnd.ms-excel", shareTitle, isEnglish)
+            val shareTitle = Localization.trFormat(
+                resolvedLang,
+                "Finsay Financial Report (Excel) - %1\$s",
+                "Οικονομική Αναφορά Finsay (Excel) - %1\$s",
+                periodTitle
+            )
+            shareFile(context, file, "application/vnd.ms-excel", shareTitle, resolvedLang)
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting Excel: ${e.message}", e)
             Handler(Looper.getMainLooper()).post {
-                val msg = if (isEnglish) "Excel export error: ${e.localizedMessage ?: "unknown"}" else "Σφάλμα εξαγωγής Excel: ${e.localizedMessage ?: "άγνωστο"}"
+                val unknown = Localization.tr(resolvedLang, "unknown", "άγνωστο")
+                val msg = Localization.trFormat(
+                    resolvedLang,
+                    "Excel export error: %1\$s",
+                    "Σφάλμα εξαγωγής Excel: %1\$s",
+                    e.localizedMessage ?: unknown
+                )
                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
         }
@@ -394,8 +416,10 @@ object ExpenseReportExporter {
         members: List<FamilyMember> = emptyList(),
         currencySymbol: String = CurrencyFormatter.currentSymbol,
         householdName: String = "",
-        isEnglish: Boolean = false
+        isEnglish: Boolean = false,
+        lang: Localization.Language? = null
     ) {
+        val resolvedLang = resolveLanguage(lang, isEnglish)
         try {
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val dateRange = buildDateRangeFileSuffix(expenses, incomes, startDateMillis, endDateMillis)
@@ -437,7 +461,7 @@ object ExpenseReportExporter {
                 paint.typeface = Typeface.DEFAULT
                 page.canvas.drawText(periodTitle, marginX, 59f, paint)
 
-                val pageLabel = if (isEnglish) "Page $pageNumber" else "Σελίδα $pageNumber"
+                val pageLabel = Localization.trFormat(resolvedLang, "Page %1\$d", "Σελίδα %1\$d", pageNumber)
                 val pageLabelW = paint.measureText(pageLabel)
                 page.canvas.drawText(pageLabel, contentRight - pageLabelW, 44f, paint)
 
@@ -498,7 +522,7 @@ object ExpenseReportExporter {
             paint.color = Color.parseColor("#475569")
             paint.textSize = 9.5f
             paint.typeface = Typeface.DEFAULT
-            canvas!!.drawText(if (isEnglish) "TOTAL INCOME" else "ΣΥΝΟΛΟ ΕΣΟΔΩΝ", marginX + 12f, y + 20f, paint)
+            canvas!!.drawText(Localization.tr(resolvedLang, "TOTAL INCOME", "ΣΥΝΟΛΟ ΕΣΟΔΩΝ"), marginX + 12f, y + 20f, paint)
             paint.color = Color.parseColor("#059669")
             paint.textSize = 13.5f
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -508,7 +532,7 @@ object ExpenseReportExporter {
             paint.color = Color.parseColor("#475569")
             paint.textSize = 9.5f
             paint.typeface = Typeface.DEFAULT
-            canvas!!.drawText(if (isEnglish) "TOTAL EXPENSES" else "ΣΥΝΟΛΟ ΕΞΟΔΩΝ", marginX + colW + 12f, y + 20f, paint)
+            canvas!!.drawText(Localization.tr(resolvedLang, "TOTAL EXPENSES", "ΣΥΝΟΛΟ ΕΞΟΔΩΝ"), marginX + colW + 12f, y + 20f, paint)
             paint.color = Color.parseColor("#DC2626")
             paint.textSize = 13.5f
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -518,7 +542,7 @@ object ExpenseReportExporter {
             paint.color = Color.parseColor("#475569")
             paint.textSize = 9.5f
             paint.typeface = Typeface.DEFAULT
-            canvas!!.drawText(if (isEnglish) "NET BALANCE" else "ΚΑΘΑΡΟ ΥΠΟΛΟΙΠΟ", marginX + colW * 2 + 12f, y + 20f, paint)
+            canvas!!.drawText(Localization.tr(resolvedLang, "NET BALANCE", "ΚΑΘΑΡΟ ΥΠΟΛΟΙΠΟ"), marginX + colW * 2 + 12f, y + 20f, paint)
             paint.color = if (netBalance >= 0.0) Color.parseColor("#047857") else Color.parseColor("#DC2626")
             paint.textSize = 13.5f
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
@@ -529,14 +553,22 @@ object ExpenseReportExporter {
                 paint.color = Color.parseColor("#334155")
                 paint.textSize = 9f
                 paint.typeface = Typeface.DEFAULT
-                val rateText = if (isEnglish) {
-                    "Savings rate: ${String.format(Locale.US, "%.1f%%", savingsRate)}"
-                } else {
-                    "Ποσοστό αποταμίευσης: ${String.format(Locale.US, "%.1f%%", savingsRate)}"
-                }
+                val rateText = Localization.trFormat(
+                    resolvedLang,
+                    "Savings rate: %1\$s",
+                    "Ποσοστό αποταμίευσης: %1\$s",
+                    String.format(Locale.US, "%.1f%%", savingsRate)
+                )
                 canvas!!.drawText(rateText, marginX + 12f, y + 57f, paint)
             }
             y += 84f
+
+            val dateShort = Localization.tr(resolvedLang, "Date", "Ημερ/νία")
+            val titleHeaderCol = Localization.tr(resolvedLang, "Title", "Περιγραφή")
+            val catHeaderCol = Localization.tr(resolvedLang, "Category", "Κατηγορία")
+            val payerHeaderCol = Localization.tr(resolvedLang, "Payer", "Πληρωτής")
+            val memberHeaderCol = Localization.tr(resolvedLang, "Member", "Μέλος")
+            val amountHeaderCol = Localization.tr(resolvedLang, "Amount", "Ποσό")
 
             // 2. Expenses Section
             fun drawExpenseTableHeader() {
@@ -544,11 +576,11 @@ object ExpenseReportExporter {
                 paint.color = Color.parseColor("#1E293B")
                 paint.textSize = 9.5f
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas!!.drawText(if (isEnglish) "Date" else "Ημερ/νία", marginX, y, paint)
-                canvas!!.drawText(if (isEnglish) "Title" else "Περιγραφή", 104f, y, paint)
-                canvas!!.drawText(if (isEnglish) "Category" else "Κατηγορία", 252f, y, paint)
-                canvas!!.drawText(if (isEnglish) "Payer" else "Πληρωτής", 364f, y, paint)
-                canvas!!.drawText(if (isEnglish) "Amount" else "Ποσό", 476f, y, paint)
+                canvas!!.drawText(dateShort, marginX, y, paint)
+                canvas!!.drawText(titleHeaderCol, 104f, y, paint)
+                canvas!!.drawText(catHeaderCol, 252f, y, paint)
+                canvas!!.drawText(payerHeaderCol, 364f, y, paint)
+                canvas!!.drawText(amountHeaderCol, 476f, y, paint)
                 y += 6f
                 paint.color = Color.parseColor("#CBD5E1")
                 paint.strokeWidth = 0.8f
@@ -556,12 +588,12 @@ object ExpenseReportExporter {
                 y += 14f
             }
 
-            drawSectionTitle(if (isEnglish) "Expenses (${expenses.size})" else "Έξοδα (${expenses.size})")
+            drawSectionTitle("${Localization.tr(resolvedLang, "Expenses", "Έξοδα")} (${expenses.size})")
             if (expenses.isEmpty()) {
                 paint.color = Color.parseColor("#64748B")
                 paint.textSize = 10f
                 paint.typeface = Typeface.DEFAULT
-                canvas!!.drawText(if (isEnglish) "No expenses in this period." else "Δεν υπάρχουν έξοδα για την περίοδο.", marginX, y, paint)
+                canvas!!.drawText(Localization.tr(resolvedLang, "No expenses in this period.", "Δεν υπάρχουν έξοδα για την περίοδο."), marginX, y, paint)
                 y += 20f
             } else {
                 drawExpenseTableHeader()
@@ -583,7 +615,7 @@ object ExpenseReportExporter {
                 paint.color = Color.parseColor("#047857")
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 paint.textSize = 10.5f
-                val totalLabel = if (isEnglish) "Total Expenses: ${formatAmount(totalExpenses, currencySymbol)}" else "Σύνολο Εξόδων: ${formatAmount(totalExpenses, currencySymbol)}"
+                val totalLabel = "${Localization.tr(resolvedLang, "Total Expenses", "Σύνολο Εξόδων")}: ${formatAmount(totalExpenses, currencySymbol)}"
                 canvas!!.drawText(totalLabel, 360f, y + 4f, paint)
                 y += 26f
             }
@@ -595,11 +627,11 @@ object ExpenseReportExporter {
                     paint.color = Color.parseColor("#1E293B")
                     paint.textSize = 9.5f
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    canvas!!.drawText(if (isEnglish) "Date" else "Ημερ/νία", marginX, y, paint)
-                    canvas!!.drawText(if (isEnglish) "Title" else "Περιγραφή", 104f, y, paint)
-                    canvas!!.drawText(if (isEnglish) "Category" else "Κατηγορία", 258f, y, paint)
-                    canvas!!.drawText(if (isEnglish) "Member" else "Μέλος", 372f, y, paint)
-                    canvas!!.drawText(if (isEnglish) "Amount" else "Ποσό", 476f, y, paint)
+                    canvas!!.drawText(dateShort, marginX, y, paint)
+                    canvas!!.drawText(titleHeaderCol, 104f, y, paint)
+                    canvas!!.drawText(catHeaderCol, 258f, y, paint)
+                    canvas!!.drawText(memberHeaderCol, 372f, y, paint)
+                    canvas!!.drawText(amountHeaderCol, 476f, y, paint)
                     y += 6f
                     paint.color = Color.parseColor("#CBD5E1")
                     paint.strokeWidth = 0.8f
@@ -607,7 +639,7 @@ object ExpenseReportExporter {
                     y += 14f
                 }
 
-                drawSectionTitle(if (isEnglish) "Incomes (${incomes.size})" else "Έσοδα (${incomes.size})", "#0D9488")
+                drawSectionTitle("${Localization.tr(resolvedLang, "Incomes", "Έσοδα")} (${incomes.size})", "#0D9488")
                 drawIncomeTableHeader()
                 for (inc in incomes) {
                     ensureSpace(19f) { drawIncomeTableHeader() }
@@ -628,7 +660,7 @@ object ExpenseReportExporter {
                 paint.color = Color.parseColor("#0D9488")
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 paint.textSize = 10.5f
-                val totalIncLabel = if (isEnglish) "Total Incomes: ${formatAmount(totalIncomes, currencySymbol)}" else "Σύνολο Εσόδων: ${formatAmount(totalIncomes, currencySymbol)}"
+                val totalIncLabel = "${Localization.tr(resolvedLang, "Total Incomes", "Σύνολο Εσόδων")}: ${formatAmount(totalIncomes, currencySymbol)}"
                 canvas!!.drawText(totalIncLabel, 360f, y + 4f, paint)
                 y += 26f
             }
@@ -641,10 +673,10 @@ object ExpenseReportExporter {
                     paint.color = Color.parseColor("#1E293B")
                     paint.textSize = 9.5f
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    canvas!!.drawText(if (isEnglish) "Member" else "Μέλος", marginX, y, paint)
-                    canvas!!.drawText(if (isEnglish) "Paid" else "Πλήρωσε", 220f, y, paint)
-                    canvas!!.drawText(if (isEnglish) "Fair Share" else "Μερίδιο", 335f, y, paint)
-                    canvas!!.drawText(if (isEnglish) "Net Balance" else "Υπόλοιπο", 455f, y, paint)
+                    canvas!!.drawText(memberHeaderCol, marginX, y, paint)
+                    canvas!!.drawText(Localization.tr(resolvedLang, "Paid", "Πλήρωσε"), 220f, y, paint)
+                    canvas!!.drawText(Localization.tr(resolvedLang, "Fair Share", "Μερίδιο"), 335f, y, paint)
+                    canvas!!.drawText(Localization.tr(resolvedLang, "Net Balance", "Υπόλοιπο"), 455f, y, paint)
                     y += 6f
                     paint.color = Color.parseColor("#CBD5E1")
                     paint.strokeWidth = 0.8f
@@ -652,7 +684,7 @@ object ExpenseReportExporter {
                     y += 14f
                 }
 
-                drawSectionTitle(if (isEnglish) "Member Settlement (Settle Up)" else "Εκκαθάριση Μελών", "#1E40AF")
+                drawSectionTitle(Localization.tr(resolvedLang, "Member Settlement (Settle Up)", "Εκκαθάριση Μελών"), "#1E40AF")
                 drawSettleHeader()
                 for (s in settleResult.memberSummaries) {
                     ensureSpace(19f) { drawSettleHeader() }
@@ -679,7 +711,7 @@ object ExpenseReportExporter {
                 paint.color = Color.parseColor("#1E40AF")
                 paint.textSize = 10.5f
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas!!.drawText(if (isEnglish) "Recommended Transfers" else "Προτεινόμενες Μεταφορές", marginX, y, paint)
+                canvas!!.drawText(Localization.tr(resolvedLang, "Recommended Transfers", "Προτεινόμενες Μεταφορές"), marginX, y, paint)
                 y += 16f
 
                 if (settleResult.transfers.isEmpty()) {
@@ -687,7 +719,7 @@ object ExpenseReportExporter {
                     paint.textSize = 10f
                     paint.typeface = Typeface.DEFAULT
                     canvas!!.drawText(
-                        if (isEnglish) "All balances are settled up!" else "Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!",
+                        Localization.tr(resolvedLang, "All balances are settled up!", "Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!"),
                         marginX,
                         y,
                         paint
@@ -718,23 +750,35 @@ object ExpenseReportExporter {
             pdfDocument.close()
 
             Handler(Looper.getMainLooper()).post {
-                val shareTitle = if (isEnglish) {
-                    "Finsay Financial Report (PDF) - $periodTitle"
-                } else {
-                    "Οικονομική Αναφορά Finsay (PDF) - $periodTitle"
-                }
-                shareFile(context, file, "application/pdf", shareTitle, isEnglish)
+                val shareTitle = Localization.trFormat(
+                    resolvedLang,
+                    "Finsay Financial Report (PDF) - %1\$s",
+                    "Οικονομική Αναφορά Finsay (PDF) - %1\$s",
+                    periodTitle
+                )
+                shareFile(context, file, "application/pdf", shareTitle, resolvedLang)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error exporting PDF: ${e.message}", e)
             Handler(Looper.getMainLooper()).post {
-                val msg = if (isEnglish) "PDF creation error: ${e.message}" else "Σφάλμα κατά τη δημιουργία PDF: ${e.message}"
+                val msg = Localization.trFormat(
+                    resolvedLang,
+                    "PDF creation error: %1\$s",
+                    "Σφάλμα κατά τη δημιουργία PDF: %1\$s",
+                    e.message ?: ""
+                )
                 Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
             }
         }
     }
 
-    private fun shareFile(context: Context, file: File, mimeType: String, title: String, isEnglish: Boolean = false) {
+    private fun shareFile(
+        context: Context,
+        file: File,
+        mimeType: String,
+        title: String,
+        lang: Localization.Language
+    ) {
         try {
             val uri: Uri = FileProvider.getUriForFile(
                 context,
@@ -756,7 +800,13 @@ object ExpenseReportExporter {
             context.startActivity(chooser)
         } catch (e: Exception) {
             Log.e(TAG, "Error sharing file: ${e.message}", e)
-            val msg = if (isEnglish) "File sharing error: ${e.localizedMessage ?: "unknown"}" else "Σφάλμα κοινοποίησης αρχείου: ${e.localizedMessage ?: "άγνωστο"}"
+            val unknown = Localization.tr(lang, "unknown", "άγνωστο")
+            val msg = Localization.trFormat(
+                lang,
+                "File sharing error: %1\$s",
+                "Σφάλμα κοινοποίησης αρχείου: %1\$s",
+                e.localizedMessage ?: unknown
+            )
             Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
         }
     }

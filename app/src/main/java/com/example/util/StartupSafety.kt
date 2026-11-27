@@ -97,6 +97,11 @@ object StartupSafety {
         return explicitlyKnownHids.contains(candidateHid)
     }
 
+    fun allocateNextSafeId(existingIds: Collection<Long>): Long {
+        val maxId = existingIds.filter { it > 0L }.maxOrNull() ?: 0L
+        return maxId + 1L
+    }
+
     /**
      * When an active household exists, `/households/{hid}/expenses` is the single shared source of truth.
      * Personal `/users/{uid}/expenses` mirror items MUST NOT be merged into an active household, because
@@ -111,7 +116,7 @@ object StartupSafety {
     ): List<FirebaseExpense> {
         val source = if (activeHouseholdId.isNotBlank()) {
             householdExpenses.filter { exp ->
-                exp.householdId == activeHouseholdId || (exp.householdId.isBlank() && totalHouseholdCount <= 1)
+                exp.householdId == activeHouseholdId || exp.householdId.isBlank()
             }
         } else {
             userExpenses
@@ -137,7 +142,7 @@ object StartupSafety {
     ): List<FirebaseIncome> {
         val source = if (activeHouseholdId.isNotBlank()) {
             householdIncomes.filter { inc ->
-                inc.householdId == activeHouseholdId || (inc.householdId.isBlank() && totalHouseholdCount <= 1)
+                inc.householdId == activeHouseholdId || inc.householdId.isBlank()
             }
         } else {
             userIncomes

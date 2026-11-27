@@ -827,7 +827,8 @@ object GreekVoiceParser {
         categories: List<ExpenseCategory>,
         allMembers: List<FamilyMember>,
         preferredDefaultPayer: FamilyMember? = null,
-        preferredDefaultPayers: List<FamilyMember> = listOfNotNull(preferredDefaultPayer)
+        preferredDefaultPayers: List<FamilyMember> = listOfNotNull(preferredDefaultPayer),
+        lang: Localization.Language = Localization.Language.GREEK
     ): ParsedVoiceExpense {
         val norm = normalizeGreek(prompt)
 
@@ -839,12 +840,13 @@ object GreekVoiceParser {
         val amount = amountDetailed?.amount ?: 10.0
         val consumedAmountWords = amountDetailed?.consumedWords ?: emptySet()
 
-        // 3. Payer vs Beneficiary Extraction with magic words: "για", "αφορά", "αφορούν"
+        // 3. Payer vs Beneficiary Extraction with magic words: "για", "αφορά", "for", "para", "pour", "für", etc.
         val (payerResult, beneficiaryInfo, consumedMemberWords) = extractPayerAndBeneficiaries(
             cleanedNorm = cleanedNorm,
             allMembers = allMembers,
             amount = amount,
-            preferredDefaultPayers = preferredDefaultPayers
+            preferredDefaultPayers = preferredDefaultPayers,
+            lang = lang
         )
         val (splitType, matchedMembers, memberDisplay) = beneficiaryInfo
 
@@ -907,7 +909,13 @@ object GreekVoiceParser {
         val matchedWords = mutableSetOf<String>()
         val segNorm = segment.lowercase(Locale.ROOT)
 
-        val allFamilyKws = listOf("οικογενεια", "ολοι", "σπιτι", "κοινο", "σπιτιου", "ολο το σπιτι", "παντες", "κοινα", "all", "everyone")
+        val allFamilyKws = listOf(
+            "οικογενεια", "ολοι", "σπιτι", "κοινο", "σπιτιου", "ολο το σπιτι", "παντες", "κοινα",
+            "all", "everyone", "family", "shared", "household",
+            "todos", "familia", "comun", "tous", "famille", "commun",
+            "alle", "familie", "gemeinsam", "tutti", "famiglia",
+            "iedereen", "gezin", "wszyscy", "rodzina", "toti", "familie"
+        )
         for (kw in allFamilyKws) {
             if (containsWord(segNorm, kw)) {
                 matchedWords.add(kw)
@@ -915,20 +923,27 @@ object GreekVoiceParser {
             }
         }
 
-        val kidsKws = listOf("παιδια", "παιδιων", "στα παιδια", "τα παιδια", "kids", "children")
+        val kidsKws = listOf(
+            "παιδια", "παιδιων", "στα παιδια", "τα παιδια", "kids", "children",
+            "ninos", "hijos", "enfants", "kinder", "bambini", "figli",
+            "criancas", "filhos", "kinderen", "dzieci", "copii"
+        )
         for (kw in kidsKws) {
             if (containsWord(segNorm, kw)) {
                 matchedWords.add(kw)
-                val kids = allMembers.filter { it.role.equals("Παιδί", ignoreCase = true) }
+                val kids = allMembers.filter { Localization.canonicalRoleKey(it.role) == "CHILD" }
                 return MemberSegmentMatch(kids.ifEmpty { allMembers }, isKids = true, matchedWords = matchedWords)
             }
         }
 
-        val parentsKws = listOf("γονεις", "γονιων", "στους γονεις", "οι γονεις", "parents")
+        val parentsKws = listOf(
+            "γονεις", "γονιων", "στους γονεις", "οι γονεις", "parents",
+            "padres", "eltern", "genitori", "pais", "ouders", "rodzice", "parinti"
+        )
         for (kw in parentsKws) {
             if (containsWord(segNorm, kw)) {
                 matchedWords.add(kw)
-                val parents = allMembers.filter { it.role.equals("Γονέας", ignoreCase = true) }
+                val parents = allMembers.filter { Localization.canonicalRoleKey(it.role) == "PARENT" }
                 return MemberSegmentMatch(parents.ifEmpty { allMembers }, isParents = true, matchedWords = matchedWords)
             }
         }
@@ -944,10 +959,7 @@ object GreekVoiceParser {
         }
 
         if (matched.size >= 2) {
-            matchedWords.add("και")
-            matchedWords.add("κι")
-            matchedWords.add("&")
-            matchedWords.add("and")
+            matchedWords.addAll(listOf("και", "κι", "&", "and", "y", "et", "und", "e", "en", "i", "si"))
         }
 
         return MemberSegmentMatch(matched, matchedWords = matchedWords)
@@ -955,24 +967,25 @@ object GreekVoiceParser {
 
     /**
      * Requirements 6.2 & 6.3:
-     * - 6.2: Understand who paid with prefixes: "πληρώθηκε από", "πλήρωσε ο", "πλήρωσε η", "πλήρωσαν οι", "πλήρωσε", "paid by"
-     * - 6.3: Understand whom the payment concerns with prefixes: "για", "για τον", "για την", "για τους", "αφορά τον", "αφορά την", "αφορά τους"
+     * - 6.2: Understand who paid with prefixes in all supported languages
+     * - 6.3: Understand whom the payment concerns with prefixes in all supported languages
      */
     private fun extractPayerAndBeneficiaries(
         cleanedNorm: String,
         allMembers: List<FamilyMember>,
         amount: Double,
-        preferredDefaultPayers: List<FamilyMember> = emptyList()
+        preferredDefaultPayers: List<FamilyMember> = emptyList(),
+        lang: Localization.Language = Localization.Language.GREEK
     ): Triple<ParsedPayerResult, Triple<String, List<FamilyMember>, String>, Set<String>> {
         val validPreferred = preferredDefaultPayers
             .filter { pref -> allMembers.any { it.id == pref.id } }
             .distinctBy { it.id }
-        val fallbackSingle = allMembers.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+        val fallbackSingle = allMembers.firstOrNull { Localization.canonicalRoleKey(it.role) == "PARENT" }
             ?: allMembers.firstOrNull()
         val defaultPayersList = if (validPreferred.isNotEmpty()) validPreferred else listOfNotNull(fallbackSingle)
         val defaultPayerId = defaultPayersList.firstOrNull()?.id ?: 0L
         val defaultPayerName = if (defaultPayersList.isNotEmpty()) {
-            Localization.resolveMemberGroupDisplay(defaultPayersList, allMembers, Localization.Language.GREEK)
+            Localization.resolveMemberGroupDisplay(defaultPayersList, allMembers, lang)
         } else {
             ""
         }
@@ -984,7 +997,7 @@ object GreekVoiceParser {
             val primary = list.firstOrNull()
             val primaryId = primary?.id ?: defaultPayerId
             val displayName = if (list.isNotEmpty()) {
-                Localization.resolveMemberGroupDisplay(list, allMembers, Localization.Language.GREEK)
+                Localization.resolveMemberGroupDisplay(list, allMembers, lang)
             } else {
                 defaultPayerName
             }
@@ -994,11 +1007,17 @@ object GreekVoiceParser {
             return ParsedPayerResult(primaryId, displayName, idsCsv, amountsCsv, list, hasExplicitPayer = isExplicit)
         }
 
-        // 6.2 Payer trigger prefixes: "πληρώθηκε από", "πλήρωσε ο", "πλήρωσε η", "πλήρωσαν οι", "πλήρωσε", "paid by"
-        val payerTriggerRegex = Regex("(?:^|[^\\p{L}\\p{Nd}])(πληρωθηκε\\s+απο|πληρωθηκε\\s+απ|πληρωσαν\\s+οι|πληρωσαν|πληρωσε\\s+ο|πληρωσε\\s+η|πληρωσε|paid\\s+by|πληρωμη\\s+απο|εβαλε\\s+ο|εβαλε\\s+η|εβαλε)(?:\\s+(?:τον|την|το|τους|τις|τα|ο|η|οι|των))?(?=$|[^\\p{L}\\p{Nd}])", RegexOption.IGNORE_CASE)
+        // 6.2 Payer trigger prefixes across supported languages
+        val payerTriggerRegex = Regex(
+            "(?:^|[^\\p{L}\\p{Nd}])(πληρωθηκε\\s+απο|πληρωθηκε\\s+απ|πληρωσαν\\s+οι|πληρωσαν|πληρωσε\\s+ο|πληρωσε\\s+η|πληρωσε|paid\\s+by|πληρωμη\\s+απο|εβαλε\\s+ο|εβαλε\\s+η|εβαλε|pagado\\s+por|pago\\s+por|paye\\s+par|bezahlt\\s+von|pagato\\s+da|betaald\\s+door|zaplacone\\s+przez|platit\\s+de)(?:\\s+(?:τον|την|το|τους|τις|τα|ο|η|οι|των))?(?=$|[^\\p{L}\\p{Nd}])",
+            RegexOption.IGNORE_CASE
+        )
 
-        // 6.3 Beneficiary trigger prefixes: "για", "για τον", "για την", "για τους", "αφορά τον", "αφορά την", "αφορά τους"
-        val beneficiaryTriggerRegex = Regex("(?:^|[^\\p{L}\\p{Nd}])(για\\s+τον|για\\s+την|για\\s+τους|για\\s+το|για\\s+τις|για\\s+τα|για|αφορα\\s+τον|αφορα\\s+την|αφορα\\s+τους|αφορα\\s+το|αφορα\\s+τις|αφορα\\s+τα|αφορα|αφορουν\\s+τους|αφορουν\\s+τις|αφορουν\\s+τα|αφορουν|for\\s+the|for)(?:\\s+(?:τον|την|το|τους|τις|τα|ολη\\s+την|ολο\\s+το))?(?=$|[^\\p{L}\\p{Nd}])", RegexOption.IGNORE_CASE)
+        // 6.3 Beneficiary trigger prefixes across supported languages
+        val beneficiaryTriggerRegex = Regex(
+            "(?:^|[^\\p{L}\\p{Nd}])(για\\s+τον|για\\s+την|για\\s+τους|για\\s+το|για\\s+τις|για\\s+τα|για|αφορα\\s+τον|αφορα\\s+την|αφορα\\s+τους|αφορα\\s+το|αφορα\\s+τις|αφορα\\s+τα|αφορα|αφορουν\\s+τους|αφορουν\\s+τις|αφορουν\\s+τα|αφορουν|for\\s+the|for|para\\s+los|para\\s+las|para|pour\\s+les|pour|fur\\s+die|fur|per\\s+i|per\\s+le|per|voor\\s+de|voor|dla|pentru)(?:\\s+(?:τον|την|το|τους|τις|τα|ολη\\s+την|ολο\\s+το))?(?=$|[^\\p{L}\\p{Nd}])",
+            RegexOption.IGNORE_CASE
+        )
 
         val payerMatch = payerTriggerRegex.find(cleanedNorm)
         val benMatch = beneficiaryTriggerRegex.find(cleanedNorm)
@@ -1007,7 +1026,13 @@ object GreekVoiceParser {
             // Consume matched trigger words
             payerMatch?.value?.split(Regex("[^\\p{L}\\p{Nd}]+"))?.filter { it.isNotBlank() }?.forEach { consumedWords.add(it) }
             benMatch?.value?.split(Regex("[^\\p{L}\\p{Nd}]+"))?.filter { it.isNotBlank() }?.forEach { consumedWords.add(it) }
-            consumedWords.addAll(listOf("πληρωθηκε", "απο", "πληρωσε", "πληρωσαν", "paid", "by", "για", "αφορα", "αφορουν", "τον", "την", "τους", "τις", "τα", "το", "ο", "η", "οι"))
+            consumedWords.addAll(
+                listOf(
+                    "πληρωθηκε", "απο", "πληρωσε", "πληρωσαν", "paid", "by", "για", "αφορα", "αφορουν",
+                    "τον", "την", "τους", "τις", "τα", "το", "ο", "η", "οι",
+                    "for", "para", "pour", "fur", "per", "voor", "dla", "pentru"
+                )
+            )
 
             val matchedPayers = mutableListOf<FamilyMember>()
             var beneficiaryResult: Triple<String, List<FamilyMember>, String>? = null
@@ -1023,14 +1048,14 @@ object GreekVoiceParser {
 
                     val bMatch = findMembersInSegment(benSeg, allMembers)
                     consumedWords.addAll(bMatch.matchedWords)
-                    beneficiaryResult = resolveBeneficiaryDisplay(bMatch, allMembers)
+                    beneficiaryResult = resolveBeneficiaryDisplay(bMatch, allMembers, lang)
                 } else {
                     val benSeg = cleanedNorm.substring(benMatch.range.last + 1, payerMatch.range.first).trim()
                     val payerSeg = cleanedNorm.substring(payerMatch.range.last + 1).trim()
 
                     val bMatch = findMembersInSegment(benSeg, allMembers)
                     consumedWords.addAll(bMatch.matchedWords)
-                    beneficiaryResult = resolveBeneficiaryDisplay(bMatch, allMembers)
+                    beneficiaryResult = resolveBeneficiaryDisplay(bMatch, allMembers, lang)
 
                     val pMatch = findMembersInSegment(payerSeg, allMembers)
                     matchedPayers.addAll(pMatch.members)
@@ -1051,13 +1076,13 @@ object GreekVoiceParser {
                     consumedWords.addAll(pMatchBefore.matchedWords)
                 }
 
-                beneficiaryResult = Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
+                beneficiaryResult = Triple("ALL_FAMILY", allMembers, Localization.sharedFamily(lang))
             } else if (benMatch != null) {
                 // Only beneficiary prefix present
                 val benSeg = cleanedNorm.substring(benMatch.range.last + 1).trim()
                 val bMatch = findMembersInSegment(benSeg, allMembers)
                 consumedWords.addAll(bMatch.matchedWords)
-                beneficiaryResult = resolveBeneficiaryDisplay(bMatch, allMembers)
+                beneficiaryResult = resolveBeneficiaryDisplay(bMatch, allMembers, lang)
 
                 // Payer extracted from before beneficiary trigger
                 val beforePart = cleanedNorm.substring(0, benMatch.range.first).trim()
@@ -1069,7 +1094,7 @@ object GreekVoiceParser {
             val hasExplicit = matchedPayers.isNotEmpty()
             val finalPayers = if (hasExplicit) matchedPayers else defaultPayersList
             val payerResult = buildPayerResult(finalPayers, hasExplicit)
-            val finalBeneficiaries = beneficiaryResult ?: Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
+            val finalBeneficiaries = beneficiaryResult ?: Triple("ALL_FAMILY", allMembers, Localization.sharedFamily(lang))
 
             return Triple(payerResult, finalBeneficiaries, consumedWords)
         } else {
@@ -1084,16 +1109,15 @@ object GreekVoiceParser {
             }
 
             if (matchedMembers.size >= 2) {
-                consumedWords.add("και")
-                consumedWords.add("κι")
+                consumedWords.addAll(listOf("και", "κι", "and", "y", "et", "und", "e", "en", "i", "si"))
             }
 
             val hasExplicit = matchedMembers.isNotEmpty()
             val payerResult = buildPayerResult(matchedMembers, hasExplicit)
             val beneficiaryResult = if (matchedMembers.isEmpty() || matchedMembers.size == allMembers.size) {
-                Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
+                Triple("ALL_FAMILY", allMembers, Localization.sharedFamily(lang))
             } else {
-                val display = Localization.resolveMemberGroupDisplay(matchedMembers, allMembers, Localization.Language.GREEK)
+                val display = Localization.resolveMemberGroupDisplay(matchedMembers, allMembers, lang)
                 Triple("SPECIFIC_MEMBERS", matchedMembers, display)
             }
 
@@ -1103,26 +1127,29 @@ object GreekVoiceParser {
 
     private fun resolveBeneficiaryDisplay(
         match: MemberSegmentMatch,
-        allMembers: List<FamilyMember>
+        allMembers: List<FamilyMember>,
+        lang: Localization.Language = Localization.Language.GREEK
     ): Triple<String, List<FamilyMember>, String> {
         if (match.isAllFamily) {
-            return Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
+            return Triple("ALL_FAMILY", allMembers, Localization.sharedFamily(lang))
         }
         if (match.isKids) {
-            val kids = allMembers.filter { it.role.equals("Παιδί", ignoreCase = true) }
-            val display = if (kids.size >= 2) "Παιδιά" else kids.firstOrNull()?.name ?: "Παιδιά"
+            val kids = allMembers.filter { Localization.canonicalRoleKey(it.role) == "CHILD" }
+            val pluralKids = Localization.pluralRoleName("Child", lang)
+            val display = if (kids.size >= 2) pluralKids else kids.firstOrNull()?.name ?: pluralKids
             return Triple("SPECIFIC_MEMBERS", kids.ifEmpty { allMembers }, display)
         }
         if (match.isParents) {
-            val parents = allMembers.filter { it.role.equals("Γονέας", ignoreCase = true) }
-            val display = if (parents.size >= 2) "Γονείς" else parents.firstOrNull()?.name ?: "Γονείς"
+            val parents = allMembers.filter { Localization.canonicalRoleKey(it.role) == "PARENT" }
+            val pluralParents = Localization.pluralRoleName("Parent", lang)
+            val display = if (parents.size >= 2) pluralParents else parents.firstOrNull()?.name ?: pluralParents
             return Triple("SPECIFIC_MEMBERS", parents.ifEmpty { allMembers }, display)
         }
         if (match.members.isNotEmpty()) {
-            val display = Localization.resolveMemberGroupDisplay(match.members, allMembers, Localization.Language.GREEK)
+            val display = Localization.resolveMemberGroupDisplay(match.members, allMembers, lang)
             return Triple("SPECIFIC_MEMBERS", match.members, display)
         }
-        return Triple("ALL_FAMILY", allMembers, "Κοινό Οικογένειας")
+        return Triple("ALL_FAMILY", allMembers, Localization.sharedFamily(lang))
     }
 
     /**

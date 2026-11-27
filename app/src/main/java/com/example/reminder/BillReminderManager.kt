@@ -13,6 +13,7 @@ import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
 import com.example.data.entity.RecurringExpense
+import com.example.util.Localization
 import java.util.Calendar
 import java.util.Locale
 
@@ -30,15 +31,30 @@ object BillReminderManager {
     private const val REQUEST_CODE_BASE = 30000
     private const val TAG = "BillReminderManager"
 
+    private fun resolveAppLanguage(context: Context): Localization.Language {
+        val code = try {
+            context.getSharedPreferences("oikonomos_app_prefs", Context.MODE_PRIVATE)
+                .getString("app_language", "EN")
+        } catch (_: Throwable) {
+            "EN"
+        }
+        return Localization.Language.fromCode(code)
+    }
+
     fun createNotificationChannel(context: Context) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val lang = resolveAppLanguage(context)
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    "Υπενθυμίσεις Πάγιων Εξόδων",
+                    Localization.tr(lang, "Bill Reminders", "Υπενθυμίσεις Πάγιων Εξόδων"),
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Ειδοποιήσεις για προγραμματισμένους λογαριασμούς και πάγια έξοδα"
+                    description = Localization.tr(
+                        lang,
+                        "Notifications for scheduled bills and standing orders",
+                        "Ειδοποιήσεις για προγραμματισμένους λογαριασμούς και πάγια έξοδα"
+                    )
                     enableVibration(true)
                     enableLights(true)
                     setShowBadge(true)
@@ -183,6 +199,7 @@ object BillReminderManager {
                 flags
             )
 
+            val lang = resolveAppLanguage(context)
             val scheduleLabel = com.example.util.RecurringScheduleHelper.scheduleSummary(
                 RecurringExpense(
                     id = reminderId,
@@ -194,11 +211,19 @@ object BillReminderManager {
                     dayOfMonth = dayOfMonth,
                     anchorMonth = anchorMonth
                 ),
-                com.example.util.Localization.Language.GREEK
+                lang
             )
-            val notifTitle = "Υπενθύμιση: $title"
+            val notifTitle = Localization.trFormat(lang, "Reminder: %1\$s", "Υπενθύμιση: %1\$s", title)
             val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
-            val notifBody = "${String.format(Locale.GERMANY, "%.2f", amount)} $curSymbol • $scheduleLabel • Πατήστε για καταγραφή"
+            val locale = if (lang == Localization.Language.ENGLISH) Locale.US else Localization.getDateLocale(lang)
+            val notifBody = Localization.trFormat(
+                lang,
+                "%1\$s %2\$s • %3\$s • Tap to log",
+                "%1\$s %2\$s • %3\$s • Πατήστε για καταγραφή",
+                String.format(locale, "%.2f", amount),
+                curSymbol,
+                scheduleLabel
+            )
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_infinity)

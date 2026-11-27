@@ -212,7 +212,7 @@ class ColdReopenCrashProtectionTest {
     @Test
     fun `BillingManager and BankNotificationSystemManager remain crash-free when services or permissions are unavailable`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val billingManager = BillingManager(context) {}
+        val billingManager = BillingManager(context) { _, _ -> }
         assertNotNull(billingManager)
 
         billingManager.startConnection()

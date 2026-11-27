@@ -6,6 +6,7 @@ import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.Income
 import com.example.data.entity.getPayerShares
+import com.example.data.entity.resolveReconciledBeneficiaries
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -57,27 +58,12 @@ object AnalyticsExpenseFilterHelper {
             return emptyList()
         }
 
-        val ids = exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-        val byId = members.filter { ids.contains(it.id) }
-        if (byId.isNotEmpty()) return byId
-
-        if (exp.memberNamesDisplay.isNotBlank() &&
-            !exp.memberNamesDisplay.equals("Κοινό Οικογένειας", ignoreCase = true) &&
-            !exp.memberNamesDisplay.equals("Family Shared", ignoreCase = true)
-        ) {
-            val raw = exp.memberNamesDisplay.trim()
-            if (Localization.isPluralRoleDisplay(raw)) {
-                val roleKey = Localization.canonicalRoleKey(raw)
-                val byRole = members.filter { Localization.canonicalRoleKey(it.role) == roleKey }
-                if (byRole.isNotEmpty()) return byRole
-            }
-            val byName = members.filter { m ->
-                GreekVoiceParser.containsWord(
-                    GreekVoiceParser.normalizeGreek(exp.memberNamesDisplay),
-                    GreekVoiceParser.normalizeGreek(m.name)
-                ) || exp.memberNamesDisplay.contains(m.name, ignoreCase = true)
-            }
-            if (byName.isNotEmpty()) return byName
+        val reconciledBeneficiaries = exp.resolveReconciledBeneficiaries(members)
+        if (reconciledBeneficiaries.isNotEmpty() && reconciledBeneficiaries.size < members.size) {
+            return reconciledBeneficiaries
+        }
+        if (reconciledBeneficiaries.isNotEmpty() && exp.splitType == "SPECIFIC_MEMBERS") {
+            return reconciledBeneficiaries
         }
 
         val combinedText = "${exp.title} ${exp.note}"
@@ -105,33 +91,8 @@ object AnalyticsExpenseFilterHelper {
         if (splitType == "ALL_FAMILY" || splitType == "ALL") {
             return activeMembers
         }
-        if (exp.memberIdsCsv.isNotBlank()) {
-            val ids = exp.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
-            val matched = activeMembers.filter { ids.contains(it.id) }
-            if (matched.isNotEmpty()) return matched
-        }
-        val raw = exp.memberNamesDisplay.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
-        if (raw.isNotBlank() &&
-            !raw.equals("Κοινό Οικογένειας", ignoreCase = true) &&
-            !raw.equals("Family", ignoreCase = true)
-        ) {
-            if (Localization.isPluralRoleDisplay(raw)) {
-                val roleKey = Localization.canonicalRoleKey(raw)
-                val byRole = activeMembers.filter { Localization.canonicalRoleKey(it.role) == roleKey }
-                if (byRole.isNotEmpty()) return byRole
-            }
-            val parts = raw.split(Regex("[,&+]+|\\s+και\\s+|\\s+and\\s+"))
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-            val matched = activeMembers.filter { m ->
-                parts.any { p ->
-                    m.name.equals(p, ignoreCase = true) ||
-                        m.name.contains(p, ignoreCase = true) ||
-                        p.contains(m.name, ignoreCase = true)
-                }
-            }
-            if (matched.isNotEmpty()) return matched
-        }
+        val reconciled = exp.resolveReconciledBeneficiaries(activeMembers)
+        if (reconciled.isNotEmpty()) return reconciled
         return activeMembers
     }
 

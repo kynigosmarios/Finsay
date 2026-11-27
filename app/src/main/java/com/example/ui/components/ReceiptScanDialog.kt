@@ -78,6 +78,7 @@ import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.ui.theme.Amber700
 import com.example.ui.theme.Emerald700
+import com.example.util.DefaultPayerHelper
 import com.example.util.Localization
 import com.example.util.ParsedReceiptData
 import com.example.util.ReceiptParser
@@ -100,6 +101,7 @@ fun ReceiptScanDialog(
     isPro: Boolean,
     appLanguage: String,
     defaultPayerMember: FamilyMember? = null,
+    defaultPayerMembers: List<FamilyMember> = listOfNotNull(defaultPayerMember),
     onSuggestCategory: ((String, String) -> ExpenseCategory?)? = null,
     onLearnCategory: ((String, Long, String, String) -> Unit)? = null,
     onShowPremiumPaywall: (String) -> Unit,
@@ -115,7 +117,7 @@ fun ReceiptScanDialog(
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val isGreek = appLanguage != "EN"
+    val lang = Localization.Language.fromCode(appLanguage)
 
     var isProcessing by remember { mutableStateOf(false) }
     var scannedBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -126,6 +128,14 @@ fun ReceiptScanDialog(
     var titleInput by remember { mutableStateOf("") }
     var amountInput by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(categories.firstOrNull()) }
+    val validDefaultPayers = remember(members, defaultPayerMembers, defaultPayerMember) {
+        val activeIds = members.map { it.id }.toSet()
+        val list = defaultPayerMembers.filter { it.id in activeIds }.distinctBy { it.id }
+        if (list.isNotEmpty()) list else listOfNotNull(defaultPayerMember?.takeIf { it.id in activeIds })
+    }
+    var useDefaultMultiPayers by remember(members, defaultPayerMembers, defaultPayerMember) {
+        mutableStateOf(validDefaultPayers.size >= 2)
+    }
     var selectedMember by remember(members, defaultPayerMember) {
         mutableStateOf(defaultPayerMember?.takeIf { dp -> members.any { it.id == dp.id } } ?: members.firstOrNull())
     }
@@ -141,7 +151,7 @@ fun ReceiptScanDialog(
 
         isProcessing = true
         scannedBitmap = bitmap
-        scanStatusMessage = if (isGreek) "Ανάλυση απόδειξης με AI & OCR..." else "Analyzing receipt with AI & OCR..."
+        scanStatusMessage = Localization.tr(lang, "Analyzing receipt with AI & OCR...", "Ανάλυση απόδειξης με AI & OCR...")
 
         coroutineScope.launch {
             try {
@@ -183,7 +193,7 @@ fun ReceiptScanDialog(
 
             } catch (e: Exception) {
                 Log.e("ReceiptScan", "OCR failed: ${e.message}", e)
-                scanStatusMessage = if (isGreek) "Δεν ήταν δυνατή η ανάγνωση. Δοκιμάστε ξανά." else "Could not read text. Please retry."
+                scanStatusMessage = Localization.tr(lang, "Could not read text. Please retry.", "Δεν ήταν δυνατή η ανάγνωση. Δοκιμάστε ξανά.")
             } finally {
                 isProcessing = false
             }
@@ -206,7 +216,7 @@ fun ReceiptScanDialog(
         if (isGranted) {
             cameraLauncher.launch(null)
         } else {
-            scanStatusMessage = if (isGreek) "Απαιτείται άδεια κάμερας για λήψη φωτογραφίας" else "Camera permission required"
+            scanStatusMessage = Localization.tr(lang, "Camera permission required", "Απαιτείται άδεια κάμερας για λήψη φωτογραφίας")
         }
     }
 
@@ -278,7 +288,7 @@ fun ReceiptScanDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (isGreek) "Σάρωση Απόδειξης" else "Receipt Scanner",
+                                text = Localization.tr(lang, "Receipt Scanner", "Σάρωση Απόδειξης"),
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -300,7 +310,7 @@ fun ReceiptScanDialog(
                     }
 
                     IconButton(onClick = onDismiss) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+                        Icon(imageVector = Icons.Default.Close, contentDescription = Localization.close(lang))
                     }
                 }
 
@@ -319,8 +329,11 @@ fun ReceiptScanDialog(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = if (isGreek) "Φωτογραφίστε ή επιλέξτε απόδειξη από τη συλλογή."
-                                else "Take a photo or choose a receipt from gallery.",
+                                text = Localization.tr(
+                                    lang,
+                                    "Take a photo or choose a receipt from gallery.",
+                                    "Φωτογραφίστε ή επιλέξτε απόδειξη από τη συλλογή."
+                                ),
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -348,7 +361,7 @@ fun ReceiptScanDialog(
                                 ) {
                                     Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = if (isGreek) "Κάμερα" else "Camera", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = Localization.tr(lang, "Camera", "Κάμερα"), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
 
                                 OutlinedButton(
@@ -369,7 +382,7 @@ fun ReceiptScanDialog(
                                 ) {
                                     Icon(imageVector = Icons.Default.Image, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = if (isGreek) "Συλλογή" else "Gallery", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text(text = Localization.tr(lang, "Gallery", "Συλλογή"), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -394,7 +407,7 @@ fun ReceiptScanDialog(
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = scanStatusMessage ?: (if (isGreek) "Ανάγνωση απόδειξης..." else "Reading receipt..."),
+                            text = scanStatusMessage ?: Localization.tr(lang, "Reading receipt...", "Ανάγνωση απόδειξης..."),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
@@ -424,7 +437,7 @@ fun ReceiptScanDialog(
                                     Spacer(modifier = Modifier.width(10.dp))
                                 }
                                 Text(
-                                    text = if (isGreek) "Ελέγξτε τα στοιχεία:" else "Review details:",
+                                    text = Localization.tr(lang, "Review details:", "Ελέγξτε τα στοιχεία:"),
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -439,7 +452,7 @@ fun ReceiptScanDialog(
                             ) {
                                 Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(text = if (isGreek) "Νέα λήψη" else "Rescan", fontSize = 12.sp)
+                                Text(text = Localization.tr(lang, "Rescan", "Νέα λήψη"), fontSize = 12.sp)
                             }
                         }
 
@@ -447,7 +460,7 @@ fun ReceiptScanDialog(
                         OutlinedTextField(
                             value = titleInput,
                             onValueChange = { titleInput = it },
-                            label = { Text(if (isGreek) "Κατάστημα / Περιγραφή" else "Merchant / Title") },
+                            label = { Text(Localization.tr(lang, "Merchant / Title", "Κατάστημα / Περιγραφή")) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             singleLine = true
@@ -458,7 +471,7 @@ fun ReceiptScanDialog(
                         OutlinedTextField(
                             value = amountInput,
                             onValueChange = { amountInput = it.replace(',', '.') },
-                            label = { Text(if (isGreek) "Ποσό ($currencySymbol)" else "Amount ($currencySymbol)") },
+                            label = { Text(Localization.trFormat(lang, "Amount (%1\$s)", "Ποσό (%1\$s)", currencySymbol)) },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -473,7 +486,16 @@ fun ReceiptScanDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
-                                    text = if (selectedCategory != null) "Κατηγορία: ${selectedCategory?.name}" else "Επιλογή Κατηγορίας",
+                                    text = if (selectedCategory != null) {
+                                        Localization.trFormat(
+                                            lang,
+                                            "Category: %1\$s",
+                                            "Κατηγορία: %1\$s",
+                                            Localization.translateCategory(selectedCategory?.name.orEmpty(), lang)
+                                        )
+                                    } else {
+                                        Localization.tr(lang, "Select Category", "Επιλογή Κατηγορίας")
+                                    },
                                     fontSize = 13.sp
                                 )
                             }
@@ -483,7 +505,7 @@ fun ReceiptScanDialog(
                             ) {
                                 categories.forEach { cat ->
                                     DropdownMenuItem(
-                                        text = { Text(cat.name) },
+                                        text = { Text(Localization.translateCategory(cat.name, lang)) },
                                         onClick = {
                                             selectedCategory = cat
                                             showCategoryMenu = false
@@ -496,6 +518,19 @@ fun ReceiptScanDialog(
                         // Member Dropdown (Who paid)
                         val activeMembers = members
                         if (activeMembers.isNotEmpty()) {
+                            val multiDefaultLabel = remember(validDefaultPayers) {
+                                if (validDefaultPayers.size >= 2) {
+                                    DefaultPayerHelper.buildEqualPayerFields(validDefaultPayers, 0.0).displayName
+                                } else ""
+                            }
+                            val payerDisplayText = when {
+                                useDefaultMultiPayers && multiDefaultLabel.isNotBlank() ->
+                                    Localization.trFormat(lang, "Paid by: %1\$s", "Πλήρωσαν: %1\$s", multiDefaultLabel)
+                                selectedMember != null ->
+                                    Localization.trFormat(lang, "Paid by: %1\$s", "Πλήρωσε: %1\$s", selectedMember?.name.orEmpty())
+                                else ->
+                                    Localization.tr(lang, "Select Member", "Επιλογή Μέλους")
+                            }
                             Box(modifier = Modifier.fillMaxWidth()) {
                                 OutlinedButton(
                                     onClick = { showMemberMenu = true },
@@ -503,7 +538,7 @@ fun ReceiptScanDialog(
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Text(
-                                        text = if (selectedMember != null) "Πλήρωσε: ${selectedMember?.name}" else "Επιλογή Μέλους",
+                                        text = payerDisplayText,
                                         fontSize = 13.sp
                                     )
                                 }
@@ -511,10 +546,20 @@ fun ReceiptScanDialog(
                                     expanded = showMemberMenu,
                                     onDismissRequest = { showMemberMenu = false }
                                 ) {
+                                    if (validDefaultPayers.size >= 2 && multiDefaultLabel.isNotBlank()) {
+                                        DropdownMenuItem(
+                                            text = { Text(multiDefaultLabel) },
+                                            onClick = {
+                                                useDefaultMultiPayers = true
+                                                showMemberMenu = false
+                                            }
+                                        )
+                                    }
                                     activeMembers.forEach { m ->
                                         DropdownMenuItem(
                                             text = { Text(m.name) },
                                             onClick = {
+                                                useDefaultMultiPayers = false
                                                 selectedMember = m
                                                 showMemberMenu = false
                                             }
@@ -531,7 +576,7 @@ fun ReceiptScanDialog(
                             onClick = {
                                 val amt = amountInput.toDoubleOrNull() ?: 0.0
                                 val cat = selectedCategory ?: categories.firstOrNull() ?: return@Button
-                                val title = titleInput.ifBlank { "Αγορά απόδειξης" }
+                                val title = titleInput.ifBlank { Localization.tr(lang, "Receipt purchase", "Αγορά απόδειξης") }
                                 onLearnCategory?.invoke(
                                     title,
                                     cat.id,
@@ -543,8 +588,10 @@ fun ReceiptScanDialog(
                                     amt,
                                     cat,
                                     selectedTimestamp,
-                                    selectedMember,
-                                    if (parsedData?.merchantAfm?.isNotBlank() == true) "ΑΦΜ: ${parsedData?.merchantAfm}" else ""
+                                    if (useDefaultMultiPayers && validDefaultPayers.size >= 2) null else selectedMember,
+                                    if (parsedData?.merchantAfm?.isNotBlank() == true) {
+                                        Localization.trFormat(lang, "Tax ID: %1\$s", "ΑΦΜ: %1\$s", parsedData?.merchantAfm.orEmpty())
+                                    } else ""
                                 )
                                 onDismiss()
                             },
@@ -559,7 +606,7 @@ fun ReceiptScanDialog(
                             Icon(imageVector = Icons.Default.Check, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isGreek) "Καταχώρηση Εξόδου" else "Save Expense",
+                                text = Localization.tr(lang, "Save Expense", "Καταχώρηση Εξόδου"),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )

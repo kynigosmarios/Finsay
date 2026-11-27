@@ -441,58 +441,54 @@ object RecurringScheduleHelper {
     }
 
     fun frequencyLabel(frequency: String, lang: Localization.Language): String {
-        val isEn = lang == Localization.Language.ENGLISH
         return when (normalizeFrequency(frequency)) {
-            FREQ_WEEKLY -> if (isEn) "Weekly" else "Εβδομαδιαία"
-            FREQ_BIWEEKLY -> if (isEn) "Biweekly" else "Δεκαπενθήμερη"
-            FREQ_QUARTERLY -> if (isEn) "Quarterly" else "Τριμηνιαία"
-            FREQ_YEARLY -> if (isEn) "Yearly" else "Ετήσια"
-            else -> if (isEn) "Monthly" else "Μηνιαία"
+            FREQ_WEEKLY -> Localization.tr(lang, "Weekly", "Εβδομαδιαία")
+            FREQ_BIWEEKLY -> Localization.tr(lang, "Biweekly", "Δεκαπενθήμερη")
+            FREQ_QUARTERLY -> Localization.tr(lang, "Quarterly", "Τριμηνιαία")
+            FREQ_YEARLY -> Localization.tr(lang, "Yearly", "Ετήσια")
+            else -> Localization.tr(lang, "Monthly", "Μηνιαία")
         }
     }
 
     fun weekdayName(isoDow: Int, lang: Localization.Language): String {
-        val isEn = lang == Localization.Language.ENGLISH
         return when (isoDow.coerceIn(1, 7)) {
-            1 -> if (isEn) "Mon" else "Δευ"
-            2 -> if (isEn) "Tue" else "Τρί"
-            3 -> if (isEn) "Wed" else "Τετ"
-            4 -> if (isEn) "Thu" else "Πέμ"
-            5 -> if (isEn) "Fri" else "Παρ"
-            6 -> if (isEn) "Sat" else "Σάβ"
-            else -> if (isEn) "Sun" else "Κυρ"
+            1 -> Localization.tr(lang, "Mon", "Δευ")
+            2 -> Localization.tr(lang, "Tue", "Τρί")
+            3 -> Localization.tr(lang, "Wed", "Τετ")
+            4 -> Localization.tr(lang, "Thu", "Πέμ")
+            5 -> Localization.tr(lang, "Fri", "Παρ")
+            6 -> Localization.tr(lang, "Sat", "Σάβ")
+            else -> Localization.tr(lang, "Sun", "Κυρ")
         }
     }
 
     fun monthNameShort(monthZeroIndexed: Int, lang: Localization.Language): String {
-        val isEn = lang == Localization.Language.ENGLISH
         val en = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
         val el = listOf("Ιαν", "Φεβ", "Μαρ", "Απρ", "Μαΐ", "Ιουν", "Ιουλ", "Αυγ", "Σεπ", "Οκτ", "Νοε", "Δεκ")
         val idx = monthZeroIndexed.coerceIn(0, 11)
-        return if (isEn) en[idx] else el[idx]
+        return Localization.tr(lang, en[idx], el[idx])
     }
 
     fun scheduleSummary(recurring: RecurringExpense, lang: Localization.Language): String {
-        val isEn = lang == Localization.Language.ENGLISH
         return when (normalizeFrequency(recurring.frequency)) {
             FREQ_WEEKLY -> {
                 val wd = weekdayName(recurring.dayOfMonth, lang)
-                if (isEn) "Weekly ($wd)" else "Κάθε εβδομάδα ($wd)"
+                Localization.trFormat(lang, "Weekly (%1\$s)", "Κάθε εβδομάδα (%1\$s)", wd)
             }
             FREQ_BIWEEKLY -> {
                 val wd = weekdayName(recurring.dayOfMonth, lang)
-                if (isEn) "Biweekly ($wd)" else "Ανά 15 ημέρες ($wd)"
+                Localization.trFormat(lang, "Biweekly (%1\$s)", "Ανά 15 ημέρες (%1\$s)", wd)
             }
             FREQ_QUARTERLY -> {
                 val m = monthNameShort(recurring.anchorMonth, lang)
-                if (isEn) "Quarterly (${recurring.dayOfMonth}, from $m)" else "Τριμηνιαία (${recurring.dayOfMonth}η, από $m)"
+                Localization.trFormat(lang, "Quarterly (%1\$d, from %2\$s)", "Τριμηνιαία (%1\$dη, από %2\$s)", recurring.dayOfMonth, m)
             }
             FREQ_YEARLY -> {
                 val m = monthNameShort(recurring.anchorMonth, lang)
-                if (isEn) "Yearly ($m ${recurring.dayOfMonth})" else "Ετήσια (${recurring.dayOfMonth} $m)"
+                Localization.trFormat(lang, "Yearly (%1\$s %2\$d)", "Ετήσια (%2\$d %1\$s)", m, recurring.dayOfMonth)
             }
             else -> {
-                if (isEn) "Every ${recurring.dayOfMonth} of month" else "Κάθε ${recurring.dayOfMonth} του μήνα"
+                Localization.everyDayOfMonth(lang, recurring.dayOfMonth)
             }
         }
     }

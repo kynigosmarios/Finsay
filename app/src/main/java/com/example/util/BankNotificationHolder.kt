@@ -9,6 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object BankNotificationHolder {
+    private const val PENDING_TX_TTL_MS = 7L * 24L * 60L * 60L * 1000L
     private val _pendingTransactions = MutableStateFlow<List<PendingBankTransaction>>(emptyList())
     val pendingTransactions: StateFlow<List<PendingBankTransaction>> = _pendingTransactions.asStateFlow()
 
@@ -56,29 +57,40 @@ object BankNotificationHolder {
         val raw = p.getString("pending_tx_json", null) ?: return
         try {
             val array = JSONArray(raw)
+            val nowMs = System.currentTimeMillis()
             val list = mutableListOf<PendingBankTransaction>()
+            var prunedExpired = false
             for (i in 0 until array.length()) {
                 val obj = array.getJSONObject(i)
+                val ts = obj.optLong("timestamp", nowMs)
+                if (nowMs - ts > PENDING_TX_TTL_MS) {
+                    prunedExpired = true
+                    continue
+                }
                 list.add(
                     PendingBankTransaction(
                         id = obj.getString("id"),
                         bankName = obj.getString("bankName"),
                         merchantName = obj.getString("merchantName"),
                         amount = obj.getDouble("amount"),
-                        timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                        rawText = obj.optString("rawText", ""),
+                        timestamp = ts,
+                        rawText = "",
                         householdId = obj.optString("householdId", ""),
                         isIncome = obj.optBoolean("isIncome", false)
                     )
                 )
             }
             _pendingTransactions.value = list
+            if (prunedExpired) {
+                saveToPrefs()
+            }
         } catch (_: Exception) {}
     }
 
     private fun saveToPrefs() {
         val p = prefs ?: return
-        val list = _pendingTransactions.value
+        val nowMs = System.currentTimeMillis()
+        val list = _pendingTransactions.value.filter { nowMs - it.timestamp <= PENDING_TX_TTL_MS }
         try {
             val array = JSONArray()
             for (tx in list) {
@@ -88,7 +100,8 @@ object BankNotificationHolder {
                 obj.put("merchantName", tx.merchantName)
                 obj.put("amount", tx.amount)
                 obj.put("timestamp", tx.timestamp)
-                obj.put("rawText", tx.rawText)
+                // Privacy hardening: never persist full raw bank notification text on disk
+                obj.put("rawText", "")
                 obj.put("householdId", tx.householdId)
                 obj.put("isIncome", tx.isIncome)
                 array.put(obj)

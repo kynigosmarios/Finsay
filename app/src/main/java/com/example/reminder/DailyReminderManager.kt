@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.util.Localization
 import java.util.Calendar
 
 object DailyReminderManager {
@@ -26,6 +27,12 @@ object DailyReminderManager {
     const val REQUEST_CODE_ALARM = 2001
     const val EXTRA_DAILY_REMINDER_TAP = "EXTRA_DAILY_REMINDER_TAP"
     private const val TAG = "DailyReminderManager"
+
+    private fun currentLanguage(context: Context): Localization.Language {
+        val code = context.getSharedPreferences("oikonomos_app_prefs", Context.MODE_PRIVATE)
+            .getString("app_language", Localization.Language.ENGLISH.code)
+        return Localization.Language.fromCode(code)
+    }
 
     private fun getPrefs(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -59,12 +66,17 @@ object DailyReminderManager {
     fun createNotificationChannel(context: Context) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val lang = currentLanguage(context)
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    "Υπενθυμίσεις Εξόδων",
+                    Localization.tr(lang, "Expense Reminders", "Υπενθυμίσεις Εξόδων"),
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Καθημερινή βραδινή υπενθύμιση για καταχώρηση των εξόδων της ημέρας"
+                    description = Localization.tr(
+                        lang,
+                        "Daily evening reminder to log your expenses for the day",
+                        "Καθημερινή βραδινή υπενθύμιση για καταχώρηση των εξόδων της ημέρας"
+                    )
                     enableVibration(true)
                     enableLights(true)
                     setShowBadge(true)
@@ -151,10 +163,21 @@ object DailyReminderManager {
 
     fun showNotification(
         context: Context,
-        title: String = "Πέρασες τα σημερινά σου έξοδα;",
-        message: String = "Γράψε τα ή πες τα με τη φωνή σου για να μη τα ξεχάσεις 🎙️"
+        title: String? = null,
+        message: String? = null
     ) {
         try {
+            val lang = currentLanguage(context)
+            val resolvedTitle = title ?: Localization.tr(
+                lang,
+                "Did you log today's expenses?",
+                "Πέρασες τα σημερινά σου έξοδα;"
+            )
+            val resolvedMessage = message ?: Localization.tr(
+                lang,
+                "Write them down or say them with your voice so you don't forget 🎙️",
+                "Γράψε τα ή πες τα με τη φωνή σου για να μη τα ξεχάσεις 🎙️"
+            )
             createNotificationChannel(context)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) != 0
@@ -177,9 +200,9 @@ object DailyReminderManager {
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification_infinity)
                 .setColor(0xFF059669.toInt())
-                .setContentTitle(title)
-                .setContentText(message)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setContentTitle(resolvedTitle)
+                .setContentText(resolvedMessage)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(resolvedMessage))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

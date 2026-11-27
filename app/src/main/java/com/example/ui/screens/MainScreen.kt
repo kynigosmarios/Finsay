@@ -192,6 +192,7 @@ private enum class InAppSubPage {
 @Composable
 fun MainScreen(
     viewModel: OikoNomosViewModel,
+    proPlanPrices: com.example.billing.BillingManager.ProPlanPrices = com.example.billing.BillingManager.ProPlanPrices(),
     onLaunchBilling: (android.app.Activity, String) -> Boolean = { _, _ -> false }
 ) {
     val context = LocalContext.current
@@ -444,19 +445,22 @@ fun MainScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        val isEnNow = latestAppLanguage.equals("EN", ignoreCase = true)
+        val langNow = com.example.util.Localization.Language.fromCode(latestAppLanguage)
         if (isGranted) {
             try {
                 speechHelper.startListening()
             } catch (t: Throwable) {
                 viewModel.showSnackbar(
-                    if (isEnNow) "Microphone start error" else "Σφάλμα εκκίνησης μικροφώνου"
+                    com.example.util.Localization.tr(langNow, "Microphone start error", "Σφάλμα εκκίνησης μικροφώνου")
                 )
             }
         } else {
             viewModel.showSnackbar(
-                if (isEnNow) "Microphone permission is required for voice entry. You can also use the quick examples!"
-                else "Απαιτείται άδεια μικροφώνου για φωνητική καταχώρηση. Μπορείτε να χρησιμοποιήσετε τα έτοιμα παραδείγματα!"
+                com.example.util.Localization.tr(
+                    langNow,
+                    "Microphone permission is required for voice entry. You can also use the quick examples!",
+                    "Απαιτείται άδεια μικροφώνου για φωνητική καταχώρηση. Μπορείτε να χρησιμοποιήσετε τα έτοιμα παραδείγματα!"
+                )
             )
         }
     }
@@ -478,10 +482,15 @@ fun MainScreen(
                 }
             }
         } catch (t: Throwable) {
-            val isEnNow = latestAppLanguage.equals("EN", ignoreCase = true)
+            val langNow = com.example.util.Localization.Language.fromCode(latestAppLanguage)
+            val fallback = com.example.util.Localization.tr(langNow, "unavailable", "μη διαθέσιμο")
             viewModel.showSnackbar(
-                if (isEnNow) "Microphone error: ${t.localizedMessage ?: "unavailable"}"
-                else "Σφάλμα μικροφώνου: ${t.localizedMessage ?: "μη διαθέσιμο"}"
+                com.example.util.Localization.trFormat(
+                    langNow,
+                    "Microphone error: %1\$s",
+                    "Σφάλμα μικροφώνου: %1\$s",
+                    t.localizedMessage ?: fallback
+                )
             )
         }
     }
@@ -644,7 +653,16 @@ fun MainScreen(
                                 contentDescription = com.example.util.Localization.tabExpenses(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabExpenses(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 0) FontWeight.Bold else FontWeight.Medium) },
+                        label = {
+                            Text(
+                                text = com.example.util.Localization.tabExpenses(lang),
+                                fontSize = 10.5.sp,
+                                fontWeight = if (activeSubPage == null && currentTab == 0) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_expenses")
                     )
@@ -662,7 +680,16 @@ fun MainScreen(
                                 contentDescription = com.example.util.Localization.tabAnalytics(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabAnalytics(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 1) FontWeight.Bold else FontWeight.Medium) },
+                        label = {
+                            Text(
+                                text = com.example.util.Localization.tabAnalytics(lang),
+                                fontSize = 10.5.sp,
+                                fontWeight = if (activeSubPage == null && currentTab == 1) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_analytics")
                     )
@@ -680,7 +707,16 @@ fun MainScreen(
                                 contentDescription = com.example.util.Localization.tabMembers(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabMembers(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 2) FontWeight.Bold else FontWeight.Medium) },
+                        label = {
+                            Text(
+                                text = com.example.util.Localization.tabMembers(lang),
+                                fontSize = 10.5.sp,
+                                fontWeight = if (activeSubPage == null && currentTab == 2) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_members")
                     )
@@ -698,7 +734,16 @@ fun MainScreen(
                                 contentDescription = com.example.util.Localization.tabCategories(lang)
                             )
                         },
-                        label = { Text(com.example.util.Localization.tabCategories(lang), fontSize = 10.5.sp, fontWeight = if (activeSubPage == null && currentTab == 3) FontWeight.Bold else FontWeight.Medium) },
+                        label = {
+                            Text(
+                                text = com.example.util.Localization.tabCategories(lang),
+                                fontSize = 10.5.sp,
+                                fontWeight = if (activeSubPage == null && currentTab == 3) FontWeight.Bold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                            )
+                        },
                         colors = navItemColors,
                         modifier = Modifier.testTag("tab_categories")
                     )
@@ -1076,7 +1121,6 @@ fun MainScreen(
                         onLanguageChange = { viewModel.setAppLanguage(it) },
                         onToggleLaunchWithChooser = { viewModel.setLaunchWithChooser(it) },
                         onCreateHousehold = { viewModel.createHousehold(it) },
-                        onJoinHousehold = { viewModel.joinHousehold(it) },
                         onSignOut = { viewModel.signOutUser() },
                         onClearAllDataAndSignOut = { viewModel.clearCurrentHouseholdAllData() },
                         onMessage = { viewModel.showSnackbar(it) },
@@ -1085,6 +1129,7 @@ fun MainScreen(
                     InAppSubPage.FINSAY_PRO -> FinsayProShowcasePage(
                         isPro = isUserPro,
                         appLanguage = appLanguage,
+                        proPlanPrices = proPlanPrices,
                         onLaunchBilling = { productId ->
                             val act = context as? android.app.Activity
                             if (act != null) onLaunchBilling(act, productId) else false
@@ -1369,6 +1414,7 @@ fun MainScreen(
         PremiumPaywallDialog(
             reason = premiumPaywallReason!!,
             appLanguage = appLanguage,
+            proPlanPrices = proPlanPrices,
             onUnlockPro = { planId ->
                 val act = context as? android.app.Activity
                 val launched = if (act != null) onLaunchBilling(act, planId) else false
@@ -1382,10 +1428,11 @@ fun MainScreen(
                         Log.w("MainScreen", "Could not open Google Play Store: ${e.message}")
                     }
                     viewModel.showSnackbar(
-                        if (appLanguage == "EN")
-                            "Connecting to Google Play... Please try again in a moment."
-                        else
+                        com.example.util.Localization.tr(
+                            lang,
+                            "Connecting to Google Play... Please try again in a moment.",
                             "Σύνδεση με το Google Play... Παρακαλώ δοκιμάστε ξανά σε λίγο."
+                        )
                     )
                 }
             },
@@ -1422,6 +1469,7 @@ fun MainScreen(
             isPro = isUserPro,
             appLanguage = appLanguage,
             defaultPayerMember = defaultPayerMember,
+            defaultPayerMembers = defaultPayerMembers,
             onSuggestCategory = { m, afm -> viewModel.suggestCategoryForMerchant(m, afm) },
             onLearnCategory = { m, cid, cname, afm -> viewModel.learnCategoryForMerchant(m, cid, cname, afm) },
             onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
@@ -1435,10 +1483,10 @@ fun MainScreen(
                     timestamp = timestamp,
                     splitType = "ALL_FAMILY",
                     memberIds = emptyList(),
-                    memberNamesDisplay = if (lang == com.example.util.Localization.Language.ENGLISH) "All" else "Όλοι",
+                    memberNamesDisplay = com.example.util.Localization.allMembersWord(lang),
                     note = note,
                     payerMemberId = member?.id ?: 0L,
-                    payerMemberName = member?.name ?: if (lang == com.example.util.Localization.Language.ENGLISH) "All" else "Όλοι",
+                    payerMemberName = member?.name ?: "",
                     payerMemberIdsCsv = if (member != null) "${member.id}" else "",
                     payerAmountsCsv = ""
                 )
@@ -1479,9 +1527,10 @@ fun MainScreen(
             categories = categories,
             members = members,
             defaultPayerMember = defaultPayerMember,
+            defaultPayerMembers = defaultPayerMembers,
             appLanguage = appLanguage,
             onDismiss = { viewModel.dismissRecurringExpenseDialog() },
-            onSave = { id, title, amount, categoryId, categoryName, dayOfMonth, note, payerId, payerName, frequency, anchorMonth ->
+            onSave = { id, title, amount, categoryId, categoryName, dayOfMonth, note, payerId, payerName, payerIdsCsv, payerAmountsCsv, frequency, anchorMonth ->
                 viewModel.saveRecurringExpense(
                     id = id,
                     title = title,
@@ -1492,6 +1541,8 @@ fun MainScreen(
                     note = note,
                     payerMemberId = payerId,
                     payerMemberName = payerName,
+                    payerMemberIdsCsv = payerIdsCsv,
+                    payerAmountsCsv = payerAmountsCsv,
                     frequency = frequency,
                     anchorMonth = anchorMonth
                 )

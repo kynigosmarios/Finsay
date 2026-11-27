@@ -7,11 +7,13 @@ import com.example.data.entity.ExpenseCategory
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.RecurringExpense
 import com.example.data.entity.SavingsGoal
+import com.example.data.entity.resolveMembersFromDisplayLabel
 import com.example.data.entity.toFirebaseExpense
 import com.example.data.model.FirebaseCategory
 import com.example.data.model.FirebaseRecurringExpense
 import com.example.data.model.FirebaseSavingsGoal
 import com.example.reminder.BillReminderManager
+import com.example.util.DefaultPayerHelper
 import com.example.util.GreekVoiceParser
 import com.example.util.Localization
 import com.example.util.RecurringExpenseAutoProcessor
@@ -30,8 +32,7 @@ internal class OikoNomosRecurringGoalsDelegate(
 ) {
     private fun denyRegistarWrite(actionEl: String, actionEn: String): Boolean {
         if (vm.hasOwnerPermissions()) return false
-        val isEn = vm._appLanguage.value == "EN"
-        vm.showSnackbar(if (isEn) actionEn else actionEl)
+        vm.showSnackbar(Localization.tr(vm._appLanguage.value, actionEn, actionEl))
         return true
     }
 
@@ -45,8 +46,11 @@ internal class OikoNomosRecurringGoalsDelegate(
         if (goal == null && !vm.isCurrentUserPro() && vm.allSavingsGoals.value.size >= 1) {
             vm.showPremiumPaywall("savings_goal_limit")
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Free edition supports up to 1 Savings Goal"
-                else "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Free edition supports up to 1 Savings Goal",
+                    "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
+                )
             )
             return
         }
@@ -75,8 +79,11 @@ internal class OikoNomosRecurringGoalsDelegate(
             vm.dismissSavingsGoalDialog()
             vm.showPremiumPaywall("savings_goal_limit")
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Free edition supports up to 1 Savings Goal"
-                else "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Free edition supports up to 1 Savings Goal",
+                    "Η δωρεάν έκδοση υποστηρίζει έως 1 Στόχο Αποταμίευσης"
+                )
             )
             return
         }
@@ -196,25 +203,41 @@ internal class OikoNomosRecurringGoalsDelegate(
                     false
                 }
 
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 if (id == 0L) {
                     vm.showSnackbar(
                         if (recordedExpense) {
-                            if (isEn) "Goal \"$cleanTitle\" created & deposit logged in expenses!"
-                            else "Ο στόχος «$cleanTitle» δημιουργήθηκε και το ποσό καταχωρήθηκε στα έξοδα!"
+                            Localization.trFormat(
+                                lang,
+                                "Goal \"%1\$s\" created & deposit logged in expenses!",
+                                "Ο στόχος «%1\$s» δημιουργήθηκε και το ποσό καταχωρήθηκε στα έξοδα!",
+                                cleanTitle
+                            )
                         } else {
-                            if (isEn) "Goal \"$cleanTitle\" created!"
-                            else "Ο στόχος «$cleanTitle» δημιουργήθηκε!"
+                            Localization.trFormat(
+                                lang,
+                                "Goal \"%1\$s\" created!",
+                                "Ο στόχος «%1\$s» δημιουργήθηκε!",
+                                cleanTitle
+                            )
                         }
                     )
                 } else {
                     vm.showSnackbar(
                         if (recordedExpense) {
-                            if (isEn) "Goal \"$cleanTitle\" updated & deposit logged in expenses!"
-                            else "Ο στόχος «$cleanTitle» ενημερώθηκε και το ποσό καταχωρήθηκε στα έξοδα!"
+                            Localization.trFormat(
+                                lang,
+                                "Goal \"%1\$s\" updated & deposit logged in expenses!",
+                                "Ο στόχος «%1\$s» ενημερώθηκε και το ποσό καταχωρήθηκε στα έξοδα!",
+                                cleanTitle
+                            )
                         } else {
-                            if (isEn) "Goal \"$cleanTitle\" updated!"
-                            else "Ο στόχος «$cleanTitle» ενημερώθηκε!"
+                            Localization.trFormat(
+                                lang,
+                                "Goal \"%1\$s\" updated!",
+                                "Ο στόχος «%1\$s» ενημερώθηκε!",
+                                cleanTitle
+                            )
                         }
                     )
                 }
@@ -275,8 +298,12 @@ internal class OikoNomosRecurringGoalsDelegate(
                     householdIdOverride = activeHouseholdId.ifBlank { null }
                 )
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Goal \"${goal.title}\" deleted"
-                    else "Ο στόχος «${goal.title}» διαγράφηκε"
+                    Localization.trFormat(
+                        vm._appLanguage.value,
+                        "Goal \"%1\$s\" deleted",
+                        "Ο στόχος «%1\$s» διαγράφηκε",
+                        goal.title
+                    )
                 )
             } finally {
                 vm.trackSyncEnd()
@@ -354,7 +381,7 @@ internal class OikoNomosRecurringGoalsDelegate(
                     householdIdOverride = activeHouseholdId.ifBlank { null }
                 )
 
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 val amountFormatted = if (kotlin.math.abs(amount - amount.toLong()) < 0.005) {
                     String.format(Locale.US, "%.0f", amount)
                 } else {
@@ -362,14 +389,24 @@ internal class OikoNomosRecurringGoalsDelegate(
                 }
                 if (updated.currentAmount >= updated.targetAmount) {
                     vm.showSnackbar(
-                        if (isEn) "🎉 Goal \"${goal.title}\" reached & logged in expenses!"
-                        else "🎉 Συγχαρητήρια! Πετύχατε τον στόχο «${goal.title}» (καταχωρήθηκε και στα έξοδα)!"
+                        Localization.trFormat(
+                            lang,
+                            "🎉 Goal \"%1\$s\" reached & logged in expenses!",
+                            "🎉 Συγχαρητήρια! Πετύχατε τον στόχο «%1\$s» (καταχωρήθηκε και στα έξοδα)!",
+                            goal.title
+                        )
                     )
                 } else {
                     val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
                     vm.showSnackbar(
-                        if (isEn) "Deposited $amountFormatted$curSymbol to \"${goal.title}\" & logged in expenses"
-                        else "Κατατέθηκαν $amountFormatted$curSymbol στον στόχο «${goal.title}» (εμφανίζεται σε Έξοδα & Στατιστικά)"
+                        Localization.trFormat(
+                            lang,
+                            "Deposited %1\$s%2\$s to \"%3\$s\" & logged in expenses",
+                            "Κατατέθηκαν %1\$s%2\$s στον στόχο «%3\$s» (εμφανίζεται σε Έξοδα & Στατιστικά)",
+                            amountFormatted,
+                            curSymbol,
+                            goal.title
+                        )
                     )
                 }
             } finally {
@@ -444,15 +481,12 @@ internal class OikoNomosRecurringGoalsDelegate(
         val currentCats = vm._allCategories.value
         SavingsGoalExpenseLinkHelper.findSavingsCategory(currentCats)?.let { return it }
 
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val nextSortOrder = (currentCats.maxOfOrNull { it.sortOrder } ?: -1) + 1
+        val safeCatId = vm.allocateNextSafeCategoryId()
         val newCategory = ExpenseCategory(
-            id = 0L,
-            name = if (isEn) {
-                SavingsGoalExpenseLinkHelper.DEFAULT_SAVINGS_CATEGORY_NAME_EN
-            } else {
-                SavingsGoalExpenseLinkHelper.DEFAULT_SAVINGS_CATEGORY_NAME_EL
-            },
+            id = safeCatId,
+            name = SavingsGoalExpenseLinkHelper.defaultSavingsCategoryName(lang),
             iconKey = SavingsGoalExpenseLinkHelper.DEFAULT_SAVINGS_CATEGORY_ICON,
             monthlyBudget = 0.0,
             colorHex = SavingsGoalExpenseLinkHelper.DEFAULT_SAVINGS_CATEGORY_COLOR,
@@ -460,7 +494,8 @@ internal class OikoNomosRecurringGoalsDelegate(
             sortOrder = nextSortOrder,
             fontColorHex = 0L
         )
-        val savedId = vm.repository.insertCategory(newCategory)
+        vm.repository.insertCategory(newCategory)
+        val savedId = safeCatId
         val persisted = newCategory.copy(id = savedId)
         vm._allCategories.value = (vm._allCategories.value.filter { it.id != savedId } + persisted)
             .sortedWith(compareBy<ExpenseCategory> { it.sortOrder }.thenBy { it.id })
@@ -497,18 +532,22 @@ internal class OikoNomosRecurringGoalsDelegate(
         activeHouseholdId: String,
         user: FirebaseUser?
     ) {
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val savingsCat = ensureSavingsCategory(activeHouseholdId, user)
-        val resolvedPayer = payerMember ?: vm.resolveDefaultPayerMember() ?: vm._allMembers.value.firstOrNull()
-        val resolvedPayerId = resolvedPayer?.id ?: 0L
-        val resolvedPayerName = resolvedPayer?.name?.ifBlank { null } ?: if (isEn) "All" else "Όλοι"
-        val resolvedPayerIdsCsv = if (resolvedPayerId > 0L) "$resolvedPayerId" else ""
+        val fallbackLabel = Localization.allMembersWord(lang)
+        val payerFields = if (payerMember != null) {
+            DefaultPayerHelper.buildEqualPayerFields(listOf(payerMember), amount, fallbackLabel = fallbackLabel)
+        } else {
+            val configuredDefaults = vm.resolveDefaultPayerMembers()
+            val chosen = if (configuredDefaults.isNotEmpty()) configuredDefaults else listOfNotNull(vm._allMembers.value.firstOrNull())
+            DefaultPayerHelper.buildEqualPayerFields(chosen, amount, fallbackLabel = fallbackLabel)
+        }
         val expenseCloudId = SavingsGoalExpenseLinkHelper.buildGoalDepositCloudId(goalCloudId)
         val nowMs = System.currentTimeMillis()
 
         val depositExpense = Expense(
             cloudId = expenseCloudId,
-            title = SavingsGoalExpenseLinkHelper.buildDepositExpenseTitle(goal.title, isEn),
+            title = SavingsGoalExpenseLinkHelper.buildDepositExpenseTitle(goal.title, lang),
             amount = amount,
             categoryId = savingsCat.id,
             categoryName = savingsCat.name,
@@ -517,11 +556,11 @@ internal class OikoNomosRecurringGoalsDelegate(
             memberIdsCsv = "",
             memberNamesDisplay = "Κοινό Οικογένειας",
             splitAmountPerPerson = amount,
-            note = SavingsGoalExpenseLinkHelper.buildDepositExpenseNote(goal.title, noteText, isEn),
-            payerMemberId = resolvedPayerId,
-            payerMemberName = resolvedPayerName,
-            payerMemberIdsCsv = resolvedPayerIdsCsv,
-            payerAmountsCsv = ""
+            note = SavingsGoalExpenseLinkHelper.buildDepositExpenseNote(goal.title, noteText, lang),
+            payerMemberId = payerFields.primaryId,
+            payerMemberName = payerFields.displayName,
+            payerMemberIdsCsv = payerFields.idsCsv,
+            payerAmountsCsv = payerFields.amountsCsv
         )
 
         vm.prefs.edit().putBoolean("has_entered_any_expense", true).apply()
@@ -679,8 +718,11 @@ internal class OikoNomosRecurringGoalsDelegate(
         if (recurring == null && !vm.isCurrentUserPro() && vm.allRecurringExpenses.value.size >= 2) {
             vm.showPremiumPaywall("recurring_expense_limit")
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Free edition supports up to 2 Standing Orders"
-                else "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Free edition supports up to 2 Standing Orders",
+                    "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
+                )
             )
             return
         }
@@ -721,8 +763,11 @@ internal class OikoNomosRecurringGoalsDelegate(
             vm.dismissRecurringExpenseDialog()
             vm.showPremiumPaywall("recurring_expense_limit")
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "Free edition supports up to 2 Standing Orders"
-                else "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "Free edition supports up to 2 Standing Orders",
+                    "Η δωρεάν έκδοση υποστηρίζει έως 2 Πάγιες Εντολές"
+                )
             )
             return
         }
@@ -760,19 +805,31 @@ internal class OikoNomosRecurringGoalsDelegate(
                 val resolvedSplitType = if (!autoRegisterIfDue) splitType else (existing?.splitType ?: splitType)
                 val resolvedMemberIdsCsv = if (!autoRegisterIfDue) memberIds.joinToString(",") else (existing?.memberIdsCsv ?: "")
                 val resolvedMemberNamesDisplay = if (!autoRegisterIfDue) memberNamesDisplay else (existing?.memberNamesDisplay ?: memberNamesDisplay)
-                val resolvedPayerIdsCsv = if (!autoRegisterIfDue) payerMemberIdsCsv else (existing?.payerMemberIdsCsv ?: "")
-                val resolvedPayerAmountsCsv = if (!autoRegisterIfDue) payerAmountsCsv else (existing?.payerAmountsCsv ?: "")
+                val resolvedPayerIdsCsv = if (payerMemberIdsCsv.isNotBlank() || !autoRegisterIfDue) payerMemberIdsCsv else (existing?.payerMemberIdsCsv ?: "")
+                val resolvedPayerAmountsCsv = if (payerAmountsCsv.isNotBlank() || !autoRegisterIfDue) payerAmountsCsv else (existing?.payerAmountsCsv ?: "")
 
-                val fallbackFields = com.example.util.DefaultPayerHelper.buildEqualPayerFields(
+                val fallbackFields = DefaultPayerHelper.buildEqualPayerFields(
                     vm.resolveDefaultPayerMembers(),
                     amount,
                     fallbackLabel = ""
                 )
                 val useDefaultPayers = payerMemberId <= 0L && resolvedPayerIdsCsv.isBlank() && payerMemberName.isBlank()
-                val effPayerId = if (useDefaultPayers) fallbackFields.primaryId else payerMemberId
+                var effPayerId = if (useDefaultPayers) fallbackFields.primaryId else payerMemberId
                 val effPayerName = if (useDefaultPayers) fallbackFields.displayName else payerMemberName.ifBlank { fallbackFields.displayName }
-                val effPayerIdsCsv = if (useDefaultPayers) fallbackFields.idsCsv else resolvedPayerIdsCsv.ifBlank { if (effPayerId > 0L) "$effPayerId" else "" }
-                val effPayerAmountsCsv = if (useDefaultPayers) fallbackFields.amountsCsv else resolvedPayerAmountsCsv
+                var effPayerIdsCsv = if (useDefaultPayers) fallbackFields.idsCsv else resolvedPayerIdsCsv
+                var effPayerAmountsCsv = if (useDefaultPayers) fallbackFields.amountsCsv else resolvedPayerAmountsCsv
+
+                if (effPayerIdsCsv.isBlank() && effPayerName.isNotBlank()) {
+                    val labelMembers = resolveMembersFromDisplayLabel(effPayerName, vm._allMembers.value)
+                    if (labelMembers.size >= 2) {
+                        val multi = DefaultPayerHelper.buildEqualPayerFields(labelMembers, amount)
+                        effPayerId = multi.primaryId
+                        effPayerIdsCsv = multi.idsCsv
+                        if (effPayerAmountsCsv.isBlank()) effPayerAmountsCsv = multi.amountsCsv
+                    } else if (effPayerId > 0L) {
+                        effPayerIdsCsv = "$effPayerId"
+                    }
+                }
 
                 var recurring = RecurringExpense(
                     id = targetId,
@@ -857,11 +914,12 @@ internal class OikoNomosRecurringGoalsDelegate(
                         val targetTimestamp = RecurringScheduleHelper.calculateTargetTimestampForPeriod(recurring, nowMillis)
                         val noteLang = Localization.Language.fromCode(vm._appLanguage.value)
                         val noteText = note.ifBlank {
-                            if (noteLang == Localization.Language.ENGLISH) {
-                                "Standing order (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
-                            } else {
-                                "Πάγια εντολή (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
-                            }
+                            Localization.trFormat(
+                                noteLang,
+                                "Standing order (%1\$s)",
+                                "Πάγια εντολή (%1\$s)",
+                                RecurringScheduleHelper.scheduleSummary(recurring, noteLang)
+                            )
                         }
                         val docId = "recurring_${generatedId}_${periodKey}"
 
@@ -954,33 +1012,57 @@ internal class OikoNomosRecurringGoalsDelegate(
                 )
 
                 val lang = Localization.Language.fromCode(vm._appLanguage.value)
-                val isEn = lang == Localization.Language.ENGLISH
                 val schedSummary = RecurringScheduleHelper.scheduleSummary(recurring, lang)
                 if (!autoRegisterIfDue) {
                     val timeStr = String.format(Locale.US, "%02d:%02d", recurring.reminderHour, recurring.reminderMinute)
                     vm.showSnackbar(
                         if (id == 0L) {
-                            if (isEn) "Reminder \"$title\" saved ($schedSummary, $timeStr)!"
-                            else "Η υπενθύμιση «$title» αποθηκεύτηκε ($schedSummary, $timeStr)!"
+                            Localization.trFormat(
+                                lang,
+                                "Reminder \"%1\$s\" saved (%2\$s, %3\$s)!",
+                                "Η υπενθύμιση «%1\$s» αποθηκεύτηκε (%2\$s, %3\$s)!",
+                                title,
+                                schedSummary,
+                                timeStr
+                            )
                         } else {
-                            if (isEn) "Reminder \"$title\" updated ($schedSummary, $timeStr)!"
-                            else "Η υπενθύμιση «$title» ενημερώθηκε ($schedSummary, $timeStr)!"
+                            Localization.trFormat(
+                                lang,
+                                "Reminder \"%1\$s\" updated (%2\$s, %3\$s)!",
+                                "Η υπενθύμιση «%1\$s» ενημερώθηκε (%2\$s, %3\$s)!",
+                                title,
+                                schedSummary,
+                                timeStr
+                            )
                         }
                     )
                 } else if (autoRegisteredThisPeriod) {
                     vm.showSnackbar(
-                        if (isEn) "Standing order \"$title\" automatically logged to expenses!"
-                        else "Η πάγια εντολή «$title» καταχωρήθηκε αυτόματα στα έξοδα!"
+                        Localization.trFormat(
+                            lang,
+                            "Standing order \"%1\$s\" automatically logged to expenses!",
+                            "Η πάγια εντολή «%1\$s» καταχωρήθηκε αυτόματα στα έξοδα!",
+                            title
+                        )
                     )
                 } else if (id == 0L) {
                     vm.showSnackbar(
-                        if (isEn) "Standing order \"$title\" saved ($schedSummary)."
-                        else "Η πάγια εντολή «$title» αποθηκεύτηκε ($schedSummary)."
+                        Localization.trFormat(
+                            lang,
+                            "Standing order \"%1\$s\" saved (%2\$s).",
+                            "Η πάγια εντολή «%1\$s» αποθηκεύτηκε (%2\$s).",
+                            title,
+                            schedSummary
+                        )
                     )
                 } else {
                     vm.showSnackbar(
-                        if (isEn) "Standing order \"$title\" updated successfully!"
-                        else "Η πάγια εντολή «$title» ενημερώθηκε επιτυχώς!"
+                        Localization.trFormat(
+                            lang,
+                            "Standing order \"%1\$s\" updated successfully!",
+                            "Η πάγια εντολή «%1\$s» ενημερώθηκε επιτυχώς!",
+                            title
+                        )
                     )
                 }
             } finally {
@@ -1022,8 +1104,12 @@ internal class OikoNomosRecurringGoalsDelegate(
                     amount = recurring.amount
                 )
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Reminder \"${recurring.title}\" deleted"
-                    else "Η υπενθύμιση «${recurring.title}» διαγράφηκε"
+                    Localization.trFormat(
+                        vm._appLanguage.value,
+                        "Reminder \"%1\$s\" deleted",
+                        "Η υπενθύμιση «%1\$s» διαγράφηκε",
+                        recurring.title
+                    )
                 )
             } finally {
                 vm.trackSyncEnd()
@@ -1070,15 +1156,13 @@ internal class OikoNomosRecurringGoalsDelegate(
             )
             if (householdId.isNotBlank()) vm.firestoreSyncRepo.syncRecurringExpense(householdId, fbRecurring)
             else if (user != null) vm.firestoreSyncRepo.syncUserRecurringExpense(user.uid, fbRecurring)
-            val isEn = vm._appLanguage.value == "EN"
-            val status = if (isEn) {
-                if (updated.isActive) "enabled" else "disabled"
-            } else {
-                if (updated.isActive) "ενεργοποιήθηκε" else "απενεργοποιήθηκε"
-            }
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             vm.showSnackbar(
-                if (isEn) "Reminder \"${recurring.title}\" $status"
-                else "Η υπενθύμιση «${recurring.title}» $status"
+                if (updated.isActive) {
+                    Localization.trFormat(lang, "Reminder \"%1\$s\" enabled", "Η υπενθύμιση «%1\$s» ενεργοποιήθηκε", recurring.title)
+                } else {
+                    Localization.trFormat(lang, "Reminder \"%1\$s\" disabled", "Η υπενθύμιση «%1\$s» απενεργοποιήθηκε", recurring.title)
+                }
             )
         }
     }
@@ -1109,11 +1193,12 @@ internal class OikoNomosRecurringGoalsDelegate(
                     memberNamesDisplay = recurring.memberNamesDisplay,
                     note = recurring.note.ifBlank {
                         val noteLang = Localization.Language.fromCode(vm._appLanguage.value)
-                        if (noteLang == Localization.Language.ENGLISH) {
-                            "Standing order executed (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
-                        } else {
-                            "Εκτέλεση πάγιας εντολής (${RecurringScheduleHelper.scheduleSummary(recurring, noteLang)})"
-                        }
+                        Localization.trFormat(
+                            noteLang,
+                            "Standing order executed (%1\$s)",
+                            "Εκτέλεση πάγιας εντολής (%1\$s)",
+                            RecurringScheduleHelper.scheduleSummary(recurring, noteLang)
+                        )
                     },
                     payerMemberId = recurring.payerMemberId,
                     payerMemberName = recurring.payerMemberName,
@@ -1177,10 +1262,15 @@ internal class OikoNomosRecurringGoalsDelegate(
                     amount = recurring.amount
                 )
                 val curSymbol = com.example.util.CurrencyFormatter.currentSymbol
-                val isEn = vm._appLanguage.value == "EN"
                 vm.showSnackbar(
-                    if (isEn) "Executed standing order: \"${recurring.title}\" (${String.format(Locale.US, "%.2f", recurring.amount)}$curSymbol)"
-                    else "Εκτελέστηκε η πάγια: «${recurring.title}» (${String.format(Locale.US, "%.2f", recurring.amount)}$curSymbol)"
+                    Localization.trFormat(
+                        vm._appLanguage.value,
+                        "Executed standing order: \"%1\$s\" (%2\$s%3\$s)",
+                        "Εκτελέστηκε η πάγια: «%1\$s» (%2\$s%3\$s)",
+                        recurring.title,
+                        String.format(Locale.US, "%.2f", recurring.amount),
+                        curSymbol
+                    )
                 )
             } finally {
                 vm.trackSyncEnd()
@@ -1209,16 +1299,21 @@ internal class OikoNomosRecurringGoalsDelegate(
                         vm._allExpenses.value = (genuinelyNew + vm._allExpenses.value).sortedWith(
                             compareByDescending<Expense> { it.timestamp }.thenByDescending { it.id }
                         )
-                        val isEn = vm._appLanguage.value == "EN"
+                        val lang = Localization.Language.fromCode(vm._appLanguage.value)
                         val names = genuinelyNew.take(2).joinToString(", ") {
-                            if (isEn) "\"${it.title}\"" else "«${it.title}»"
+                            if (lang == Localization.Language.GREEK) "«${it.title}»" else "\"${it.title}\""
                         }
                         val suffix = if (genuinelyNew.size > 2) {
-                            if (isEn) " and ${genuinelyNew.size - 2} more" else " και άλλες ${genuinelyNew.size - 2}"
+                            Localization.trFormat(lang, " and %1\$d more", " και άλλες %1\$d", genuinelyNew.size - 2)
                         } else ""
                         vm.showSnackbar(
-                            if (isEn) "Auto-logged to expenses: $names$suffix!"
-                            else "Αυτόματη καταχώρηση: $names$suffix στα έξοδα!"
+                            Localization.trFormat(
+                                lang,
+                                "Auto-logged to expenses: %1\$s%2\$s!",
+                                "Αυτόματη καταχώρηση: %1\$s%2\$s στα έξοδα!",
+                                names,
+                                suffix
+                            )
                         )
                     }
                 }

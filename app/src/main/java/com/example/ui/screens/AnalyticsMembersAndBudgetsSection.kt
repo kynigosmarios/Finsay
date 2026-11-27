@@ -73,7 +73,6 @@ internal fun AnalyticsMembersBreakdownCard(
     chartTypeMembers: Int,
     activeDrillDownPeriodKey: String,
     appLanguage: String,
-    isGreek: Boolean,
     lang: Localization.Language,
     onSplitModeChange: (Int) -> Unit,
     onChartTypeMembersChange: (Int) -> Unit,
@@ -109,12 +108,12 @@ internal fun AnalyticsMembersBreakdownCard(
                     0 to Localization.individualMode(lang),
                     1 to Localization.parentsMode(lang),
                     2 to Localization.kidsMode(lang),
-                    3 to (if (lang == Localization.Language.ENGLISH) "Who Paid" else "Ποιος Πλήρωσε")
+                    3 to Localization.tr(lang, "Who Paid", "Ποιος Πλήρωσε")
                 )
             } else {
                 listOf(
                     0 to Localization.individualMode(lang),
-                    3 to (if (lang == Localization.Language.ENGLISH) "Who Paid" else "Ποιος Πλήρωσε")
+                    3 to Localization.tr(lang, "Who Paid", "Ποιος Πλήρωσε")
                 )
             }
 
@@ -151,9 +150,10 @@ internal fun AnalyticsMembersBreakdownCard(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = textColor,
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 8.dp),
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
                                 maxLines = 1,
-                                softWrap = false
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -168,7 +168,7 @@ internal fun AnalyticsMembersBreakdownCard(
                         periodKey = activeDrillDownPeriodKey,
                         typeFilter = "EXPENSE",
                         specialFilter = AnalyticsSpecialFilter(
-                            badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${member.name}",
+                            badgeLabel = "${Localization.tr(lang, "Paid by", "Πλήρωσε")}: ${member.name}",
                             payerMemberId = member.id
                         )
                     )
@@ -289,8 +289,13 @@ internal fun AnalyticsMembersBreakdownCard(
                                         }
                                         val subtitle = when (splitMode) {
                                             0 -> if (com > 0.01) {
-                                                if (lang == Localization.Language.ENGLISH) "Direct: ${String.format(Locale.US, "%.1f", ind)}$currencySymbol • Shared: ${String.format(Locale.US, "%.1f", com)}$currencySymbol"
-                                                else "Ατομικά: ${String.format(Locale.US, "%.1f", ind)}$currencySymbol • Κοινό: ${String.format(Locale.US, "%.1f", com)}$currencySymbol"
+                                                Localization.trFormat(
+                                                    lang,
+                                                    "Direct: %1\$s • Shared: %2\$s",
+                                                    "Ατομικά: %1\$s • Κοινό: %2\$s",
+                                                    "${String.format(Locale.US, "%.1f", ind)}$currencySymbol",
+                                                    "${String.format(Locale.US, "%.1f", com)}$currencySymbol"
+                                                )
                                             } else {
                                                 Localization.translateRole(member.role, lang)
                                             }
@@ -353,9 +358,9 @@ internal fun AnalyticsCategoryBudgetsCard(
         Column(modifier = Modifier.padding(18.dp)) {
             val scopeSubtitle = if (budgetMultiplier > 1) {
                 if (filterScope == "YEAR") {
-                    if (lang == Localization.Language.ENGLISH) "Yearly (x12 months)" else "Ετήσιο (x12 μήνες)"
+                    Localization.tr(lang, "Yearly (x12 months)", "Ετήσιο (x12 μήνες)")
                 } else {
-                    if (lang == Localization.Language.ENGLISH) "Total (x$budgetMultiplier months)" else "Σύνολο (x$budgetMultiplier μήνες)"
+                    Localization.trFormat(lang, "Total (x%1\$d months)", "Σύνολο (x%1\$d μήνες)", budgetMultiplier)
                 }
             } else null
 
@@ -401,7 +406,7 @@ internal fun AnalyticsCategoryBudgetsCard(
 
             if (displayedCats.isEmpty()) {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH) "No expenses recorded for this period." else "Δεν υπάρχουν καταγεγραμμένα έξοδα για αυτή την περίοδο.",
+                    text = Localization.tr(lang, "No expenses recorded for this period.", "Δεν υπάρχουν καταγεγραμμένα έξοδα για αυτή την περίοδο."),
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 12.dp)
@@ -534,7 +539,6 @@ internal fun AnalyticsSavingsGoalsCard(
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit
 ) {
     val currencySymbol = LocalCurrencySymbol.current
-    val isGreek = lang != Localization.Language.ENGLISH
     val savingsCategory = SavingsGoalExpenseLinkHelper.findSavingsCategory(categories)
     val periodGoalDeposits = periodExpenses.filter { exp ->
         SavingsGoalExpenseLinkHelper.isGoalDepositExpense(exp) ||
@@ -558,7 +562,7 @@ internal fun AnalyticsSavingsGoalsCard(
                 icon = Icons.Default.Savings,
                 iconTint = Emerald700,
                 iconContainerColor = Emerald100,
-                title = if (isGreek) "Στόχοι Αποταμίευσης" else "Savings Goals",
+                title = Localization.tr(lang, "Savings Goals", "Στόχοι Αποταμίευσης"),
                 subtitle = if (totalTargetAcrossGoals > 0.0) {
                     "${String.format(Locale.US, "%.0f", totalSavedAcrossGoals)}$currencySymbol / ${String.format(Locale.US, "%.0f", totalTargetAcrossGoals)}$currencySymbol"
                 } else null,
@@ -605,18 +609,16 @@ internal fun AnalyticsSavingsGoalsCard(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isGreek) "Καταθέσεις σε στόχους (περίοδος)" else "Deposits to goals (period)",
+                            text = Localization.tr(lang, "Deposits to goals (period)", "Καταθέσεις σε στόχους (περίοδος)"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = if (periodGoalDeposits.isNotEmpty()) {
-                                if (isGreek) "${periodGoalDeposits.size} καταθέσεις"
-                                else "${periodGoalDeposits.size} deposits"
+                                Localization.trFormat(lang, "%1\$d deposits", "%1\$d καταθέσεις", periodGoalDeposits.size)
                             } else {
-                                if (isGreek) "Καμία κατάθεση"
-                                else "No deposits"
+                                Localization.tr(lang, "No deposits", "Καμία κατάθεση")
                             },
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -231,7 +231,7 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Reset Password" else "Επαναφορά Κωδικού",
+                            text = Localization.tr(lang, "Reset Password", "Επαναφορά Κωδικού"),
                             fontSize = 19.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -240,10 +240,11 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH)
-                                "Enter your registered email address to receive a secure password reset link."
-                            else
-                                "Εισάγετε το email του λογαριασμού σας για να λάβετε σύνδεσμο επαναφοράς κωδικού.",
+                            text = Localization.tr(
+                                lang,
+                                "Enter your registered email address to receive a secure password reset link.",
+                                "Εισάγετε το email του λογαριασμού σας για να λάβετε σύνδεσμο επαναφοράς κωδικού."
+                            ),
                             fontSize = 12.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
@@ -294,7 +295,7 @@ fun AuthScreen(
                                     .height(48.dp)
                             ) {
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Back to Sign In" else "Επιστροφή στη Σύνδεση",
+                                    text = Localization.tr(lang, "Back to Sign In", "Επιστροφή στη Σύνδεση"),
                                     fontSize = 14.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -360,10 +361,12 @@ fun AuthScreen(
                                     viewModel.sendPasswordResetEmail(
                                         email = email,
                                         onSuccess = {
-                                            resetSuccessMessage = if (lang == Localization.Language.ENGLISH)
-                                                "A password reset link has been sent to $email."
-                                            else
-                                                "Στάλθηκε σύνδεσμος επαναφοράς στο $email."
+                                            resetSuccessMessage = Localization.trFormat(
+                                                lang,
+                                                "A password reset link has been sent to %1\$s.",
+                                                "Στάλθηκε σύνδεσμος επαναφοράς στο %1\$s.",
+                                                email
+                                            )
                                         },
                                         onError = { errorMessage = it }
                                     )
@@ -387,7 +390,7 @@ fun AuthScreen(
                                     )
                                 } else {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Send Reset Email" else "Αποστολή Email Επαναφοράς",
+                                        text = Localization.tr(lang, "Send Reset Email", "Αποστολή Email Επαναφοράς"),
                                         fontSize = 14.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White
@@ -408,7 +411,7 @@ fun AuthScreen(
                                 modifier = Modifier.testTag("back_to_login_button")
                             ) {
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "← Back to Sign In" else "← Επιστροφή στη Σύνδεση",
+                                    text = "← ${Localization.tr(lang, "Back to Sign In", "Επιστροφή στη Σύνδεση")}",
                                     color = Emerald700,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold
@@ -442,10 +445,12 @@ fun AuthScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Sign In" else "Σύνδεση",
+                                        text = Localization.tr(lang, "Sign In", "Σύνδεση"),
                                         fontSize = 14.sp,
                                         fontWeight = if (!isSignUp) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (!isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (!isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -463,10 +468,12 @@ fun AuthScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Sign Up" else "Εγγραφή",
+                                        text = Localization.tr(lang, "Sign Up", "Εγγραφή"),
                                         fontSize = 14.sp,
                                         fontWeight = if (isSignUp) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (isSignUp) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -480,11 +487,11 @@ fun AuthScreen(
                                 val serverClientId = try {
                                     context.getString(R.string.default_web_client_id)
                                 } catch (e: Exception) {
-                                    errorMessage = if (lang == Localization.Language.ENGLISH) {
-                                        "Google Sign-In configuration missing"
-                                    } else {
+                                    errorMessage = Localization.tr(
+                                        lang,
+                                        "Google Sign-In configuration missing",
                                         "Λείπει η ρύθμιση σύνδεσης Google"
-                                    }
+                                    )
                                     return@OutlinedButton
                                 }
 
@@ -512,7 +519,7 @@ fun AuthScreen(
                                                 }
                                             )
                                         } else {
-                                            errorMessage = if (lang == Localization.Language.ENGLISH) "Invalid Google credential" else "Μη έγκυρο διαπιστευτήριο Google"
+                                            errorMessage = Localization.tr(lang, "Invalid Google credential", "Μη έγκυρο διαπιστευτήριο Google")
                                             isGoogleSigningIn = false
                                         }
                                     } catch (e: GetCredentialCancellationException) {
@@ -520,7 +527,13 @@ fun AuthScreen(
                                         isGoogleSigningIn = false
                                     } catch (e: Exception) {
                                         Log.e("Auth", "Google Sign-In failed", e)
-                                        errorMessage = if (lang == Localization.Language.ENGLISH) "Google Sign-In error: ${e.localizedMessage ?: "Please try again"}" else "Σφάλμα Google Sign-In: ${e.localizedMessage ?: "Προσπαθήστε ξανά"}"
+                                        val fallbackErr = Localization.tr(lang, "Please try again", "Προσπαθήστε ξανά")
+                                        errorMessage = Localization.trFormat(
+                                            lang,
+                                            "Google Sign-In error: %1\$s",
+                                            "Σφάλμα Google Sign-In: %1\$s",
+                                            e.localizedMessage ?: fallbackErr
+                                        )
                                         isGoogleSigningIn = false
                                     }
                                 }
@@ -552,10 +565,16 @@ fun AuthScreen(
                                     )
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Text(
-                                        text = if (isSignUp) (if (lang == Localization.Language.ENGLISH) "Sign up with Google" else "Εγγραφή με Google") else (if (lang == Localization.Language.ENGLISH) "Sign in with Google" else "Σύνδεση με Google"),
+                                        text = if (isSignUp) {
+                                            Localization.tr(lang, "Sign up with Google", "Εγγραφή με Google")
+                                        } else {
+                                            Localization.tr(lang, "Sign in with Google", "Σύνδεση με Google")
+                                        },
                                         fontSize = 14.5.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -570,7 +589,7 @@ fun AuthScreen(
                         ) {
                             HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outlineVariant)
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "  or with Email  " else "  ή με Email  ",
+                                text = "  ${Localization.tr(lang, "or with Email", "ή με Email")}  ",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -614,8 +633,8 @@ fun AuthScreen(
                                     password = it
                                     errorMessage = null
                                 },
-                                label = { Text(if (lang == Localization.Language.ENGLISH) "Password *" else "Κωδικός Πρόσβασης *") },
-                                placeholder = { Text(if (lang == Localization.Language.ENGLISH) "At least 6 characters" else "Τουλάχιστον 6 χαρακτήρες") },
+                                label = { Text("${Localization.tr(lang, "Password", "Κωδικός Πρόσβασης")} *") },
+                                placeholder = { Text(Localization.tr(lang, "At least 6 characters", "Τουλάχιστον 6 χαρακτήρες")) },
                                 leadingIcon = {
                                     Icon(Icons.Default.Lock, contentDescription = null, tint = Emerald700)
                                 },
@@ -623,7 +642,7 @@ fun AuthScreen(
                                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                         Icon(
                                             imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                            contentDescription = if (lang == Localization.Language.ENGLISH) "Show password" else "Εμφάνιση κωδικού"
+                                            contentDescription = Localization.tr(lang, "Show password", "Εμφάνιση κωδικού")
                                         )
                                     }
                                 },
@@ -649,8 +668,8 @@ fun AuthScreen(
                                     firstName = it
                                     errorMessage = null
                                 },
-                                label = { Text(if (lang == Localization.Language.ENGLISH) "First Name *" else "Όνομα *") },
-                                placeholder = { Text(if (lang == Localization.Language.ENGLISH) "e.g. John" else "π.χ. Μάριος") },
+                                label = { Text("${Localization.tr(lang, "First Name", "Όνομα")} *") },
+                                placeholder = { Text(Localization.tr(lang, "e.g. John", "π.χ. Μάριος")) },
                                 leadingIcon = {
                                     Icon(Icons.Default.Person, contentDescription = null, tint = Emerald700)
                                 },
@@ -675,8 +694,8 @@ fun AuthScreen(
                                     lastName = it
                                     errorMessage = null
                                 },
-                                label = { Text(if (lang == Localization.Language.ENGLISH) "Last Name *" else "Επίθετο *") },
-                                placeholder = { Text(if (lang == Localization.Language.ENGLISH) "e.g. Doe" else "π.χ. Παπαδόπουλος") },
+                                label = { Text("${Localization.tr(lang, "Last Name", "Επίθετο")} *") },
+                                placeholder = { Text(Localization.tr(lang, "e.g. Doe", "π.χ. Παπαδόπουλος")) },
                                 leadingIcon = {
                                     Icon(Icons.Default.Badge, contentDescription = null, tint = Emerald700)
                                 },
@@ -700,14 +719,14 @@ fun AuthScreen(
                                 onValueChange = { birthDate = it },
                                 readOnly = true,
                                 interactionSource = birthDateInteractionSource,
-                                label = { Text(if (lang == Localization.Language.ENGLISH) "Date of Birth *" else "Ημερομηνία Γέννησης *") },
-                                placeholder = { Text(if (lang == Localization.Language.ENGLISH) "DD/MM/YYYY" else "ΗΗ/ΜΜ/ΕΕΕΕ") },
+                                label = { Text("${Localization.tr(lang, "Date of Birth", "Ημερομηνία Γέννησης")} *") },
+                                placeholder = { Text(Localization.tr(lang, "DD/MM/YYYY", "ΗΗ/ΜΜ/ΕΕΕΕ")) },
                                 leadingIcon = {
                                     Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Emerald700)
                                 },
                                 trailingIcon = {
                                     IconButton(onClick = { showDatePickerDialog = true }) {
-                                        Icon(Icons.Default.EditCalendar, contentDescription = "Pick Date", tint = Emerald700)
+                                        Icon(Icons.Default.EditCalendar, contentDescription = Localization.tr(lang, "Pick Date", "Επιλογή Ημερομηνίας"), tint = Emerald700)
                                     }
                                 },
                                 singleLine = true,
@@ -719,7 +738,7 @@ fun AuthScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // 6. Κινητό Τηλέφωνο (αριθμός, με πρόθεμα χώρας μπροστά, προεπιλεγμένη η Ελλάδα)
+                            // 6. Κινητό Τηλέφωνο (αριθμός, με πρόθεμα χώρας μπροστά)
                             OutlinedTextField(
                                 value = phoneNumber,
                                 onValueChange = {
@@ -727,7 +746,7 @@ fun AuthScreen(
                                     phoneNumber = digitsOnly
                                     errorMessage = null
                                 },
-                                label = { Text(if (lang == Localization.Language.ENGLISH) "Mobile Phone *" else "Κινητό Τηλέφωνο *") },
+                                label = { Text("${Localization.tr(lang, "Mobile Phone", "Κινητό Τηλέφωνο")} *") },
                                 placeholder = { Text("69XXXXXXXX") },
                                 leadingIcon = {
                                     Box {
@@ -743,8 +762,15 @@ fun AuthScreen(
                                                     "+30" -> "🇬🇷 +30"
                                                     "+357" -> "🇨🇾 +357"
                                                     "+44" -> "🇬🇧 +44"
-                                                    "+49" -> "🇩🇪 +49"
                                                     "+1" -> "🇺🇸 +1"
+                                                    "+34" -> "🇪🇸 +34"
+                                                    "+33" -> "🇫🇷 +33"
+                                                    "+49" -> "🇩🇪 +49"
+                                                    "+39" -> "🇮🇹 +39"
+                                                    "+351" -> "🇵🇹 +351"
+                                                    "+31" -> "🇳🇱 +31"
+                                                    "+48" -> "🇵🇱 +48"
+                                                    "+40" -> "🇷🇴 +40"
                                                     else -> countryCode
                                                 },
                                                 fontSize = 13.sp,
@@ -753,7 +779,7 @@ fun AuthScreen(
                                             )
                                             Icon(
                                                 imageVector = Icons.Default.ArrowDropDown,
-                                                contentDescription = "Select country prefix",
+                                                contentDescription = Localization.tr(lang, "Select country prefix", "Επιλογή κωδικού χώρας"),
                                                 tint = Emerald700,
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -763,11 +789,18 @@ fun AuthScreen(
                                             onDismissRequest = { showCountryDropdown = false }
                                         ) {
                                             listOf(
-                                                "+30" to "Ελλάδα 🇬🇷 (+30)",
-                                                "+357" to "Κύπρος 🇨🇾 (+357)",
-                                                "+44" to "UK 🇬🇧 (+44)",
-                                                "+49" to "Germany 🇩🇪 (+49)",
-                                                "+1" to "USA 🇺🇸 (+1)"
+                                                "+30" to "🇬🇷 Greece (+30)",
+                                                "+357" to "🇨🇾 Cyprus (+357)",
+                                                "+44" to "🇬🇧 UK (+44)",
+                                                "+1" to "🇺🇸 USA (+1)",
+                                                "+34" to "🇪🇸 España (+34)",
+                                                "+33" to "🇫🇷 France (+33)",
+                                                "+49" to "🇩🇪 Deutschland (+49)",
+                                                "+39" to "🇮🇹 Italia (+39)",
+                                                "+351" to "🇵🇹 Portugal (+351)",
+                                                "+31" to "🇳🇱 Nederland (+31)",
+                                                "+48" to "🇵🇱 Polska (+48)",
+                                                "+40" to "🇷🇴 România (+40)"
                                             ).forEach { (code, label) ->
                                                 DropdownMenuItem(
                                                     text = {
@@ -831,8 +864,8 @@ fun AuthScreen(
                                     password = it
                                     errorMessage = null
                                 },
-                                label = { Text(if (lang == Localization.Language.ENGLISH) "Password *" else "Κωδικός πρόσβασης *") },
-                                placeholder = { Text(if (lang == Localization.Language.ENGLISH) "At least 6 characters" else "Τουλάχιστον 6 χαρακτήρες") },
+                                label = { Text("${Localization.tr(lang, "Password", "Κωδικός Πρόσβασης")} *") },
+                                placeholder = { Text(Localization.tr(lang, "At least 6 characters", "Τουλάχιστον 6 χαρακτήρες")) },
                                 leadingIcon = {
                                     Icon(Icons.Default.Lock, contentDescription = null, tint = Emerald700)
                                 },
@@ -840,7 +873,7 @@ fun AuthScreen(
                                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                         Icon(
                                             imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                            contentDescription = if (lang == Localization.Language.ENGLISH) "Show password" else "Εμφάνιση κωδικού"
+                                            contentDescription = Localization.tr(lang, "Show password", "Εμφάνιση κωδικού")
                                         )
                                     }
                                 },
@@ -940,7 +973,11 @@ fun AuthScreen(
                                 )
                             } else {
                                 Text(
-                                    text = if (isSignUp) (if (lang == Localization.Language.ENGLISH) "Create Account" else "Δημιουργία Λογαριασμού") else (if (lang == Localization.Language.ENGLISH) "Sign In" else "Σύνδεση"),
+                                    text = if (isSignUp) {
+                                        Localization.tr(lang, "Create Account", "Δημιουργία Λογαριασμού")
+                                    } else {
+                                        Localization.tr(lang, "Sign In", "Σύνδεση")
+                                    },
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -960,7 +997,7 @@ fun AuthScreen(
                                 modifier = Modifier.testTag("forgot_password_button")
                             ) {
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Forgot password?" else "Ξεχάσατε τον κωδικό πρόσβασης;",
+                                    text = Localization.tr(lang, "Forgot password?", "Ξεχάσατε τον κωδικό πρόσβασης;"),
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Emerald700
@@ -973,87 +1010,14 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Requirement 1: Language Selector with generous pill padding and margins
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            // Language Selector supporting all 10 languages cleanly
+            com.example.ui.components.LanguageSelectorPill(
+                currentLanguageCode = appLanguage,
+                onSelectLanguage = { viewModel.setAppLanguage(it) },
                 modifier = Modifier
-                    .widthIn(min = 270.dp, max = 320.dp)
+                    .widthIn(min = 210.dp, max = 300.dp)
                     .testTag("auth_language_selector")
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(5.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Greek Option
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (appLanguage == "EL") Emerald700 else Color.Transparent,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .clickable { viewModel.setAppLanguage("EL") }
-                            .testTag("auth_language_el")
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Text(text = "🇬🇷", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Ελληνικά",
-                                    fontSize = 13.sp,
-                                    fontWeight = if (appLanguage == "EL") FontWeight.Bold else FontWeight.Medium,
-                                    color = if (appLanguage == "EL") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    // English Option
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (appLanguage == "EN") Emerald700 else Color.Transparent,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(42.dp)
-                            .clickable { viewModel.setAppLanguage("EN") }
-                            .testTag("auth_language_en")
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 14.dp, vertical = 6.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Text(text = "🇬🇧", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "English",
-                                    fontSize = 13.sp,
-                                    fontWeight = if (appLanguage == "EN") FontWeight.Bold else FontWeight.Medium,
-                                    color = if (appLanguage == "EN") Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
         }
@@ -1104,7 +1068,7 @@ fun AuthScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Select Date of Birth" else "Επιλογή Ημερομηνίας Γέννησης",
+                            text = Localization.tr(lang, "Select Date of Birth", "Επιλογή Ημερομηνίας Γέννησης"),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1124,8 +1088,8 @@ fun AuthScreen(
                             onValueChange = { input ->
                                 dayText = input.filter { ch -> ch.isDigit() }.take(2)
                             },
-                            label = { Text(if (lang == Localization.Language.ENGLISH) "Day" else "Ημέρα") },
-                            placeholder = { Text(if (lang == Localization.Language.ENGLISH) "DD" else "ΗΗ") },
+                            label = { Text(Localization.tr(lang, "Day", "Ημέρα")) },
+                            placeholder = { Text(Localization.tr(lang, "DD", "ΗΗ")) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(12.dp),
@@ -1138,8 +1102,8 @@ fun AuthScreen(
                             onValueChange = { input ->
                                 monthText = input.filter { ch -> ch.isDigit() }.take(2)
                             },
-                            label = { Text(if (lang == Localization.Language.ENGLISH) "Month" else "Μήνας") },
-                            placeholder = { Text(if (lang == Localization.Language.ENGLISH) "MM" else "ΜΜ") },
+                            label = { Text(Localization.tr(lang, "Month", "Μήνας")) },
+                            placeholder = { Text(Localization.tr(lang, "MM", "ΜΜ")) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(12.dp),
@@ -1152,8 +1116,8 @@ fun AuthScreen(
                             onValueChange = { input ->
                                 yearText = input.filter { ch -> ch.isDigit() }.take(4)
                             },
-                            label = { Text(if (lang == Localization.Language.ENGLISH) "Year" else "Έτος") },
-                            placeholder = { Text(if (lang == Localization.Language.ENGLISH) "YYYY" else "ΕΕΕΕ") },
+                            label = { Text(Localization.tr(lang, "Year", "Έτος")) },
+                            placeholder = { Text(Localization.tr(lang, "YYYY", "ΕΕΕΕ")) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             shape = RoundedCornerShape(12.dp),
@@ -1168,7 +1132,7 @@ fun AuthScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = { showDatePickerDialog = false }) {
-                            Text(text = if (lang == Localization.Language.ENGLISH) "Cancel" else "Άκυρο", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = Localization.cancel(lang), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -1184,7 +1148,7 @@ fun AuthScreen(
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Emerald700)
                         ) {
-                            Text(text = if (lang == Localization.Language.ENGLISH) "Confirm" else "Επιβεβαίωση", color = Color.White)
+                            Text(text = Localization.tr(lang, "Confirm", "Επιβεβαίωση"), color = Color.White)
                         }
                     }
                 }

@@ -2,6 +2,8 @@ package com.example.billing
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.android.billingclient.api.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,11 +22,18 @@ class BillingManager(
         val productIds: List<String>
     )
 
+    data class ProPlanPrices(
+        val monthlyPrice: String? = null,
+        val yearlyPrice: String? = null,
+        val lifetimePrice: String? = null
+    )
+
     companion object {
         private const val TAG = "FinsayBilling"
         const val SUB_MONTHLY = "finsay_pro_monthly"
         const val SUB_YEARLY = "finsay_pro_yearly"
         const val INAPP_LIFETIME = "finsay_pro_lifetime"
+        private const val MAX_ACKNOWLEDGE_RETRIES = 2
     }
 
     private var billingClient: BillingClient? = try {
@@ -54,7 +63,12 @@ class BillingManager(
     private val _lifetimeProductDetails = MutableStateFlow<ProductDetails?>(null)
     val lifetimeProductDetails: StateFlow<ProductDetails?> = _lifetimeProductDetails.asStateFlow()
 
+    private val _planPrices = MutableStateFlow(ProPlanPrices())
+    val planPrices: StateFlow<ProPlanPrices> = _planPrices.asStateFlow()
+
+    private val mainHandler = Handler(Looper.getMainLooper())
     private val purchaseQueryLock = Any()
+    private var activeQueryGeneration = 0L
     private var subsQueryDone = false
     private var inappQueryDone = false
     private var subsQueryOk = false
@@ -62,6 +76,26 @@ class BillingManager(
     private var activeSubsList: List<PlayPurchaseEntitlement> = emptyList()
     private var activeInappList: List<PlayPurchaseEntitlement> = emptyList()
     private val notifiedPendingTokens = mutableSetOf<String>()
+
+    private fun extractSubscriptionFormattedPrice(details: ProductDetails?): String? {
+        val offers = details?.subscriptionOfferDetails.orEmpty()
+        if (offers.isEmpty()) return null
+        val baseOffer = offers.firstOrNull { it.offerId.isNullOrBlank() } ?: offers.firstOrNull() ?: return null
+        val phases = baseOffer.pricingPhases.pricingPhaseList
+        val recurringPhase = phases.lastOrNull { it.priceAmountMicros > 0L } ?: phases.lastOrNull()
+        return recurringPhase?.formattedPrice?.takeIf { it.isNotBlank() }
+    }
+
+    private fun updatePlanPricesSnapshot() {
+        val monthly = extractSubscriptionFormattedPrice(_monthlyProductDetails.value)
+        val yearly = extractSubscriptionFormattedPrice(_yearlyProductDetails.value)
+        val lifetime = _lifetimeProductDetails.value?.oneTimePurchaseOfferDetails?.formattedPrice?.takeIf { it.isNotBlank() }
+        _planPrices.value = ProPlanPrices(
+            monthlyPrice = monthly,
+            yearlyPrice = yearly,
+            lifetimePrice = lifetime
+        )
+    }
 
     fun startConnection() {
         val client = billingClient ?: return
@@ -128,6 +162,7 @@ class BillingManager(
                             }
                             Log.d(TAG, "Found subscription: ${details.productId} - ${details.title}")
                         }
+                        updatePlanPricesSnapshot()
                     } else {
                         Log.d(TAG, "Query subscriptions status: ${billingResult.responseCode} - ${billingResult.debugMessage}")
                     }
@@ -154,6 +189,7 @@ class BillingManager(
                                 Log.d(TAG, "Found in-app product: ${details.productId} - ${details.title}")
                             }
                         }
+                        updatePlanPricesSnapshot()
                     } else {
                         Log.d(TAG, "Query in-app status: ${billingResult.responseCode} - ${billingResult.debugMessage}")
                     }
@@ -194,7 +230,14 @@ class BillingManager(
                 val result = client.launchBillingFlow(activity, flowBuilder.build())
                 result.responseCode == BillingClient.BillingResponseCode.OK
             } else {
-                val details = if (productId == SUB_MONTHLY) _monthlyProductDetails.value else _yearlyProductDetails.value
+                val details = when (productId) {
+                    SUB_MONTHLY -> _monthlyProductDetails.value
+                    SUB_YEARLY -> _yearlyProductDetails.value
+                    else -> {
+                        Log.w(TAG, "Refusing billing flow for unrecognized productId: $productId")
+                        return false
+                    }
+                }
                 val offerToken = details?.let { selectBestOfferToken(it) }
                 if (details == null || offerToken == null) {
                     Log.w(TAG, "No product details or offer token available for $productId.")
@@ -245,13 +288,15 @@ class BillingManager(
         try {
             if (!client.isReady) return
 
-            synchronized(purchaseQueryLock) {
+            val queryGeneration = synchronized(purchaseQueryLock) {
+                activeQueryGeneration += 1L
                 subsQueryDone = false
                 inappQueryDone = false
                 subsQueryOk = false
                 inappQueryOk = false
                 activeSubsList = emptyList()
                 activeInappList = emptyList()
+                activeQueryGeneration
             }
 
             // 1. Query Subscriptions
@@ -262,10 +307,20 @@ class BillingManager(
                 try {
                     val ok = billingResult.responseCode == BillingClient.BillingResponseCode.OK
                     val active = if (ok) processPurchasesBatch(purchases, isPurchaseUpdate = false) else emptyList()
-                    evaluateCombinedQueryResult(isSubs = true, queryOk = ok, activePurchases = active)
+                    evaluateCombinedQueryResult(
+                        queryGeneration = queryGeneration,
+                        isSubs = true,
+                        queryOk = ok,
+                        activePurchases = active
+                    )
                 } catch (t: Throwable) {
                     Log.w(TAG, "querySubsPurchases callback warning: ${t.message}")
-                    evaluateCombinedQueryResult(isSubs = true, queryOk = false, activePurchases = emptyList())
+                    evaluateCombinedQueryResult(
+                        queryGeneration = queryGeneration,
+                        isSubs = true,
+                        queryOk = false,
+                        activePurchases = emptyList()
+                    )
                 }
             }
 
@@ -277,10 +332,20 @@ class BillingManager(
                 try {
                     val ok = billingResult.responseCode == BillingClient.BillingResponseCode.OK
                     val active = if (ok) processPurchasesBatch(purchases, isPurchaseUpdate = false) else emptyList()
-                    evaluateCombinedQueryResult(isSubs = false, queryOk = ok, activePurchases = active)
+                    evaluateCombinedQueryResult(
+                        queryGeneration = queryGeneration,
+                        isSubs = false,
+                        queryOk = ok,
+                        activePurchases = active
+                    )
                 } catch (t: Throwable) {
                     Log.w(TAG, "queryInAppPurchases callback warning: ${t.message}")
-                    evaluateCombinedQueryResult(isSubs = false, queryOk = false, activePurchases = emptyList())
+                    evaluateCombinedQueryResult(
+                        queryGeneration = queryGeneration,
+                        isSubs = false,
+                        queryOk = false,
+                        activePurchases = emptyList()
+                    )
                 }
             }
         } catch (t: Throwable) {
@@ -289,12 +354,16 @@ class BillingManager(
     }
 
     private fun evaluateCombinedQueryResult(
+        queryGeneration: Long,
         isSubs: Boolean,
         queryOk: Boolean,
         activePurchases: List<PlayPurchaseEntitlement>
     ) {
         var combinedToEmit: List<PlayPurchaseEntitlement>? = null
         synchronized(purchaseQueryLock) {
+            // Ignore stale callbacks from an older overlapping queryActivePurchases() call
+            if (queryGeneration != activeQueryGeneration) return
+
             if (isSubs) {
                 subsQueryDone = true
                 subsQueryOk = queryOk
@@ -305,8 +374,17 @@ class BillingManager(
                 activeInappList = activePurchases
             }
 
-            if (subsQueryDone && inappQueryDone && (subsQueryOk || inappQueryOk)) {
-                combinedToEmit = (activeSubsList + activeInappList).distinctBy { it.purchaseToken }
+            if (subsQueryDone && inappQueryDone) {
+                val merged = (activeSubsList + activeInappList).distinctBy { it.purchaseToken }
+                // CRITICAL: Never revoke Pro (emit an empty list) unless BOTH SUBS and INAPP queries succeeded.
+                // A transient error on one query type must never strip an active subscriber's entitlement.
+                if (subsQueryOk && inappQueryOk) {
+                    combinedToEmit = merged
+                } else if (merged.isNotEmpty()) {
+                    combinedToEmit = merged
+                } else {
+                    Log.w(TAG, "Skipping entitlement revocation because Billing query was incomplete (subsOk=$subsQueryOk, inappOk=$inappQueryOk)")
+                }
             }
         }
         combinedToEmit?.let { list ->
@@ -388,7 +466,7 @@ class BillingManager(
         }
     }
 
-    private fun acknowledgePurchase(purchase: Purchase) {
+    private fun acknowledgePurchase(purchase: Purchase, attempt: Int = 0) {
         val client = billingClient ?: return
         try {
             if (purchase.isAcknowledged) return
@@ -409,7 +487,19 @@ class BillingManager(
                         }
                         onActivePurchasesUpdated(merged, true)
                     } else {
-                        Log.w(TAG, "Purchase acknowledge note: ${result.debugMessage}")
+                        Log.w(TAG, "Purchase acknowledge note (code=${result.responseCode}, attempt=$attempt): ${result.debugMessage}")
+                        val isRetryable = result.responseCode == BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE ||
+                            result.responseCode == BillingClient.BillingResponseCode.SERVICE_DISCONNECTED ||
+                            result.responseCode == BillingClient.BillingResponseCode.NETWORK_ERROR ||
+                            result.responseCode == BillingClient.BillingResponseCode.ERROR
+                        if (isRetryable && attempt < MAX_ACKNOWLEDGE_RETRIES) {
+                            val delayMs = (attempt + 1) * 3_000L
+                            mainHandler.postDelayed({
+                                if (billingClient?.isReady == true) {
+                                    acknowledgePurchase(purchase, attempt + 1)
+                                }
+                            }, delayMs)
+                        }
                     }
                 } catch (t: Throwable) {
                     Log.w(TAG, "acknowledgePurchase callback warning: ${t.message}")

@@ -682,7 +682,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         try {
-            auth.setLanguageCode(if (_appLanguage.value == "EN") "en" else "el")
+            auth.setLanguageCode(com.example.util.Localization.Language.fromCode(_appLanguage.value).firebaseCode)
         } catch (t: Throwable) {
             Log.w("OikoNomosVM", "auth.setLanguageCode warning: ${t.message}")
         }
@@ -696,11 +696,18 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
+        val existingUser = try { auth.currentUser } catch (_: Throwable) { null }
+        val cachedUid = prefs.getString("cached_active_uid", null)
+        val shouldClearLocalRoomOnStart = existingUser == null ||
+            StartupSafety.isActualUserSwitch(cachedUid, existingUser.uid)
+
         val clearJob = viewModelScope.launch(Dispatchers.IO + coroutineExceptionHandler) {
-            try {
-                repository.clearAllData()
-            } catch (t: Throwable) {
-                Log.d("OikoNomosVM", "Room clear on start: ${t.message}")
+            if (shouldClearLocalRoomOnStart) {
+                try {
+                    repository.clearAllData()
+                } catch (t: Throwable) {
+                    Log.d("OikoNomosVM", "Room clear on user switch/logged-out start: ${t.message}")
+                }
             }
         }
         roomClearJob = clearJob
@@ -718,10 +725,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         inFlightCreateGoalKeys.clear()
         _isInitialExpensesLoading.value = true
 
-        val existingUser = try { auth.currentUser } catch (_: Throwable) { null }
         if (existingUser != null) {
             try {
-                if (prefs.getString("cached_active_uid", null).isNullOrBlank()) {
+                if (cachedUid.isNullOrBlank() || cachedUid != existingUser.uid) {
                     prefs.edit().putString("cached_active_uid", existingUser.uid).apply()
                 }
                 if (isUserVerified(existingUser)) {
@@ -1148,6 +1154,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     // Structure (Members, Categories, Deleted Items) & UI Settings
     fun getDeletedMemberIds(householdId: String): Set<String> = structureDelegate.getDeletedMemberIds(householdId)
     fun getDeletedCategoryIds(householdId: String): Set<String> = structureDelegate.getDeletedCategoryIds(householdId)
+    internal suspend fun allocateNextSafeCategoryId(): Long = structureDelegate.allocateNextSafeCategoryId()
     fun loadDeletedItems(householdId: String) = structureDelegate.loadDeletedItems(householdId)
     fun seedStandardCategories(categoryType: String = "EXPENSE") = structureDelegate.seedStandardCategories(categoryType)
     fun openMemberDialog(member: FamilyMember? = null) = structureDelegate.openMemberDialog(member)
@@ -1235,9 +1242,6 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun dismissActivityDialog() { _showActivityDialog.value = false }
     fun showPremiumPaywall(reason: String) { _premiumPaywallReason.value = reason }
     fun dismissPremiumPaywall() { _premiumPaywallReason.value = null }
-    fun activateProFromBilling() = structureDelegate.activateProFromBilling()
-    fun unlockPro() = structureDelegate.unlockPro()
-    fun revokePro() = structureDelegate.revokePro()
     fun onPlayPurchasesUpdated(
         purchases: List<com.example.billing.BillingManager.PlayPurchaseEntitlement>,
         isFreshPurchase: Boolean
@@ -1285,49 +1289,183 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         const val FREE_MAX_EXPENSE_CATEGORIES = 5
         const val FREE_MAX_INCOME_CATEGORIES = 5
 
-        fun getStandardDefaultCategories(isEnglish: Boolean): List<ExpenseCategory> = if (isEnglish) {
-            listOf(
-                ExpenseCategory(1L, "Supermarket", "cart", 0.0, 4278556265L, "supermarket, groceries, grocery, market, lidl, shopping, σούπερ μάρκετ, μάρκετ, ψώνια", 0, 0L, "EXPENSE"),
-                ExpenseCategory(2L, "Food & Coffee", "food", 0.0, 4293870660L, "food, coffee, cafe, delivery, restaurant, pizza, lunch, dinner, φαγητό, καφές, εστιατόριο", 1, 0L, "EXPENSE"),
-                ExpenseCategory(3L, "Bills & Home", "house", 0.0, 4279080072L, "bill, bills, electricity, water, rent, internet, phone, home, utilities, λογαριασμός, ρεύμα, ενοίκιο", 2, 0L, "EXPENSE"),
-                ExpenseCategory(4L, "Transport & Fuel", "gas_station", 0.0, 4293548044L, "fuel, gas, petrol, tolls, parking, bus, metro, taxi, uber, transport, βενζίνη, καύσιμα, ταξί", 3, 0L, "EXPENSE"),
-                ExpenseCategory(5L, "Health & Pharmacy", "medical", 0.0, 4293675161L, "doctor, pharmacy, medicine, health, hospital, dentist, γιατρός, φαρμακείο, φάρμακα", 4, 0L, "EXPENSE"),
-                ExpenseCategory(6L, "Entertainment", "entertainment", 0.0, 4287323382L, "entertainment, cinema, movie, drinks, bar, concert, netflix, διασκέδαση, σινεμά, ποτό", 5, 0L, "EXPENSE"),
-                ExpenseCategory(7L, "Other", "other", 0.0, 4283124564L, "other, misc, miscellaneous, άλλο, διάφορα", 6, 0L, "EXPENSE")
-            )
-        } else {
-            listOf(
-                ExpenseCategory(1L, "Σούπερ μάρκετ", "cart", 0.0, 4278556265L, "σούπερ μάρκετ, σουπερμάρκετ, lidl, σκλαβενίτης, βασιλόπουλος, μάρκετ, ψώνια, supermarket, groceries", 0, 0L, "EXPENSE"),
-                ExpenseCategory(2L, "Φαγητό & Καφές", "food", 0.0, 4293870660L, "φαγητό, καφές, delivery, σουβλάκια, πίτσα, εστιατόριο, food, coffee, restaurant", 1, 0L, "EXPENSE"),
-                ExpenseCategory(3L, "Λογαριασμοί & Σπίτι", "house", 0.0, 4279080072L, "λογαριασμός, ρεύμα, νερό, ενοίκιο, κοινόχρηστα, ιντερνετ, τηλέφωνο, bills, rent, utilities", 2, 0L, "EXPENSE"),
-                ExpenseCategory(4L, "Μετακινήσεις & Καύσιμα", "gas_station", 0.0, 4293548044L, "βενζίνη, καύσιμα, διόδια, πάρκινγκ, λεωφορείο, μετρό, ταξί, fuel, gas, transport", 3, 0L, "EXPENSE"),
-                ExpenseCategory(5L, "Υγεία & Φαρμακείο", "medical", 0.0, 4293675161L, "γιατρός, φαρμακείο, φάρμακα, εξετάσεις, health, pharmacy, doctor", 4, 0L, "EXPENSE"),
-                ExpenseCategory(6L, "Διασκέδαση & Ψυχαγωγία", "entertainment", 0.0, 4287323382L, "διασκέδαση, έξοδος, ποτό, σινεμά, entertainment, cinema, bar", 5, 0L, "EXPENSE"),
-                ExpenseCategory(7L, "Άλλο", "other", 0.0, 4283124564L, "άλλο, διάφορα, other", 6, 0L, "EXPENSE")
+        fun getStandardDefaultCategories(lang: com.example.util.Localization.Language): List<ExpenseCategory> {
+            val l = lang
+            return listOf(
+                ExpenseCategory(
+                    1L,
+                    com.example.util.Localization.translateCategory("Supermarket", l),
+                    "cart",
+                    0.0,
+                    4278556265L,
+                    "supermarket, groceries, grocery, market, lidl, shopping, σούπερ μάρκετ, μάρκετ, ψώνια, supermercado, supermarché, supermarkt, supermercato, zakupy, cumpărături",
+                    0,
+                    0L,
+                    "EXPENSE"
+                ),
+                ExpenseCategory(
+                    2L,
+                    com.example.util.Localization.translateCategory("Food & Coffee", l),
+                    "food",
+                    0.0,
+                    4293870660L,
+                    "food, coffee, cafe, delivery, restaurant, pizza, lunch, dinner, φαγητό, καφές, εστιατόριο, comida, café, repas, essen, kaffee, cibo, caffè, eten, koffie, jedzenie, kawa, mâncare, cafea",
+                    1,
+                    0L,
+                    "EXPENSE"
+                ),
+                ExpenseCategory(
+                    3L,
+                    com.example.util.Localization.translateCategory("Bills & Home", l),
+                    "house",
+                    0.0,
+                    4279080072L,
+                    "bill, bills, electricity, water, rent, internet, phone, home, utilities, λογαριασμός, ρεύμα, ενοίκιο, facturas, alquiler, factures, loyer, rechnungen, miete, bollette, affitto, contas, rekeningen, huur, rachunki, czynsz, facturi, chirie",
+                    2,
+                    0L,
+                    "EXPENSE"
+                ),
+                ExpenseCategory(
+                    4L,
+                    com.example.util.Localization.translateCategory("Transport & Fuel", l),
+                    "gas_station",
+                    0.0,
+                    4293548044L,
+                    "fuel, gas, petrol, tolls, parking, bus, metro, taxi, uber, transport, βενζίνη, καύσιμα, ταξί, gasolina, transporte, carburant, kraftstoff, benzin, benzina, combustível, brandstof, paliwo, combustibil",
+                    3,
+                    0L,
+                    "EXPENSE"
+                ),
+                ExpenseCategory(
+                    5L,
+                    com.example.util.Localization.translateCategory("Health & Pharmacy", l),
+                    "medical",
+                    0.0,
+                    4293675161L,
+                    "doctor, pharmacy, medicine, health, hospital, dentist, γιατρός, φαρμακείο, φάρμακα, farmacia, salud, pharmacie, santé, apotheke, arzt, farmácia, saúde, apotheek, apteka, zdrowie, farmacie, sănătate",
+                    4,
+                    0L,
+                    "EXPENSE"
+                ),
+                ExpenseCategory(
+                    6L,
+                    com.example.util.Localization.translateCategory("Entertainment", l),
+                    "entertainment",
+                    0.0,
+                    4287323382L,
+                    "entertainment, cinema, movie, drinks, bar, concert, netflix, διασκέδαση, σινεμά, ποτό, cine, ocio, cinéma, loisirs, kino, unterhaltung, svago, lazer, bioscoop, rozrywka, divertisment",
+                    5,
+                    0L,
+                    "EXPENSE"
+                ),
+                ExpenseCategory(
+                    7L,
+                    com.example.util.Localization.translateCategory("Other", l),
+                    "other",
+                    0.0,
+                    4283124564L,
+                    "other, misc, miscellaneous, άλλο, διάφορα, otros, autre, sonstiges, altro, outros, overig, inne, altele",
+                    6,
+                    0L,
+                    "EXPENSE"
+                )
             )
         }
 
-        fun getStandardDefaultIncomeCategories(isEnglish: Boolean): List<ExpenseCategory> = if (isEnglish) {
-            listOf(
-                ExpenseCategory(101L, "Salary", "work", 0.0, 0xFF059669L, "salary, paycheck, wages, payroll, μισθός, μισθοδοσία", 0, 0L, "INCOME"),
-                ExpenseCategory(102L, "Rent", "house", 0.0, 0xFF0D9488L, "rent, rental, lease, ενοίκιο, μίσθωμα", 1, 0L, "INCOME"),
-                ExpenseCategory(103L, "Business / Freelance", "tech", 0.0, 0xFF0284C7L, "business, freelance, invoice, client, project, επιχείρηση, τιμολόγιο", 2, 0L, "INCOME"),
-                ExpenseCategory(104L, "Subsidy / Allowance", "loan", 0.0, 0xFF8B5CF6L, "subsidy, allowance, grant, refund, benefit, επιδότηση, επίδομα", 3, 0L, "INCOME"),
-                ExpenseCategory(105L, "Bonus / Gift", "gift", 0.0, 0xFFD97706L, "bonus, gift, reward, tip, μπόνους, δώρο", 4, 0L, "INCOME"),
-                ExpenseCategory(106L, "Investments", "savings", 0.0, 0xFF10B981L, "investments, dividend, interest, stocks, crypto, επενδύσεις, μέρισμα", 5, 0L, "INCOME"),
-                ExpenseCategory(107L, "Other", "other", 0.0, 0xFF475569L, "other, misc, income, άλλο, διάφορα, έσοδο", 6, 0L, "INCOME")
+        fun getStandardDefaultCategories(isEnglish: Boolean): List<ExpenseCategory> =
+            getStandardDefaultCategories(
+                if (isEnglish) com.example.util.Localization.Language.ENGLISH
+                else com.example.util.Localization.Language.GREEK
             )
-        } else {
-            listOf(
-                ExpenseCategory(101L, "Μισθός", "work", 0.0, 0xFF059669L, "μισθός, μισθοδοσία, salary, paycheck", 0, 0L, "INCOME"),
-                ExpenseCategory(102L, "Ενοίκιο", "house", 0.0, 0xFF0D9488L, "ενοίκιο, μίσθωμα, rent", 1, 0L, "INCOME"),
-                ExpenseCategory(103L, "Επιχείρηση / Freelance", "tech", 0.0, 0xFF0284C7L, "επιχείρηση, freelance, τιμολόγιο, πελάτης, business", 2, 0L, "INCOME"),
-                ExpenseCategory(104L, "Επιδότηση", "loan", 0.0, 0xFF8B5CF6L, "επιδότηση, επίδομα, επιστροφή, subsidy, allowance", 3, 0L, "INCOME"),
-                ExpenseCategory(105L, "Bonus / Δώρο", "gift", 0.0, 0xFFD97706L, "bonus, μπόνους, δώρο, πάσχα, χριστούγεννα, gift", 4, 0L, "INCOME"),
-                ExpenseCategory(106L, "Επενδύσεις", "savings", 0.0, 0xFF10B981L, "επενδύσεις, μέρισμα, τόκοι, μετοχές, investments", 5, 0L, "INCOME"),
-                ExpenseCategory(107L, "Άλλο", "other", 0.0, 0xFF475569L, "άλλο, διάφορα, έσοδο, other", 6, 0L, "INCOME")
+
+        fun getStandardDefaultIncomeCategories(lang: com.example.util.Localization.Language): List<ExpenseCategory> {
+            val l = lang
+            return listOf(
+                ExpenseCategory(
+                    101L,
+                    com.example.util.Localization.translateCategory("Salary", l),
+                    "work",
+                    0.0,
+                    0xFF059669L,
+                    "salary, paycheck, wages, payroll, μισθός, μισθοδοσία, salario, salaire, gehalt, stipendio, salário, salaris, wynagrodzenie, salariu",
+                    0,
+                    0L,
+                    "INCOME"
+                ),
+                ExpenseCategory(
+                    102L,
+                    com.example.util.Localization.translateCategory("Rent", l),
+                    "house",
+                    0.0,
+                    0xFF0D9488L,
+                    "rent, rental, lease, ενοίκιο, μίσθωμα, alquiler, loyer, miete, affitto, renda, huur, czynsz, chirie",
+                    1,
+                    0L,
+                    "INCOME"
+                ),
+                ExpenseCategory(
+                    103L,
+                    com.example.util.Localization.translateCategory("Business / Freelance", l),
+                    "tech",
+                    0.0,
+                    0xFF0284C7L,
+                    "business, freelance, invoice, client, project, επιχείρηση, τιμολόγιο, negocio, entreprise, geschäft, attività, negócio, bedrijf, firma, afacere",
+                    2,
+                    0L,
+                    "INCOME"
+                ),
+                ExpenseCategory(
+                    104L,
+                    com.example.util.Localization.translateCategory("Subsidy / Allowance", l),
+                    "loan",
+                    0.0,
+                    0xFF8B5CF6L,
+                    "subsidy, allowance, grant, refund, benefit, επιδότηση, επίδομα, subsidio, allocation, zuschuss, sussidio, subsídio, toeslag, dotacja, subvenție",
+                    3,
+                    0L,
+                    "INCOME"
+                ),
+                ExpenseCategory(
+                    105L,
+                    com.example.util.Localization.translateCategory("Bonus / Gift", l),
+                    "gift",
+                    0.0,
+                    0xFFD97706L,
+                    "bonus, gift, reward, tip, μπόνους, δώρο, bono, regalo, prime, cadeau, geschenk, presente, prezent, cadou",
+                    4,
+                    0L,
+                    "INCOME"
+                ),
+                ExpenseCategory(
+                    106L,
+                    com.example.util.Localization.translateCategory("Investments", l),
+                    "savings",
+                    0.0,
+                    0xFF10B981L,
+                    "investments, dividend, interest, stocks, crypto, επενδύσεις, μέρισμα, inversiones, investissements, investitionen, investimenti, investimentos, investeringen, inwestycje, investiții",
+                    5,
+                    0L,
+                    "INCOME"
+                ),
+                ExpenseCategory(
+                    107L,
+                    com.example.util.Localization.translateCategory("Other", l),
+                    "other",
+                    0.0,
+                    0xFF475569L,
+                    "other, misc, income, άλλο, διάφορα, έσοδο, otros, autre, sonstiges, altro, outros, overig, inne, altele",
+                    6,
+                    0L,
+                    "INCOME"
+                )
             )
         }
+
+        fun getStandardDefaultIncomeCategories(isEnglish: Boolean): List<ExpenseCategory> =
+            getStandardDefaultIncomeCategories(
+                if (isEnglish) com.example.util.Localization.Language.ENGLISH
+                else com.example.util.Localization.Language.GREEK
+            )
 
         val STANDARD_DEFAULT_CATEGORIES: List<ExpenseCategory> = getStandardDefaultCategories(isEnglish = false)
         val STANDARD_DEFAULT_INCOME_CATEGORIES: List<ExpenseCategory> = getStandardDefaultIncomeCategories(isEnglish = false)

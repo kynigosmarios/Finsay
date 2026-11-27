@@ -99,7 +99,7 @@ internal class OikoNomosSyncDelegate(
         val placeholder = Household(
             id = hid,
             name = vm.prefs.getString("household_name_$hid", null)?.takeIf { it.isNotBlank() }
-                ?: if (vm._appLanguage.value == "EL") "Το Εξοδολόγιό μου" else "My Household Book",
+                ?: com.example.util.Localization.myExodologio(com.example.util.Localization.Language.fromCode(vm._appLanguage.value)),
             ownerId = user.uid,
             memberUids = listOf(user.uid),
             memberRoles = mapOf(user.uid to HouseholdRole.CREATOR.key)
@@ -156,10 +156,11 @@ internal class OikoNomosSyncDelegate(
             val displayName = user.displayName.orEmpty().trim()
             val parts = displayName.split(" ").filter { it.isNotBlank() }
             val currentLang = vm._appLanguage.value.ifBlank { "EN" }
+            val currentLangEnum = com.example.util.Localization.Language.fromCode(currentLang)
             val profile = vm.firestoreSyncRepo.getOrCreateUserProfile(
                 uid = user.uid,
                 email = user.email.orEmpty(),
-                displayName = displayName.ifBlank { user.email?.substringBefore("@") ?: if (currentLang == "EL") "Χρήστης" else "User" },
+                displayName = displayName.ifBlank { user.email?.substringBefore("@") ?: com.example.util.Localization.tr(currentLangEnum, "User", "Χρήστης") },
                 firstName = parts.firstOrNull().orEmpty(),
                 lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
                 authProvider = provider,
@@ -214,7 +215,7 @@ internal class OikoNomosSyncDelegate(
                 vm._appLanguage.value = effectiveProfile.appLanguage
                 vm.prefs.edit().putString("app_language", effectiveProfile.appLanguage).apply()
                 try {
-                    vm.auth.setLanguageCode(if (effectiveProfile.appLanguage == "EN") "en" else "el")
+                    vm.auth.setLanguageCode(com.example.util.Localization.Language.fromCode(effectiveProfile.appLanguage).firebaseCode)
                 } catch (_: Throwable) {}
             }
             if (effectiveProfile.themeMode.isNotBlank()) {
@@ -232,7 +233,9 @@ internal class OikoNomosSyncDelegate(
                     val targetHid = profile.householdId.takeIf {
                         StartupSafety.isHouseholdAllowedForUser(it, false, emptySet(), profile.householdIds.toSet())
                     } ?: vm.getOrEnsureHouseholdId(user)
-                    val defaultHouseholdName = if (vm._appLanguage.value == "EL") "Το Εξοδολόγιό μου" else "My Household Book"
+                    val defaultHouseholdName = com.example.util.Localization.myExodologio(
+                        com.example.util.Localization.Language.fromCode(vm._appLanguage.value)
+                    )
                     val ensured = vm.firestoreSyncRepo.ensureHouseholdExists(
                         householdId = targetHid,
                         ownerUid = user.uid,
@@ -347,76 +350,90 @@ internal class OikoNomosSyncDelegate(
                 }
         }
 
-        vm.userExpensesSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            vm.firestoreSyncRepo.observeUserExpenses(userId)
-                .catch { t -> Log.w(tag, "observeUserExpenses error: ${t.message}") }
-                .collect { list ->
-                    vm.lastUserExpenses = list
-                    if (vm._currentHousehold.value?.id.isNullOrBlank()) {
-                        applyResolvedExpenses()
-                    }
-                }
-        }
-
-        vm.userIncomesSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            vm.firestoreSyncRepo.observeUserIncomes(userId)
-                .catch { t -> Log.w(tag, "observeUserIncomes error: ${t.message}") }
-                .collect { list ->
-                    vm.lastUserIncomes = list
-                    if (vm._currentHousehold.value?.id.isNullOrBlank()) {
-                        applyResolvedIncomes()
-                    }
-                }
-        }
-
-        vm.userSavingsGoalsSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            vm.firestoreSyncRepo.observeUserSavingsGoals(userId)
-                .catch { t -> Log.w(tag, "observeUserSavingsGoals error: ${t.message}") }
-                .collect { list ->
-                    vm.lastUserSavingsGoals = list
-                    if (vm._currentHousehold.value?.id.isNullOrBlank() && vm._userHouseholds.value.isEmpty()) {
-                        applyResolvedSavingsGoals(expectedHouseholdId = "")
-                    }
-                }
-        }
-
-        vm.userRecurringSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            vm.firestoreSyncRepo.observeUserRecurringExpenses(userId)
-                .catch { t -> Log.w(tag, "observeUserRecurringExpenses error: ${t.message}") }
-                .collect { list ->
-                    if (vm._currentHousehold.value?.id.isNullOrBlank() && list.isNotEmpty()) {
-                        val mapped = list.map { rr ->
-                            RecurringExpense(
-                                id = RecurringExpenseAutoProcessor.resolveCloudEntityId(rr.id),
-                                title = rr.title,
-                                amount = rr.amount,
-                                categoryId = rr.categoryId,
-                                categoryName = rr.categoryName,
-                                frequency = rr.frequency,
-                                dayOfMonth = rr.dayOfMonth,
-                                reminderHour = rr.reminderHour,
-                                reminderMinute = rr.reminderMinute,
-                                splitType = rr.splitType,
-                                memberIdsCsv = rr.memberIdsCsv,
-                                memberNamesDisplay = rr.memberNamesDisplay,
-                                note = rr.note,
-                                isActive = rr.isActive,
-                                lastGeneratedMonth = rr.lastGeneratedMonth,
-                                payerMemberId = rr.payerMemberId,
-                                payerMemberName = rr.payerMemberName,
-                                payerMemberIdsCsv = rr.payerMemberIdsCsv,
-                                payerAmountsCsv = rr.payerAmountsCsv,
-                                anchorMonth = rr.anchorMonth
-                            )
+        // Only attach personal fallback listeners when the user has no active household yet;
+        // once observeHouseholdData(hid) starts, these 4 redundant listeners are cancelled to save Firestore reads.
+        if (vm._currentHousehold.value?.id.isNullOrBlank()) {
+            vm.userExpensesSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+                vm.firestoreSyncRepo.observeUserExpenses(userId)
+                    .catch { t -> Log.w(tag, "observeUserExpenses error: ${t.message}") }
+                    .collect { list ->
+                        vm.lastUserExpenses = list
+                        if (vm._currentHousehold.value?.id.isNullOrBlank()) {
+                            applyResolvedExpenses()
                         }
-                        vm.repository.replaceAllRecurringExpenses(mapped)
                     }
-                }
+            }
+
+            vm.userIncomesSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+                vm.firestoreSyncRepo.observeUserIncomes(userId)
+                    .catch { t -> Log.w(tag, "observeUserIncomes error: ${t.message}") }
+                    .collect { list ->
+                        vm.lastUserIncomes = list
+                        if (vm._currentHousehold.value?.id.isNullOrBlank()) {
+                            applyResolvedIncomes()
+                        }
+                    }
+            }
+
+            vm.userSavingsGoalsSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+                vm.firestoreSyncRepo.observeUserSavingsGoals(userId)
+                    .catch { t -> Log.w(tag, "observeUserSavingsGoals error: ${t.message}") }
+                    .collect { list ->
+                        vm.lastUserSavingsGoals = list
+                        if (vm._currentHousehold.value?.id.isNullOrBlank() && vm._userHouseholds.value.isEmpty()) {
+                            applyResolvedSavingsGoals(expectedHouseholdId = "")
+                        }
+                    }
+            }
+
+            vm.userRecurringSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+                vm.firestoreSyncRepo.observeUserRecurringExpenses(userId)
+                    .catch { t -> Log.w(tag, "observeUserRecurringExpenses error: ${t.message}") }
+                    .collect { list ->
+                        if (vm._currentHousehold.value?.id.isNullOrBlank() && list.isNotEmpty()) {
+                            val mapped = list.map { rr ->
+                                RecurringExpense(
+                                    id = RecurringExpenseAutoProcessor.resolveCloudEntityId(rr.id),
+                                    title = rr.title,
+                                    amount = rr.amount,
+                                    categoryId = rr.categoryId,
+                                    categoryName = rr.categoryName,
+                                    frequency = rr.frequency,
+                                    dayOfMonth = rr.dayOfMonth,
+                                    reminderHour = rr.reminderHour,
+                                    reminderMinute = rr.reminderMinute,
+                                    splitType = rr.splitType,
+                                    memberIdsCsv = rr.memberIdsCsv,
+                                    memberNamesDisplay = rr.memberNamesDisplay,
+                                    note = rr.note,
+                                    isActive = rr.isActive,
+                                    lastGeneratedMonth = rr.lastGeneratedMonth,
+                                    payerMemberId = rr.payerMemberId,
+                                    payerMemberName = rr.payerMemberName,
+                                    payerMemberIdsCsv = rr.payerMemberIdsCsv,
+                                    payerAmountsCsv = rr.payerAmountsCsv,
+                                    anchorMonth = rr.anchorMonth
+                                )
+                            }
+                            vm.repository.replaceAllRecurringExpenses(mapped)
+                        }
+                    }
+            }
         }
     }
 
     fun observeHouseholdData(householdId: String) {
         if (householdId.isBlank()) return
+        // Once an active household is observed, close redundant personal-mirror listeners
+        vm.userExpensesSyncJob?.cancel()
+        vm.userExpensesSyncJob = null
+        vm.userIncomesSyncJob?.cancel()
+        vm.userIncomesSyncJob = null
+        vm.userSavingsGoalsSyncJob?.cancel()
+        vm.userSavingsGoalsSyncJob = null
+        vm.userRecurringSyncJob?.cancel()
+        vm.userRecurringSyncJob = null
+
         if (vm.lastObservedHouseholdId == householdId &&
             vm.expensesSyncJob?.isActive == true &&
             vm.membersSyncJob?.isActive == true &&
@@ -463,6 +480,7 @@ internal class OikoNomosSyncDelegate(
             vm.firestoreSyncRepo.observeExpenses(householdId)
                 .catch { t -> Log.w(tag, "observeExpenses error: ${t.message}") }
                 .collect { expenses ->
+                    if (vm._currentHousehold.value?.id != householdId) return@collect
                     vm.lastHouseholdExpenses = expenses
                     applyResolvedExpenses()
                 }
@@ -472,6 +490,7 @@ internal class OikoNomosSyncDelegate(
             vm.firestoreSyncRepo.observeIncomes(householdId)
                 .catch { t -> Log.w(tag, "observeIncomes error: ${t.message}") }
                 .collect { incomes ->
+                    if (vm._currentHousehold.value?.id != householdId) return@collect
                     vm.lastHouseholdIncomes = incomes
                     applyResolvedIncomes()
                 }
@@ -481,6 +500,7 @@ internal class OikoNomosSyncDelegate(
             vm.firestoreSyncRepo.observeMembers(householdId)
                 .catch { t -> Log.w(tag, "observeMembers error: ${t.message}") }
                 .collect { members ->
+                    if (vm._currentHousehold.value?.id != householdId) return@collect
                     vm.lastHouseholdMembers = members
                     vm.syncAndMergeMembers(members, explicitHouseholdId = householdId)
                 }
@@ -490,6 +510,7 @@ internal class OikoNomosSyncDelegate(
             vm.firestoreSyncRepo.observeCategories(householdId)
                 .catch { t -> Log.w(tag, "observeCategories error: ${t.message}") }
                 .collect { cats ->
+                    if (vm._currentHousehold.value?.id != householdId) return@collect
                     vm.lastHouseholdCategories = cats
                     vm.syncAndMergeCategories(cats, explicitHouseholdId = householdId)
                 }
@@ -509,6 +530,7 @@ internal class OikoNomosSyncDelegate(
             vm.firestoreSyncRepo.observeRecurringExpenses(householdId)
                 .catch { t -> Log.w(tag, "observeRecurringExpenses error: ${t.message}") }
                 .collect { list ->
+                    if (vm._currentHousehold.value?.id != householdId) return@collect
                     val mapped = list.map { rr ->
                         RecurringExpense(
                             id = RecurringExpenseAutoProcessor.resolveCloudEntityId(rr.id),
@@ -575,13 +597,13 @@ internal class OikoNomosSyncDelegate(
                     }
                     activities.forEach { if (it.id.isNotBlank()) notifiedIds.add(it.id) }
 
-                    val isEn = vm._appLanguage.value == "EN"
+                    val notifLang = com.example.util.Localization.Language.fromCode(vm._appLanguage.value)
                     val householdName = household?.name ?: "Finsay"
                     newRemote.take(2).forEachIndexed { idx, act ->
-                        val summaryText = if (isEn) {
-                            act.summaryEn.ifBlank { act.summaryEl }
-                        } else {
+                        val summaryText = if (notifLang == com.example.util.Localization.Language.GREEK) {
                             act.summaryEl.ifBlank { act.summaryEn }
+                        } else {
+                            act.summaryEn.ifBlank { act.summaryEl }
                         }
                         HouseholdActivityNotificationManager.notifyRemoteActivity(
                             context = vm.getApplication(),
@@ -589,7 +611,8 @@ internal class OikoNomosSyncDelegate(
                             actorName = act.actorName,
                             summaryText = summaryText,
                             notificationId = act.id.hashCode() + idx,
-                            isGreek = !isEn
+                            isGreek = notifLang == com.example.util.Localization.Language.GREEK,
+                            lang = notifLang
                         )
                     }
                 }
@@ -731,14 +754,23 @@ internal class OikoNomosSyncDelegate(
         )
     }
 
+    @Volatile
+    private var lastResumeHouseholdRefreshMs: Long = 0L
+
     fun onAppResumed() {
-        vm._reminderClockTickMs.value = System.currentTimeMillis()
+        val nowMs = System.currentTimeMillis()
+        vm._reminderClockTickMs.value = nowMs
         val user = vm.auth.currentUser ?: vm._currentUser.value ?: return
         if (!vm.isUserVerified(user)) return
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             try {
                 vm.firestoreSyncRepo.enableNetwork()
-                vm.refreshUserHouseholds()
+                val shouldRefreshHouseholds = vm._userHouseholds.value.isEmpty() ||
+                    (nowMs - lastResumeHouseholdRefreshMs) >= 300_000L
+                if (shouldRefreshHouseholds) {
+                    lastResumeHouseholdRefreshMs = nowMs
+                    vm.refreshUserHouseholds()
+                }
                 val hid = vm._currentHousehold.value?.id ?: vm.getOrEnsureHouseholdId(user)
                 if (hid.isNotBlank()) {
                     observeHouseholdData(hid)

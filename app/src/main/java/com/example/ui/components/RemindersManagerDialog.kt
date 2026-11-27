@@ -122,7 +122,6 @@ fun RemindersManagerDialog(
     onLogExpenseNow: (RecurringExpense) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isGreek = !appLanguage.equals("EN", ignoreCase = true)
 
     var showEditor by remember { mutableStateOf(false) }
     var reminderToEdit by remember { mutableStateOf<RecurringExpense?>(null) }
@@ -157,7 +156,7 @@ fun RemindersManagerDialog(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (isGreek) "Επιστροφή" else "Back",
+                        contentDescription = Localization.tr(lang, "Back", "Επιστροφή"),
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -177,7 +176,7 @@ fun RemindersManagerDialog(
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = if (isGreek) "Υπενθυμίσεις" else "Bill Reminders",
+                    text = Localization.tr(lang, "Bill Reminders", "Υπενθυμίσεις"),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -209,7 +208,7 @@ fun RemindersManagerDialog(
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = if (isGreek) "Νέα Υπενθύμιση Εξόδου" else "New Bill Reminder",
+                text = Localization.tr(lang, "New Bill Reminder", "Νέα Υπενθύμιση Εξόδου"),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -249,7 +248,7 @@ fun RemindersManagerDialog(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (isGreek) "Δεν υπάρχουν ακόμη υπενθυμίσεις" else "No reminders yet",
+                            text = Localization.tr(lang, "No reminders yet", "Δεν υπάρχουν ακόμη υπενθυμίσεις"),
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -258,7 +257,7 @@ fun RemindersManagerDialog(
 
                         // Quick suggestion chips
                         Text(
-                            text = if (isGreek) "Προτεινόμενα πάγια έξοδα:" else "Suggested recurring bills:",
+                            text = Localization.tr(lang, "Suggested recurring bills:", "Προτεινόμενα πάγια έξοδα:"),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -269,14 +268,15 @@ fun RemindersManagerDialog(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.padding(horizontal = 8.dp)
                         ) {
+                            data class BillSuggestion(val key: String, val emoji: String, val label: String, val defaultAmount: Double)
                             val suggestions = listOf(
-                                "🏠 " + (if (isGreek) "Ενοίκιο" else "Rent"),
-                                "⚡ " + (if (isGreek) "ΔΕΗ / Ρεύμα" else "Electricity"),
-                                "📱 " + (if (isGreek) "Κινητή & Internet" else "Mobile & Internet"),
-                                "🏋️ " + (if (isGreek) "Γυμναστήριο" else "Gym"),
-                                "📺 " + (if (isGreek) "Netflix / TV" else "Streaming")
+                                BillSuggestion("rent", "🏠", Localization.tr(lang, "Rent", "Ενοίκιο"), 450.0),
+                                BillSuggestion("electricity", "⚡", Localization.tr(lang, "Electricity", "ΔΕΗ / Ρεύμα"), 80.0),
+                                BillSuggestion("internet", "📱", Localization.tr(lang, "Mobile & Internet", "Κινητή & Internet"), 30.0),
+                                BillSuggestion("gym", "🏋️", Localization.tr(lang, "Gym", "Γυμναστήριο"), 35.0),
+                                BillSuggestion("streaming", "📺", Localization.tr(lang, "Streaming", "Netflix / TV"), 15.0)
                             )
-                            suggestions.forEach { name ->
+                            suggestions.forEach { item ->
                                 FilterChip(
                                     selected = false,
                                     onClick = {
@@ -284,36 +284,28 @@ fun RemindersManagerDialog(
                                             onShowPremiumPaywall("recurring_expense_limit")
                                             return@FilterChip
                                         }
-                                        val cleanName = name.substringAfter(" ")
                                         val matchedCat = categories.find { cat ->
-                                            val cn = cat.name.lowercase()
-                                            when {
-                                                cleanName.contains("Ενοίκιο") || cleanName.contains("Rent") -> cn.contains("σπίτι") || cn.contains("home")
-                                                cleanName.contains("Ρεύμα") || cleanName.contains("Electricity") -> cn.contains("λογαριασμ") || cn.contains("bill")
-                                                cleanName.contains("Internet") -> cn.contains("λογαριασμ") || cn.contains("bill")
-                                                cleanName.contains("Γυμναστήριο") || cleanName.contains("Gym") -> cn.contains("υγεία") || cn.contains("διασκέδαση")
+                                            val cn = Localization.translateCategory(cat.name, Localization.Language.ENGLISH).lowercase()
+                                            when (item.key) {
+                                                "rent" -> cn.contains("home") || cn.contains("housing")
+                                                "electricity", "internet" -> cn.contains("bill")
+                                                "gym" -> cn.contains("health") || cn.contains("entertainment")
                                                 else -> false
                                             }
                                         } ?: categories.firstOrNull()
 
                                         reminderToEdit = RecurringExpense(
                                             id = 0L,
-                                            title = cleanName,
-                                            amount = when {
-                                                cleanName.contains("Ενοίκιο") || cleanName.contains("Rent") -> 450.0
-                                                cleanName.contains("Ρεύμα") || cleanName.contains("Electricity") -> 80.0
-                                                cleanName.contains("Internet") -> 30.0
-                                                cleanName.contains("Γυμναστήριο") || cleanName.contains("Gym") -> 35.0
-                                                else -> 15.0
-                                            },
+                                            title = item.label,
+                                            amount = item.defaultAmount,
                                             categoryId = matchedCat?.id ?: 1L,
-                                            categoryName = matchedCat?.name ?: "Σπίτι",
+                                            categoryName = matchedCat?.name ?: Localization.translateCategory("Σπίτι", lang),
                                             dayOfMonth = 1,
-                                            note = if (isGreek) "Πάγιος λογαριασμός" else "Recurring bill"
+                                            note = Localization.tr(lang, "Recurring bill", "Πάγιος λογαριασμός")
                                         )
                                         showEditor = true
                                     },
-                                    label = { Text(name, fontSize = 12.sp) },
+                                    label = { Text("${item.emoji} ${item.label}", fontSize = 12.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                     )
@@ -336,7 +328,7 @@ fun RemindersManagerDialog(
                         ) { reminder ->
                             ReminderItemCard(
                                 reminder = reminder,
-                                isGreek = isGreek,
+                                lang = lang,
                                 onToggleActive = { onToggleActive(reminder) },
                                 onEdit = {
                                     reminderToEdit = reminder
@@ -365,7 +357,7 @@ fun RemindersManagerDialog(
                 splitType = rec.splitType.ifBlank { "ALL_FAMILY" },
                 memberIdsCsv = rec.memberIdsCsv,
                 memberNamesDisplay = rec.memberNamesDisplay.ifBlank {
-                    if (isGreek) "Κοινό Οικογένειας" else "Family Shared"
+                    Localization.familyShared(lang)
                 },
                 note = rec.note,
                 payerMemberId = rec.payerMemberId,
@@ -427,7 +419,7 @@ fun RemindersManagerDialog(
 @Composable
 private fun ReminderItemCard(
     reminder: RecurringExpense,
-    isGreek: Boolean,
+    lang: Localization.Language,
     onToggleActive: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -435,10 +427,7 @@ private fun ReminderItemCard(
     modifier: Modifier = Modifier
 ) {
     val formattedTime = String.format(Locale.US, "%02d:%02d", reminder.reminderHour, reminder.reminderMinute)
-    val scheduleText = RecurringScheduleHelper.scheduleSummary(
-        reminder,
-        if (isGreek) Localization.Language.GREEK else Localization.Language.ENGLISH
-    )
+    val scheduleText = RecurringScheduleHelper.scheduleSummary(reminder, lang)
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -498,7 +487,7 @@ private fun ReminderItemCard(
                             " → ${reminder.memberNamesDisplay}"
                         } else ""
                         Text(
-                            text = reminder.categoryName + payerPart + beneficiaryPart,
+                            text = Localization.translateCategory(reminder.categoryName, lang) + payerPart + beneficiaryPart,
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -593,7 +582,7 @@ private fun ReminderItemCard(
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isGreek) "Καταγραφή Τώρα" else "Record Now",
+                        text = Localization.tr(lang, "Record Now", "Καταγραφή Τώρα"),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1
@@ -606,7 +595,7 @@ private fun ReminderItemCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
-                        contentDescription = if (isGreek) "Επεξεργασία" else "Edit",
+                        contentDescription = Localization.tr(lang, "Edit", "Επεξεργασία"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
@@ -618,7 +607,7 @@ private fun ReminderItemCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = if (isGreek) "Διαγραφή" else "Delete",
+                        contentDescription = Localization.tr(lang, "Delete", "Διαγραφή"),
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(18.dp)
                     )

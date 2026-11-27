@@ -48,7 +48,6 @@ fun PrivacyConsentDialog(
     onAccept: () -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEnglish = lang == Localization.Language.ENGLISH
 
     Dialog(
         onDismissRequest = { /* Modal requires user interaction */ },
@@ -91,13 +90,13 @@ fun PrivacyConsentDialog(
 
                     Column {
                         Text(
-                            text = if (isEnglish) "Data Privacy & Sync" else "Προστασία & Κοινή Χρήση Δεδομένων",
+                            text = Localization.tr(lang, "Data Privacy & Sync", "Προστασία & Κοινή Χρήση Δεδομένων"),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (isEnglish) "Encrypted & private cloud storage" else "Ασφαλής & ιδιωτική αποθήκευση",
+                            text = Localization.tr(lang, "Encrypted & private cloud storage", "Ασφαλής & ιδιωτική αποθήκευση"),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -107,10 +106,11 @@ fun PrivacyConsentDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = if (isEnglish)
-                        "Your budget records are stored in a private, encrypted cloud database (GDPR compliant) to ensure your expenses stay synchronized across your devices and are securely accessible to your household."
-                    else
-                        "Τα δεδομένα σας αποθηκεύονται σε ασφαλή, κρυπτογραφημένη βάση στο cloud (σύμφωνα με το GDPR), ώστε τα έξοδά σας να συγχρονίζονται σε όλες τις συσκευές σας και να είναι προσβάσιμα στο εξοδολόγιό σας.",
+                    text = Localization.tr(
+                        lang,
+                        "Your budget records are stored in a private, encrypted cloud database (GDPR compliant) to ensure your expenses stay synchronized across your devices and are securely accessible to your household.",
+                        "Τα δεδομένα σας αποθηκεύονται σε ασφαλή, κρυπτογραφημένη βάση στο cloud (σύμφωνα με το GDPR), ώστε τα έξοδά σας να συγχρονίζονται σε όλες τις συσκευές σας και να είναι προσβάσιμα στο εξοδολόγιό σας."
+                    ),
                     fontSize = 13.sp,
                     lineHeight = 18.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -123,29 +123,32 @@ fun PrivacyConsentDialog(
                 ) {
                     SimplifiedPrivacyBullet(
                         icon = Icons.Default.Lock,
-                        title = if (isEnglish) "Full Encryption" else "Πλήρης Κρυπτογράφηση",
-                        subtitle = if (isEnglish)
-                            "Your personal finances are encrypted and protected."
-                        else
+                        title = Localization.tr(lang, "Full Encryption", "Πλήρης Κρυπτογράφηση"),
+                        subtitle = Localization.tr(
+                            lang,
+                            "Your personal finances are encrypted and protected.",
                             "Τα προσωπικά σας οικονομικά στοιχεία είναι πλήρως κρυπτογραφημένα."
+                        )
                     )
 
                     SimplifiedPrivacyBullet(
                         icon = Icons.Default.CloudDone,
-                        title = if (isEnglish) "No Third-Party Sharing" else "Μηδενική Κοινοποίηση σε Τρίτους",
-                        subtitle = if (isEnglish)
-                            "We never sell or share your data with advertisers."
-                        else
+                        title = Localization.tr(lang, "No Third-Party Sharing", "Μηδενική Κοινοποίηση σε Τρίτους"),
+                        subtitle = Localization.tr(
+                            lang,
+                            "We never sell or share your data with advertisers.",
                             "Τα στοιχεία σας δεν πωλούνται και δεν διαβιβάζονται σε διαφημιστές."
+                        )
                     )
 
                     SimplifiedPrivacyBullet(
                         icon = Icons.Default.Group,
-                        title = if (isEnglish) "Private & Secure" else "Απόλυτη Ιδιωτικότητα",
-                        subtitle = if (isEnglish)
-                            "Your personal finances belong strictly to you and remain protected."
-                        else
+                        title = Localization.tr(lang, "Private & Secure", "Απόλυτη Ιδιωτικότητα"),
+                        subtitle = Localization.tr(
+                            lang,
+                            "Your personal finances belong strictly to you and remain protected.",
                             "Τα προσωπικά σας οικονομικά ανήκουν αποκλειστικά σε εσάς και παραμένουν προστατευμένα."
+                        )
                     )
                 }
 
@@ -164,7 +167,7 @@ fun PrivacyConsentDialog(
                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isEnglish) "Accept & Continue" else "Αποδοχή & Συνέχεια",
+                        text = Localization.tr(lang, "Accept & Continue", "Αποδοχή & Συνέχεια"),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )

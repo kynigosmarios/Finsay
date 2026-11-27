@@ -16,8 +16,8 @@ android {
         applicationId = "com.kynigos.oikonomos"
         minSdk = 24
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.0.5"
+        versionCode = 7
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -107,19 +107,19 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.room.runtime)
     implementation(libs.coil.compose)
-    implementation(libs.converter.moshi)
-    implementation(libs.firebase.ai)
+    // implementation(libs.converter.moshi) // Unused
+    // implementation(libs.firebase.ai) // Unused billable SDK
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.auth)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.googleid)
-    implementation(libs.firebase.appcheck.recaptcha)
-    implementation(libs.firebase.appcheck.debug)
+    // implementation(libs.firebase.appcheck.recaptcha) // Unused
+    // implementation(libs.firebase.appcheck.debug) // Debug-only provider; never ship in release
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.logging.interceptor)
-    implementation(libs.moshi.kotlin)
+    // implementation(libs.logging.interceptor) // Unused
+    // implementation(libs.moshi.kotlin) // Unused
     implementation(libs.okhttp)
     implementation(libs.play.billing)
     implementation(libs.play.app.update)
@@ -128,10 +128,10 @@ dependencies {
     implementation(libs.play.review.ktx)
     implementation(libs.play.services.mlkit.text.recognition)
     implementation(libs.play.services.mlkit.barcode.scanning)
-    implementation(libs.retrofit)
+    // implementation(libs.retrofit) // Unused
 
     ksp(libs.androidx.room.compiler)
-    ksp(libs.moshi.kotlin.codegen)
+    // ksp(libs.moshi.kotlin.codegen) // Unused
 
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.androidx.core)

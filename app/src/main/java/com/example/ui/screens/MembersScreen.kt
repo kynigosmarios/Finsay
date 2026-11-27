@@ -107,7 +107,6 @@ fun MembersScreen(
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isGreek = lang != Localization.Language.ENGLISH
     val clipboardManager = LocalClipboardManager.current
 
     var memberToDelete by remember { mutableStateOf<FamilyMember?>(null) }
@@ -136,7 +135,7 @@ fun MembersScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isGreek) "Μέλη Εξοδολογίου" else "Household Members",
+                        text = Localization.tr(lang, "Household Members", "Μέλη Εξοδολογίου"),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -170,7 +169,7 @@ fun MembersScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isGreek) "Προσθήκη" else "Add",
+                                text = Localization.tr(lang, "Add", "Προσθήκη"),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -209,7 +208,7 @@ fun MembersScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
-                            text = if (isGreek) "Δεν υπάρχουν μέλη" else "No members added",
+                            text = Localization.tr(lang, "No members added", "Δεν υπάρχουν μέλη"),
                             fontSize = 16.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -229,7 +228,7 @@ fun MembersScreen(
                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isGreek) "Προσθήκη Μέλους" else "Add Member",
+                                    text = Localization.tr(lang, "Add Member", "Προσθήκη Μέλους"),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.5.sp
                                 )
@@ -329,7 +328,7 @@ fun MembersScreen(
                                                     color = Emerald700.copy(alpha = 0.14f)
                                                 ) {
                                                     Text(
-                                                        text = if (isGreek) "★ Προεπιλογή" else "★ Default",
+                                                        text = Localization.tr(lang, "★ Default", "★ Προεπιλογή"),
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = Emerald700,
@@ -450,7 +449,7 @@ fun MembersScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (isGreek) "Διαγραμμένα Μέλη (${deletedMembers.size})" else "Deleted Members (${deletedMembers.size})",
+                                    text = Localization.trFormat(lang, "Deleted Members (%1\$d)", "Διαγραμμένα Μέλη (%1\$d)", deletedMembers.size),
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -478,16 +477,18 @@ fun MembersScreen(
             shape = RoundedCornerShape(20.dp),
             title = {
                 Text(
-                    text = if (isGreek) "Διαγραφή Μέλους;" else "Delete Member?",
+                    text = Localization.tr(lang, "Delete Member?", "Διαγραφή Μέλους;"),
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = if (isGreek)
-                        "«${m.name}» θα μεταφερθεί στα Διαγραμμένα. Τα έξοδα και στατιστικά διατηρούνται."
-                    else
-                        "\"${m.name}\" will move to Deleted Members. Existing expenses and stats remain intact.",
+                    text = Localization.trFormat(
+                        lang,
+                        "\"%1\$s\" will move to Deleted Members. Existing expenses and stats remain intact.",
+                        "«%1\$s» θα μεταφερθεί στα Διαγραμμένα. Τα έξοδα και στατιστικά διατηρούνται.",
+                        m.name
+                    ),
                     fontSize = 13.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -500,7 +501,7 @@ fun MembersScreen(
                     }
                 ) {
                     Text(
-                        text = if (isGreek) "Διαγραφή" else "Delete",
+                        text = Localization.delete(lang),
                         color = Color(0xFFEF4444),
                         fontWeight = FontWeight.Bold
                     )
@@ -508,7 +509,7 @@ fun MembersScreen(
             },
             dismissButton = {
                 TextButton(onClick = { memberToDelete = null }) {
-                    Text(if (isGreek) "Ακύρωση" else "Cancel")
+                    Text(Localization.cancel(lang))
                 }
             }
         )
@@ -552,7 +553,7 @@ fun MembersScreen(
                             }
                         }
                         Text(
-                            text = if (isGreek) "Διαγραμμένα Μέλη" else "Deleted Members",
+                            text = Localization.tr(lang, "Deleted Members", "Διαγραμμένα Μέλη"),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -567,7 +568,7 @@ fun MembersScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (isGreek) "Δεν υπάρχουν διεγραμμένα μέλη." else "No deleted members.",
+                                text = Localization.tr(lang, "No deleted members.", "Δεν υπάρχουν διεγραμμένα μέλη."),
                                 fontSize = 13.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -646,7 +647,7 @@ fun MembersScreen(
                                                 )
                                                 Spacer(modifier = Modifier.width(3.dp))
                                                 Text(
-                                                    text = if (isGreek) "Επαναφορά" else "Restore",
+                                                    text = Localization.tr(lang, "Restore", "Επαναφορά"),
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold
                                                 )
@@ -681,10 +682,11 @@ fun MembersScreen(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                     ) {
                         Text(
-                            text = if (isGreek)
-                                "ℹ️ Η διαγραφή μέλους δεν αλλοιώνει τα παλαιότερα στατιστικά και καταχωρημένα έξοδα."
-                            else
+                            text = Localization.tr(
+                                lang,
                                 "ℹ️ Deleting a member preserves all historical statistics and recorded expenses.",
+                                "ℹ️ Η διαγραφή μέλους δεν αλλοιώνει τα παλαιότερα στατιστικά και καταχωρημένα έξοδα."
+                            ),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(10.dp)
@@ -696,7 +698,7 @@ fun MembersScreen(
                         modifier = Modifier.align(Alignment.End)
                     ) {
                         Text(
-                            text = if (isGreek) "Κλείσιμο" else "Close",
+                            text = Localization.close(lang),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -714,17 +716,19 @@ fun MembersScreen(
             shape = RoundedCornerShape(20.dp),
             title = {
                 Text(
-                    text = if (isGreek) "Οριστική Διαγραφή;" else "Permanently Delete?",
+                    text = Localization.tr(lang, "Permanently Delete?", "Οριστική Διαγραφή;"),
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFEF4444)
                 )
             },
             text = {
                 Text(
-                    text = if (isGreek)
-                        "Είστε βέβαιοι ότι θέλετε να καταργήσετε οριστικά το μέλος «${target.name}»; Τα ιστορικά έξοδα και τα στατιστικά δεν θα αλλοιωθούν."
-                    else
-                        "Are you sure you want to permanently remove member \"${target.name}\"? Historical expenses and stats will remain intact.",
+                    text = Localization.trFormat(
+                        lang,
+                        "Are you sure you want to permanently remove member \"%1\$s\"? Historical expenses and stats will remain intact.",
+                        "Είστε βέβαιοι ότι θέλετε να καταργήσετε οριστικά το μέλος «%1\$s»; Τα ιστορικά έξοδα και τα στατιστικά δεν θα αλλοιωθούν.",
+                        target.name
+                    ),
                     fontSize = 13.5.sp
                 )
             },
@@ -738,7 +742,7 @@ fun MembersScreen(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = if (isGreek) "Οριστική Διαγραφή" else "Permanently Delete",
+                        text = Localization.tr(lang, "Permanently Delete", "Οριστική Διαγραφή"),
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
@@ -746,7 +750,7 @@ fun MembersScreen(
             },
             dismissButton = {
                 TextButton(onClick = { memberToPermanentlyDelete = null }) {
-                    Text(if (isGreek) "Ακύρωση" else "Cancel")
+                    Text(Localization.cancel(lang))
                 }
             }
         )

@@ -120,7 +120,6 @@ fun AppSettingsDialog(
     onLanguageChange: (String) -> Unit = {},
     onToggleLaunchWithChooser: (Boolean) -> Unit,
     onCreateHousehold: (String) -> Unit,
-    onJoinHousehold: (String) -> Unit,
     onOpenReminders: (() -> Unit)? = null,
     onSignOut: () -> Unit,
     onClearAllDataAndSignOut: () -> Unit = {},
@@ -166,10 +165,11 @@ fun AppSettingsDialog(
                 context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
             } catch (_: Exception) {
                 onMessage(
-                    if (lang == Localization.Language.ENGLISH)
-                        "Go to Settings > Notifications > Notification access to enable Finsay"
-                    else
+                    Localization.tr(
+                        lang,
+                        "Go to Settings > Notifications > Notification access to enable Finsay",
                         "Μεταβείτε στις Ρυθμίσεις > Ειδοποιήσεις για ενεργοποίηση του Finsay"
+                    )
                 )
             }
         }
@@ -212,7 +212,7 @@ fun AppSettingsDialog(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = if (lang == Localization.Language.ENGLISH) "Back" else "Επιστροφή",
+                        contentDescription = Localization.tr(lang, "Back", "Επιστροφή"),
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -317,7 +317,7 @@ fun AppSettingsDialog(
 
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "Entry Reminder" else "Υπενθύμιση καταχώρησης",
+                                            text = Localization.tr(lang, "Entry Reminder", "Υπενθύμιση καταχώρησης"),
                                             fontSize = 13.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -396,7 +396,7 @@ fun AppSettingsDialog(
                                                 )
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
-                                                    text = if (lang == Localization.Language.ENGLISH) "Reminder Time" else "Ώρα ειδοποίησης",
+                                                    text = Localization.tr(lang, "Reminder Time", "Ώρα ειδοποίησης"),
                                                     fontSize = 13.sp,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color = MaterialTheme.colorScheme.onSurface
@@ -486,7 +486,7 @@ fun AppSettingsDialog(
                                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Bank Push Reader" else "Ανάγνωση Τραπεζικών Push",
+                                        text = Localization.tr(lang, "Bank Push Reader", "Ανάγνωση Τραπεζικών Push"),
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -515,7 +515,7 @@ fun AppSettingsDialog(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Info,
-                                            contentDescription = if (lang == Localization.Language.ENGLISH) "Info" else "Πληροφορίες",
+                                            contentDescription = Localization.tr(lang, "Info", "Πληροφορίες"),
                                             tint = Emerald700,
                                             modifier = Modifier.size(16.dp)
                                         )
@@ -584,7 +584,7 @@ fun AppSettingsDialog(
 
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
-                                                text = if (lang == Localization.Language.ENGLISH) "App Lock (Biometrics / PIN)" else "Κλείδωμα Εφαρμογής (PIN / Βιομετρικά)",
+                                                text = Localization.tr(lang, "App Lock (Biometrics / PIN)", "Κλείδωμα Εφαρμογής (PIN / Βιομετρικά)"),
                                                 fontSize = 13.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface,
@@ -592,10 +592,11 @@ fun AppSettingsDialog(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
-                                                text = if (lang == Localization.Language.ENGLISH)
-                                                    "Protect Finsay with Fingerprint, Face ID or 4-digit PIN"
-                                                else
-                                                    "Προστασία με Αποτύπωμα, Face ID ή 4-ψήφιο PIN",
+                                                text = Localization.tr(
+                                                    lang,
+                                                    "Protect Finsay with Fingerprint, Face ID or 4-digit PIN",
+                                                    "Προστασία με Αποτύπωμα, Face ID ή 4-ψήφιο PIN"
+                                                ),
                                                 fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 1,
@@ -642,7 +643,7 @@ fun AppSettingsDialog(
                                                     )
                                                     Spacer(modifier = Modifier.width(10.dp))
                                                     Text(
-                                                        text = if (lang == Localization.Language.ENGLISH) "Unlock with Biometrics" else "Ξεκλείδωμα με Βιομετρικά",
+                                                        text = Localization.tr(lang, "Unlock with Biometrics", "Ξεκλείδωμα με Βιομετρικά"),
                                                         fontSize = 12.5.sp,
                                                         fontWeight = FontWeight.Medium,
                                                         color = MaterialTheme.colorScheme.onSurface,
@@ -691,7 +692,7 @@ fun AppSettingsDialog(
                                                     )
                                                     Spacer(modifier = Modifier.width(6.dp))
                                                     Text(
-                                                        text = if (lang == Localization.Language.ENGLISH) "Change 4-digit PIN" else "Αλλαγή 4-ψήφιου PIN",
+                                                        text = Localization.tr(lang, "Change 4-digit PIN", "Αλλαγή 4-ψήφιου PIN"),
                                                         fontSize = 12.5.sp,
                                                         fontWeight = FontWeight.SemiBold,
                                                         color = Emerald700
@@ -723,28 +724,12 @@ fun AppSettingsDialog(
                         }
                     }
 
-                    // Section: Επιλογή Γλώσσας (Language Selection)
+                    // Section: Επιλογή Γλώσσας (Language Selection - 10 Languages)
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            LanguageOptionCard(
-                                title = "Ελληνικά",
-                                flag = "🇬🇷",
-                                isSelected = appLanguage == "EL",
-                                onClick = { onLanguageChange("EL") },
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            LanguageOptionCard(
-                                title = "English",
-                                flag = "🇬🇧",
-                                isSelected = appLanguage == "EN",
-                                onClick = { onLanguageChange("EN") },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                        LanguageSettingsCard(
+                            currentLanguageCode = appLanguage,
+                            onSelectLanguage = onLanguageChange
+                        )
                     }
 
                     // Section: Διαχείριση Δεδομένων (Clear Household Data Row)
@@ -805,19 +790,21 @@ fun AppSettingsDialog(
             shape = RoundedCornerShape(22.dp),
             title = {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH) "Clear Household Data?" else "Εκκαθάριση Δεδομένων Εξοδολογίου;",
+                    text = Localization.tr(lang, "Clear Household Data?", "Εκκαθάριση Δεδομένων Εξοδολογίου;"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp
                 )
             },
             text = {
-                val householdTitle = household?.name?.ifBlank { null }
-                    ?: if (lang == Localization.Language.ENGLISH) "active household" else "τρέχον εξοδολόγιο"
+                val householdTitle = household?.name?.ifBlank { null }?.let { Localization.translateHouseholdName(it, lang) }
+                    ?: Localization.tr(lang, "active household", "τρέχον εξοδολόγιο")
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH)
-                        "All expenses, incomes, members, categories, goals, and reminders of \"$householdTitle\" will be cleared. A backup remains safely stored in Firebase so the owner can restore it if needed."
-                    else
-                        "Θα εκκαθαριστούν όλα τα έξοδα, έσοδα, μέλη, κατηγορίες, στόχοι και υπενθυμίσεις από το «$householdTitle». Τα δεδομένα διατηρούνται με ασφάλεια στο Firebase για επαναφορά από τον ιδιοκτήτη αν χρειαστεί.",
+                    text = Localization.trFormat(
+                        lang,
+                        "All expenses, incomes, members, categories, goals, and reminders of \"%1\$s\" will be cleared. A backup remains safely stored in Firebase so the owner can restore it if needed.",
+                        "Θα εκκαθαριστούν όλα τα έξοδα, έσοδα, μέλη, κατηγορίες, στόχοι και υπενθυμίσεις από το «%1\$s». Τα δεδομένα διατηρούνται με ασφάλεια στο Firebase για επαναφορά από τον ιδιοκτήτη αν χρειαστεί.",
+                        householdTitle
+                    ),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -834,7 +821,7 @@ fun AppSettingsDialog(
                     modifier = Modifier.testTag("confirm_clear_household_data_btn")
                 ) {
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Clear Data" else "Εκκαθάριση",
+                        text = Localization.tr(lang, "Clear Data", "Εκκαθάριση"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.5.sp
                     )
@@ -886,7 +873,7 @@ fun AppSettingsDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Bank Push Reader" else "Ανάγνωση Τραπεζικών Push",
+                        text = Localization.tr(lang, "Bank Push Reader", "Ανάγνωση Τραπεζικών Push"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     )
@@ -894,10 +881,11 @@ fun AppSettingsDialog(
             },
             text = {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH)
-                        "This feature automatically detects purchase push notifications STRICTLY from supported banks & wallets:\n\n• Google Pay / Google Wallet\n• Eurobank\n• Alpha Bank\n• National Bank of Greece (NBG)\n• Piraeus Bank\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nIt NEVER triggers from emails or non-banking notifications. All processing is 100% private and on-device."
-                    else
-                        "Η λειτουργία αυτή αναγνωρίζει αυτόματα ειδοποιήσεις αγορών (Push Notifications) ΑΥΣΤΗΡΑ και μόνο από τις υποστηριζόμενες τράπεζες & πορτοφόλια:\n\n• Google Pay / Πορτοφόλι Google\n• Eurobank\n• Alpha Bank\n• Εθνική Τράπεζα (NBG)\n• Τράπεζα Πειραιώς\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nΔεν ενεργοποιείται ΠΟΤΕ από emails ή άλλες προσωπικές ειδοποιήσεις. Η επεξεργασία γίνεται 100% τοπικά στη συσκευή σας για απόλυτη ασφάλεια.",
+                    text = Localization.tr(
+                        lang,
+                        "This feature automatically detects purchase push notifications STRICTLY from supported banks & wallets:\n\n• Google Pay / Google Wallet\n• Eurobank\n• Alpha Bank\n• National Bank of Greece (NBG)\n• Piraeus Bank\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nIt NEVER triggers from emails or non-banking notifications. All processing is 100% private and on-device.",
+                        "Η λειτουργία αυτή αναγνωρίζει αυτόματα ειδοποιήσεις αγορών (Push Notifications) ΑΥΣΤΗΡΑ και μόνο από τις υποστηριζόμενες τράπεζες & πορτοφόλια:\n\n• Google Pay / Πορτοφόλι Google\n• Eurobank\n• Alpha Bank\n• Εθνική Τράπεζα (NBG)\n• Τράπεζα Πειραιώς\n• Revolut\n• Payzy\n• Viber Pay\n• PayPal\n• Snappi\n\nΔεν ενεργοποιείται ΠΟΤΕ από emails ή άλλες προσωπικές ειδοποιήσεις. Η επεξεργασία γίνεται 100% τοπικά στη συσκευή σας για απόλυτη ασφάλεια."
+                    ),
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -929,10 +917,11 @@ fun AppSettingsDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH)
-                            "Notification Access Disclosure"
-                        else
-                            "Γνωστοποίηση Πρόσβασης Ειδοποιήσεων",
+                        text = Localization.tr(
+                            lang,
+                            "Notification Access Disclosure",
+                            "Γνωστοποίηση Πρόσβασης Ειδοποιήσεων"
+                        ),
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.5.sp
                     )
@@ -940,18 +929,19 @@ fun AppSettingsDialog(
             },
             text = {
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH)
+                    text = Localization.tr(
+                        lang,
                         "To automatically suggest expense entries from your card and wallet payments, Finsay requests Android Notification Access (NotificationListenerService).\n\n" +
                             "• What is read: Strictly incoming payment push notifications from supported banking & wallet apps (Google Pay/Wallet, Eurobank, Alpha Bank, NBG, Piraeus Bank, Revolut, Payzy, Viber Pay, PayPal, Snappi) to extract only the transaction amount and merchant name.\n" +
                             "• What is NEVER read: Personal messages, SMS, OTP codes, emails, or notifications from any other app are immediately ignored.\n" +
                             "• Privacy: 100% of notification parsing runs locally on your device. Notification text is never uploaded, logged, or shared with third parties or advertisers.\n\n" +
-                            "By tapping \"Accept & Continue\", you agree to enable this feature and proceed to Android Notification Access settings."
-                    else
+                            "By tapping \"Accept & Continue\", you agree to enable this feature and proceed to Android Notification Access settings.",
                         "Για να σας προτείνει αυτόματα καταχώρηση εξόδων από τις πληρωμές με κάρτα ή ψηφιακό πορτοφόλι, το Finsay ζητά άδεια Πρόσβασης Ειδοποιήσεων Android (NotificationListenerService).\n\n" +
                             "• Τι διαβάζεται: Αποκλειστικά και μόνο εισερχόμενες τραπεζικές ειδοποιήσεις πληρωμών από υποστηριζόμενες εφαρμογές (Google Pay/Wallet, Eurobank, Alpha Bank, Εθνική Τράπεζα, Πειραιώς, Revolut, Payzy, Viber Pay, PayPal, Snappi) για εξαγωγή μόνο του ποσού και του καταστήματος.\n" +
                             "• Τι ΔΕΝ διαβάζεται ποτέ: Προσωπικά μηνύματα, SMS, κωδικοί OTP, emails ή ειδοποιήσεις από άλλες εφαρμογές αγνοούνται άμεσα.\n" +
                             "• Ιδιωτικότητα: Η επεξεργασία γίνεται 100% τοπικά στη συσκευή σας. Το κείμενο των ειδοποιήσεων δεν αποστέλλεται και δεν κοινοποιείται ποτέ σε τρίτους ή διαφημιστές.\n\n" +
-                            "Πατώντας «Αποδοχή & Συνέχεια», συναινείτε στην ενεργοποίηση και θα μεταφερθείτε στις ρυθμίσεις Πρόσβασης Ειδοποιήσεων του Android.",
+                            "Πατώντας «Αποδοχή & Συνέχεια», συναινείτε στην ενεργοποίηση και θα μεταφερθείτε στις ρυθμίσεις Πρόσβασης Ειδοποιήσεων του Android."
+                    ),
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -969,7 +959,7 @@ fun AppSettingsDialog(
                     modifier = Modifier.testTag("bank_disclosure_accept_btn")
                 ) {
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Accept & Continue" else "Αποδοχή & Συνέχεια",
+                        text = Localization.tr(lang, "Accept & Continue", "Αποδοχή & Συνέχεια"),
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.5.sp

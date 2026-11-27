@@ -135,8 +135,8 @@ fun VoiceConfirmationDialog(
         }
         if (list.isEmpty()) {
             val cleanPayer = pendingExpense.payerMemberName.replace(Regex("\\([^)]*\\)"), "").trim()
-            if (cleanPayer.equals("Γονείς", ignoreCase = true) || cleanPayer.equals("Parents", ignoreCase = true)) {
-                val parents = members.filter { it.role.equals("Γονέας", ignoreCase = true) }
+            if (Localization.canonicalRoleKey(cleanPayer) == "PARENT") {
+                val parents = members.filter { Localization.canonicalRoleKey(it.role) == "PARENT" }
                 if (parents.isNotEmpty()) list.addAll(parents.map { it.id })
             } else {
                 val names = cleanPayer.split(Regex("[&,/]+")).map { it.trim() }.filter { it.isNotBlank() }
@@ -152,7 +152,7 @@ fun VoiceConfirmationDialog(
             if (!pendingExpense.hasExplicitPayer && validDefaultPayers.isNotEmpty()) {
                 list.addAll(validDefaultPayers.map { it.id })
             } else {
-                val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                val def = members.firstOrNull { Localization.canonicalRoleKey(it.role) == "PARENT" }
                     ?: members.firstOrNull()
                 if (def != null) list.add(def.id)
             }
@@ -647,16 +647,17 @@ fun VoiceConfirmationDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = if (lang == Localization.Language.ENGLISH) "Equal division:" else "Ισόποσος καταμερισμός:",
+                                            text = Localization.tr(lang, "Equal division:", "Ισόποσος καταμερισμός:"),
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = if (lang == Localization.Language.ENGLISH) {
-                                                "${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol / person"
-                                            } else {
-                                                "${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol / άτομο"
-                                            },
+                                            text = Localization.trFormat(
+                                                lang,
+                                                "%1\$s / person",
+                                                "%1\$s / άτομο",
+                                                "${String.format(Locale.US, "%.2f", equalShare)} $currencySymbol"
+                                            ),
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = Emerald700
@@ -841,7 +842,7 @@ fun VoiceConfirmationDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Who is this for?" else "Σε ποιον αφορά;",
+                            text = Localization.tr(lang, "Who is this for?", "Σε ποιον αφορά;"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -873,7 +874,7 @@ fun VoiceConfirmationDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "All members" else "Όλα τα μέλη",
+                                text = Localization.tr(lang, "All members", "Όλα τα μέλη"),
                                 fontSize = 13.sp,
                                 fontWeight = if (isAllFamily) FontWeight.Bold else FontWeight.Normal
                             )
@@ -939,7 +940,7 @@ fun VoiceConfirmationDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Per person: " else "Ανά άτομο: ",
+                                    text = Localization.tr(lang, "Per person: ", "Ανά άτομο: "),
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -996,7 +997,7 @@ fun VoiceConfirmationDialog(
                             val chosenCat = categories.find { it.id == selectedCategoryId }
                                 ?: categories.firstOrNull()
                             val catId = chosenCat?.id ?: 1L
-                            val catName = chosenCat?.name ?: if (lang == Localization.Language.ENGLISH) "General" else "Γενικά"
+                            val catName = chosenCat?.name ?: Localization.tr(lang, "General", "Γενικά")
 
                             val splitType = if (isAllFamily) "ALL_FAMILY" else "SPECIFIC_MEMBERS"
                             val finalMemberIds = if (isAllFamily) {
@@ -1006,7 +1007,7 @@ fun VoiceConfirmationDialog(
                             }
 
                             val memberDisplay = if (isAllFamily) {
-                                if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
+                                Localization.allMembersWord(lang)
                             } else {
                                 val active = members.filter { finalMemberIds.contains(it.id) }
                                 Localization.resolveMemberGroupDisplay(active, members, lang)
@@ -1016,7 +1017,7 @@ fun VoiceConfirmationDialog(
                                 if (validDefaultPayers.isNotEmpty()) {
                                     validDefaultPayers.map { it.id }
                                 } else {
-                                    val def = members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                                    val def = members.firstOrNull { Localization.canonicalRoleKey(it.role) == "PARENT" }
                                         ?: members.firstOrNull()
                                     if (def != null) listOf(def.id) else emptyList()
                                 }

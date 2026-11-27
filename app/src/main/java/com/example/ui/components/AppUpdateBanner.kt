@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.ui.theme.Emerald700
+import com.example.util.Localization
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -65,7 +66,7 @@ fun AppUpdateBanner(
     onDismissClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isGreek = !appLanguage.equals("EN", ignoreCase = true)
+    val lang = Localization.Language.fromCode(appLanguage)
     val currentOnUpdate by rememberUpdatedState(onUpdateClick)
     val currentOnDismiss by rememberUpdatedState(onDismissClick)
 
@@ -102,7 +103,7 @@ fun AppUpdateBanner(
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = if (isGreek) "Αγνόηση" else "Ignore",
+                        text = Localization.tr(lang, "Ignore", "Αγνόηση"),
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
@@ -192,7 +193,7 @@ fun AppUpdateBanner(
                     }
 
                     Text(
-                        text = if (isGreek) "Διαθέσιμη Ενημέρωση" else "Update Available",
+                        text = Localization.tr(lang, "Update Available", "Διαθέσιμη Ενημέρωση"),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -209,7 +210,7 @@ fun AppUpdateBanner(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = if (isGreek) "Αγνόηση" else "Ignore",
+                            contentDescription = Localization.tr(lang, "Ignore", "Αγνόηση"),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(18.dp)
                         )
@@ -219,7 +220,7 @@ fun AppUpdateBanner(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = if (isGreek) "Υπάρχει νέα έκδοση του Finsay" else "A new version of Finsay is available",
+                    text = Localization.tr(lang, "A new version of Finsay is available", "Υπάρχει νέα έκδοση του Finsay"),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -230,11 +231,11 @@ fun AppUpdateBanner(
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = if (isGreek) {
+                    text = Localization.tr(
+                        lang,
+                        "Update from Google Play to get the latest improvements and fixes.",
                         "Ενημερώστε από το Google Play για τις πιο πρόσφατες βελτιώσεις και διορθώσεις."
-                    } else {
-                        "Update from Google Play to get the latest improvements and fixes."
-                    },
+                    ),
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -264,7 +265,7 @@ fun AppUpdateBanner(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isGreek) "Ενημέρωση" else "Update",
+                            text = Localization.tr(lang, "Update", "Ενημέρωση"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -281,7 +282,7 @@ fun AppUpdateBanner(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                     ) {
                         Text(
-                            text = if (isGreek) "Αγνόηση" else "Ignore",
+                            text = Localization.tr(lang, "Ignore", "Αγνόηση"),
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,

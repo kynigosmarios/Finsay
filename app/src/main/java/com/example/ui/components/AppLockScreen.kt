@@ -35,6 +35,7 @@ import androidx.fragment.app.FragmentActivity
 import com.example.R
 import com.example.ui.theme.Emerald700
 import com.example.util.AppLockManager
+import com.example.util.Localization
 
 @Composable
 fun AppLockScreen(
@@ -42,7 +43,7 @@ fun AppLockScreen(
     onUnlocked: () -> Unit
 ) {
     val context = LocalContext.current
-    val isEn = appLanguage.equals("en", ignoreCase = true)
+    val lang = Localization.Language.fromCode(appLanguage)
     var enteredPin by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
 
@@ -50,7 +51,7 @@ fun AppLockScreen(
         AppLockManager.isBiometricEnabled(context) && AppLockManager.canUseBiometrics(context)
     }
 
-    val triggerBiometric: () -> Unit = remember(context, isEn, onUnlocked) {
+    val triggerBiometric: () -> Unit = remember(context, lang, onUnlocked) {
         {
             val activity = context as? FragmentActivity
             if (activity != null && AppLockManager.canUseBiometrics(context)) {
@@ -67,12 +68,15 @@ fun AppLockScreen(
                         }
                     )
                     val info = BiometricPrompt.PromptInfo.Builder()
-                        .setTitle(if (isEn) "Unlock Finsay" else "Ξεκλείδωμα Finsay")
+                        .setTitle(Localization.tr(lang, "Unlock Finsay", "Ξεκλείδωμα Finsay"))
                         .setSubtitle(
-                            if (isEn) "Verify your identity to access your finances"
-                            else "Επιβεβαιώστε την ταυτότητά σας για πρόσβαση"
+                            Localization.tr(
+                                lang,
+                                "Verify your identity to access your finances",
+                                "Επιβεβαιώστε την ταυτότητά σας για πρόσβαση"
+                            )
                         )
-                        .setNegativeButtonText(if (isEn) "Use PIN" else "Χρήση PIN")
+                        .setNegativeButtonText(Localization.tr(lang, "Use PIN", "Χρήση PIN"))
                         .setAllowedAuthenticators(
                             BiometricManager.Authenticators.BIOMETRIC_STRONG or
                                 BiometricManager.Authenticators.BIOMETRIC_WEAK
@@ -146,7 +150,7 @@ fun AppLockScreen(
                 Spacer(modifier = Modifier.height(18.dp))
 
                 Text(
-                    text = if (isEn) "Finsay is locked" else "Το Finsay είναι κλειδωμένο",
+                    text = Localization.tr(lang, "Finsay is locked", "Το Finsay είναι κλειδωμένο"),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
@@ -154,9 +158,9 @@ fun AppLockScreen(
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = if (isError) {
-                        if (isEn) "Incorrect PIN. Please try again." else "Λάθος PIN. Δοκιμάστε ξανά."
+                        Localization.tr(lang, "Incorrect PIN. Please try again.", "Λάθος PIN. Δοκιμάστε ξανά.")
                     } else {
-                        if (isEn) "Enter your 4-digit PIN to continue" else "Εισάγετε το 4-ψήφιο PIN σας"
+                        Localization.tr(lang, "Enter your 4-digit PIN to continue", "Εισάγετε το 4-ψήφιο PIN σας")
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -214,7 +218,7 @@ fun AppLockPinSetupDialog(
     onPinConfirmed: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val isEn = appLanguage.equals("en", ignoreCase = true)
+    val lang = Localization.Language.fromCode(appLanguage)
     var step by remember { mutableIntStateOf(0) } // 0 = enter new PIN, 1 = confirm PIN
     var firstPin by remember { mutableStateOf("") }
     var currentInput by remember { mutableStateOf("") }
@@ -280,9 +284,9 @@ fun AppLockPinSetupDialog(
 
                 Text(
                     text = when {
-                        step == 1 -> if (isEn) "Confirm 4-digit PIN" else "Επιβεβαίωση 4-ψήφιου PIN"
-                        isChangingExisting -> if (isEn) "Set New PIN" else "Ορισμός Νέου PIN"
-                        else -> if (isEn) "Create 4-digit PIN" else "Δημιουργία 4-ψήφιου PIN"
+                        step == 1 -> Localization.tr(lang, "Confirm 4-digit PIN", "Επιβεβαίωση 4-ψήφιου PIN")
+                        isChangingExisting -> Localization.tr(lang, "Set New PIN", "Ορισμός Νέου PIN")
+                        else -> Localization.tr(lang, "Create 4-digit PIN", "Δημιουργία 4-ψήφιου PIN")
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
@@ -293,9 +297,13 @@ fun AppLockPinSetupDialog(
 
                 Text(
                     text = when {
-                        mismatchError -> if (isEn) "PINs did not match. Try again." else "Τα PIN δεν ταιριάζουν. Δοκιμάστε ξανά."
-                        step == 1 -> if (isEn) "Re-enter your PIN to confirm" else "Πληκτρολογήστε ξανά το PIN σας"
-                        else -> if (isEn) "Used as fallback alongside Fingerprint / Face ID" else "Χρησιμοποιείται μαζί με Δακτυλικό Αποτύπωμα / Face ID"
+                        mismatchError -> Localization.tr(lang, "PINs did not match. Try again.", "Τα PIN δεν ταιριάζουν. Δοκιμάστε ξανά.")
+                        step == 1 -> Localization.tr(lang, "Re-enter your PIN to confirm", "Πληκτρολογήστε ξανά το PIN σας")
+                        else -> Localization.tr(
+                            lang,
+                            "Used as fallback alongside Fingerprint / Face ID",
+                            "Χρησιμοποιείται μαζί με Δακτυλικό Αποτύπωμα / Face ID"
+                        )
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = if (mismatchError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -347,7 +355,7 @@ fun AppLockPinSetupDialog(
                     modifier = Modifier.testTag("app_lock_pin_cancel")
                 ) {
                     Text(
-                        text = if (isEn) "Cancel" else "Ακύρωση",
+                        text = Localization.cancel(lang),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold
                     )

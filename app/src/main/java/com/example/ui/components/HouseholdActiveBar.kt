@@ -46,8 +46,10 @@ fun HouseholdActiveBar(
     onRefreshSync: (() -> Unit)? = null
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEn = lang == Localization.Language.ENGLISH
-    val displayName = currentHousehold?.name?.ifBlank { if (isEn) "My Household Book" else "Το Εξοδολόγιό μου" } ?: if (isEn) "My Household Book" else "Το Εξοδολόγιό μου"
+    val displayName = currentHousehold?.name
+        ?.takeIf { it.isNotBlank() }
+        ?.let { Localization.translateHouseholdName(it, lang) }
+        ?: Localization.defaultHouseholdName(lang)
 
     val syncColor = when (syncStatus) {
         SyncStatusState.SYNCING -> Amber700
@@ -86,7 +88,7 @@ fun HouseholdActiveBar(
             ) {
                 Icon(
                     imageVector = Icons.Default.Home,
-                    contentDescription = if (isEn) "Active Household" else "Ενεργό Εξοδολόγιο",
+                    contentDescription = Localization.tr(lang, "Active Household", "Ενεργό Εξοδολόγιο"),
                     tint = Emerald700,
                     modifier = Modifier.size(17.dp)
                 )
@@ -174,7 +176,7 @@ fun HouseholdActiveBar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.SwapHoriz,
-                        contentDescription = if (isEn) "Switch Household" else "Αλλαγή Εξοδολογίου",
+                        contentDescription = Localization.tr(lang, "Switch Household", "Αλλαγή Εξοδολογίου"),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )

@@ -68,7 +68,6 @@ internal fun AnalyticsSettleUpCard(
     activeDrillDownPeriodKey: String,
     settlePeriodTimestamp: Long,
     lang: Localization.Language,
-    isGreek: Boolean,
     onDrillDownToHome: (HomeDrillDownRequest) -> Unit,
     onSettleTransfer: (FamilyMember, FamilyMember, Double, Long) -> Unit
 ) {
@@ -97,14 +96,14 @@ internal fun AnalyticsSettleUpCard(
                 icon = Icons.Default.SwapHoriz,
                 iconTint = MaterialTheme.colorScheme.primary,
                 iconContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                title = if (isGreek) "Εκκαθάριση Εξόδων" else "Expense Settle-Up",
+                title = Localization.tr(lang, "Expense Settle-Up", "Εκκαθάριση Εξόδων"),
                 badge = {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = Emerald700.copy(alpha = 0.12f)
                     ) {
                         Text(
-                            text = if (settleUpResult.isBalanced) (if (isGreek) "ΙΣΟΣΚΕΛΙΣΜΕΝΟ" else "BALANCED") else "${settleUpResult.transfers.size} ${if (isGreek) "μεταφορές" else "transfers"}",
+                            text = if (settleUpResult.isBalanced) Localization.tr(lang, "BALANCED", "ΙΣΟΣΚΕΛΙΣΜΕΝΟ") else Localization.trFormat(lang, "%1\$d transfers", "%1\$d μεταφορές", settleUpResult.transfers.size),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (settleUpResult.isBalanced) Emerald700 else Amber700,
@@ -122,7 +121,7 @@ internal fun AnalyticsSettleUpCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (isGreek) "✅ Όλα τα μερίδια είναι τακτοποιημένα!" else "✅ All member shares are balanced!",
+                        text = Localization.tr(lang, "✅ All member shares are balanced!", "✅ Όλα τα μερίδια είναι τακτοποιημένα!"),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Emerald700,
@@ -160,7 +159,7 @@ internal fun AnalyticsSettleUpCard(
                                                 )
                                             } else {
                                                 AnalyticsSpecialFilter(
-                                                    badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${t.toMember.name}",
+                                                    badgeLabel = "${Localization.tr(lang, "Paid by", "Πλήρωσε")}: ${t.toMember.name}",
                                                     payerMemberId = t.toMember.id
                                                 )
                                             }
@@ -236,7 +235,7 @@ internal fun AnalyticsSettleUpCard(
 
             Spacer(modifier = Modifier.height(14.dp))
             Text(
-                text = if (isGreek) "Ανάλυση ανά Μέλος:" else "Per-Member Breakdown:",
+                text = Localization.tr(lang, "Per-Member Breakdown:", "Ανάλυση ανά Μέλος:"),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -254,7 +253,7 @@ internal fun AnalyticsSettleUpCard(
                                     periodKey = activeDrillDownPeriodKey,
                                     typeFilter = "EXPENSE",
                                     specialFilter = AnalyticsSpecialFilter(
-                                        badgeLabel = "${if (isGreek) "Πλήρωσε" else "Paid by"}: ${s.member.name}",
+                                        badgeLabel = "${Localization.tr(lang, "Paid by", "Πλήρωσε")}: ${s.member.name}",
                                         payerMemberId = s.member.id
                                     )
                                 )
@@ -281,7 +280,7 @@ internal fun AnalyticsSettleUpCard(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "${if (isGreek) "Πλ." else "Paid"} ${String.format(Locale.GERMANY, "%.0f", s.totalPaid)}$currencySymbol • ${if (isGreek) "Μερ." else "Share"} ${String.format(Locale.GERMANY, "%.0f", s.totalShare)}$currencySymbol",
+                            text = "${Localization.tr(lang, "Paid", "Πλ.")} ${String.format(Locale.GERMANY, "%.0f", s.totalPaid)}$currencySymbol • ${Localization.tr(lang, "Share", "Μερ.")} ${String.format(Locale.GERMANY, "%.0f", s.totalShare)}$currencySymbol",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -312,8 +311,8 @@ internal fun AnalyticsSettleUpCard(
                 onClick = {
                     val text = SettleUpCalculator.formatSummaryText(
                         result = settleUpResult,
-                        householdTitle = if (isGreek) "Εξοδολόγιο" else "Household",
-                        isGreek = isGreek,
+                        householdTitle = Localization.tr(lang, "Household", "Εξοδολόγιο"),
+                        lang = lang,
                         currencySymbol = currencySymbol
                     )
                     clipboardManager.setText(AnnotatedString(text))
@@ -327,7 +326,7 @@ internal fun AnalyticsSettleUpCard(
                 Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isGreek) "Αντιγραφή" else "Copy",
+                    text = Localization.tr(lang, "Copy", "Αντιγραφή"),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )

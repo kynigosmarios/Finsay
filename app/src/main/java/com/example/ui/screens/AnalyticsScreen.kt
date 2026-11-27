@@ -68,7 +68,6 @@ fun AnalyticsScreen(
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isGreek = lang != Localization.Language.ENGLISH
     val context = LocalContext.current
     var splitMode by remember { mutableIntStateOf(initialSplitMode) }
     var chartTypeFamily by remember { mutableIntStateOf(0) }
@@ -126,7 +125,7 @@ fun AnalyticsScreen(
 
     val activePeriodDisplay = when (filterScope) {
         "ALL" -> Localization.allMonthsCombined(lang)
-        "YEAR" -> if (lang == Localization.Language.ENGLISH) "Year $selectedYearKey" else "Έτος $selectedYearKey"
+        "YEAR" -> Localization.trFormat(lang, "Year %1\$s", "Έτος %1\$s", selectedYearKey)
         else -> if (selectedPeriodKey == "CURRENT_MONTH" || selectedPeriodKey == currentMonthKey) currentMonthLabel else getMonthLabel(selectedPeriodKey)
     }
 
@@ -296,8 +295,8 @@ fun AnalyticsScreen(
             .sortedByDescending { it.second }
     }
 
-    val parentsList = remember(members) { members.filter { it.role.equals("Γονέας", ignoreCase = true) } }
-    val kidsMembers = remember(members) { members.filter { it.role.equals("Παιδί", ignoreCase = true) } }
+    val parentsList = remember(members) { members.filter { Localization.canonicalRoleKey(it.role) == "PARENT" } }
+    val kidsMembers = remember(members) { members.filter { Localization.canonicalRoleKey(it.role) == "CHILD" } }
     val hasFamilyWithKids = remember(parentsList, kidsMembers) { parentsList.isNotEmpty() && kidsMembers.isNotEmpty() }
 
     val displayedMembers = remember(splitMode, hasFamilyWithKids, members, parentsList, kidsMembers) {
@@ -331,7 +330,7 @@ fun AnalyticsScreen(
         var kSpend = 0.0
         members.forEach { m ->
             val spend = indSpendMap[m] ?: 0.0
-            if (m.role.equals("Παιδί", ignoreCase = true)) {
+            if (Localization.canonicalRoleKey(m.role) == "CHILD") {
                 kSpend += spend
             } else {
                 dirParents += spend
@@ -344,7 +343,7 @@ fun AnalyticsScreen(
             shares.forEach { share ->
                 val payer = members.find { it.id == share.memberId }
                     ?: members.find { it.name.equals(share.memberName, ignoreCase = true) }
-                    ?: members.firstOrNull { it.role.equals("Γονέας", ignoreCase = true) }
+                    ?: members.firstOrNull { Localization.canonicalRoleKey(it.role) == "PARENT" }
                     ?: members.firstOrNull()
                 if (payer != null) {
                     pSpendMap[payer] = (pSpendMap[payer] ?: 0.0) + share.amount
@@ -360,7 +359,7 @@ fun AnalyticsScreen(
                 val comShare = when {
                     splitMode == 2 -> 0.0
                     hasFamilyWithKids -> {
-                        if (member.role.equals("Γονέας", ignoreCase = true) && parentsList.isNotEmpty()) {
+                        if (Localization.canonicalRoleKey(member.role) == "PARENT" && parentsList.isNotEmpty()) {
                             commonSpend / parentsList.size
                         } else if (parentsList.isEmpty() && members.isNotEmpty()) {
                             commonSpend / members.size
@@ -542,7 +541,6 @@ fun AnalyticsScreen(
                 chartTypeMembers = chartTypeMembers,
                 activeDrillDownPeriodKey = activeDrillDownPeriodKey,
                 appLanguage = appLanguage,
-                isGreek = isGreek,
                 lang = lang,
                 onSplitModeChange = { splitMode = it },
                 onChartTypeMembersChange = { chartTypeMembers = it },
@@ -584,7 +582,6 @@ fun AnalyticsScreen(
                     activeDrillDownPeriodKey = activeDrillDownPeriodKey,
                     settlePeriodTimestamp = settlePeriodTimestamp,
                     lang = lang,
-                    isGreek = isGreek,
                     onDrillDownToHome = onDrillDownToHome,
                     onSettleTransfer = onSettleTransfer
                 )
@@ -598,7 +595,6 @@ fun AnalyticsScreen(
                 categories = categories,
                 members = members,
                 isPro = isPro,
-                isGreek = isGreek,
                 lang = lang,
                 context = context,
                 onShowPremiumPaywall = onShowPremiumPaywall

@@ -75,7 +75,6 @@ fun NotificationConsentScreen(
 ) {
     val context = LocalContext.current
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEnglish = lang == Localization.Language.ENGLISH
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -151,7 +150,7 @@ fun NotificationConsentScreen(
                 Spacer(modifier = Modifier.height(26.dp))
 
                 Text(
-                    text = if (isEnglish) "Stay Updated & in Control" else "Ενεργοποίηση Ενημερώσεων",
+                    text = Localization.tr(lang, "Stay Updated & in Control", "Ενεργοποίηση Ενημερώσεων"),
                     fontFamily = ModernFontFamily,
                     fontWeight = FontWeight.Black,
                     fontSize = 24.sp,
@@ -162,10 +161,11 @@ fun NotificationConsentScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = if (isEnglish)
-                        "Receive gentle reminders to log your expenses, budget alerts, and household sync notifications."
-                    else
-                        "Λάβετε διακριτικές υπενθυμίσεις για την καταγραφή των εξόδων σας, ειδοποιήσεις υπέρβασης προϋπολογισμού και ενημερώσεις συγχρονισμού.",
+                    text = Localization.tr(
+                        lang,
+                        "Receive gentle reminders to log your expenses, budget alerts, and household sync notifications.",
+                        "Λάβετε διακριτικές υπενθυμίσεις για την καταγραφή των εξόδων σας, ειδοποιήσεις υπέρβασης προϋπολογισμού και ενημερώσεις συγχρονισμού."
+                    ),
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -178,33 +178,36 @@ fun NotificationConsentScreen(
                 // Feature Highlights Cards
                 NotificationBenefitItem(
                     icon = Icons.Default.Alarm,
-                    title = if (isEnglish) "Daily Expense Reminders" else "Καθημερινή Υπενθύμιση",
-                    description = if (isEnglish)
-                        "A subtle daily prompt at your preferred time so no expense is forgotten."
-                    else
+                    title = Localization.tr(lang, "Daily Expense Reminders", "Καθημερινή Υπενθύμιση"),
+                    description = Localization.tr(
+                        lang,
+                        "A subtle daily prompt at your preferred time so no expense is forgotten.",
                         "Μια διακριτική ειδοποίηση την ώρα που επιθυμείτε για να μην ξεχνάτε καμία συναλλαγή."
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 NotificationBenefitItem(
                     icon = Icons.Default.PieChart,
-                    title = if (isEnglish) "Budget & Limit Alerts" else "Ειδοποιήσεις Προϋπολογισμού",
-                    description = if (isEnglish)
-                        "Get notified before you exceed your monthly category limits."
-                    else
+                    title = Localization.tr(lang, "Budget & Limit Alerts", "Ειδοποιήσεις Προϋπολογισμού"),
+                    description = Localization.tr(
+                        lang,
+                        "Get notified before you exceed your monthly category limits.",
                         "Ενημερωθείτε έγκαιρα πριν ξεπεράσετε τα μηνιαία όρια των κατηγοριών σας."
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 NotificationBenefitItem(
                     icon = Icons.Default.Group,
-                    title = if (isEnglish) "Family & Household Sync" else "Ενημερώσεις Οικογένειας",
-                    description = if (isEnglish)
-                        "Real-time alerts when shared expenses are registered by other members."
-                    else
+                    title = Localization.tr(lang, "Family & Household Sync", "Ενημερώσεις Οικογένειας"),
+                    description = Localization.tr(
+                        lang,
+                        "Real-time alerts when shared expenses are registered by other members.",
                         "Άμεση ενημέρωση όταν άλλα μέλη του εξοδολογίου καταχωρούν κοινά έξοδα."
+                    )
                 )
             }
 
@@ -231,7 +234,7 @@ fun NotificationConsentScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isEnglish) "Enable & Accept Notifications" else "Αποδοχή & Ενεργοποίηση",
+                        text = Localization.tr(lang, "Enable & Accept Notifications", "Αποδοχή & Ενεργοποίηση"),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -247,7 +250,7 @@ fun NotificationConsentScreen(
                         .testTag("notification_consent_skip_btn")
                 ) {
                     Text(
-                        text = if (isEnglish) "Maybe Later" else "Ίσως Αργότερα",
+                        text = Localization.tr(lang, "Maybe Later", "Ίσως Αργότερα"),
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.SemiBold

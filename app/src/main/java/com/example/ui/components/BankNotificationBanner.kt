@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.ui.theme.Emerald700
 import com.example.util.LocalCurrencySymbol
+import com.example.util.Localization
 import com.example.util.PendingBankTransaction
 import java.util.Locale
 import kotlin.math.abs
@@ -80,7 +81,7 @@ fun BankNotificationBanner(
     modifier: Modifier = Modifier
 ) {
     if (transactions.isEmpty()) return
-    val isGreek = appLanguage != "EN"
+    val lang = Localization.Language.fromCode(appLanguage)
     val currencySymbol = LocalCurrencySymbol.current
 
     var selectedIndex by remember { mutableIntStateOf(0) }
@@ -175,7 +176,7 @@ fun BankNotificationBanner(
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = if (isGreek) "Αγνόηση" else "Ignore",
+                                text = Localization.tr(lang, "Ignore", "Αγνόηση"),
                                 color = MaterialTheme.colorScheme.error,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold
@@ -268,9 +269,9 @@ fun BankNotificationBanner(
 
                             Text(
                                 text = if (currentTx.isIncome) {
-                                    if (isGreek) "Εντοπίστηκε Έσοδο" else "Income Detected"
+                                    Localization.tr(lang, "Income Detected", "Εντοπίστηκε Έσοδο")
                                 } else {
-                                    if (isGreek) "Εντοπίστηκε Έξοδο" else "Expense Detected"
+                                    Localization.tr(lang, "Expense Detected", "Εντοπίστηκε Έξοδο")
                                 },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -293,7 +294,7 @@ fun BankNotificationBanner(
                                     ) {
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                            contentDescription = "Previous",
+                                            contentDescription = Localization.tr(lang, "Previous", "Προηγούμενο"),
                                             tint = if (currentIndex > 0) Emerald700 else Emerald700.copy(alpha = 0.3f),
                                             modifier = Modifier
                                                 .size(16.dp)
@@ -311,7 +312,7 @@ fun BankNotificationBanner(
                                         )
                                         Icon(
                                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                            contentDescription = "Next",
+                                            contentDescription = Localization.tr(lang, "Next", "Επόμενο"),
                                             tint = if (currentIndex < transactions.size - 1) Emerald700 else Emerald700.copy(alpha = 0.3f),
                                             modifier = Modifier
                                                 .size(16.dp)
@@ -329,7 +330,7 @@ fun BankNotificationBanner(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = if (isGreek) "Αγνόηση" else "Dismiss",
+                                    contentDescription = Localization.tr(lang, "Dismiss", "Αγνόηση"),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -353,9 +354,9 @@ fun BankNotificationBanner(
                                 Text(
                                     text = currentTx.merchantName.ifBlank {
                                         if (currentTx.isIncome) {
-                                            if (isGreek) "Εισερχόμενη πίστωση" else "Incoming deposit"
+                                            Localization.tr(lang, "Incoming deposit", "Εισερχόμενη πίστωση")
                                         } else {
-                                            if (isGreek) "Πληρωμή με κάρτα" else "Card payment"
+                                            Localization.tr(lang, "Card payment", "Πληρωμή με κάρτα")
                                         }
                                     },
                                     fontSize = 15.sp,
@@ -442,9 +443,9 @@ fun BankNotificationBanner(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (currentTx.isIncome) {
-                                        if (isGreek) "Καταχώρηση Εσόδου" else "Record Income"
+                                        Localization.tr(lang, "Record Income", "Καταχώρηση Εσόδου")
                                     } else {
-                                        if (isGreek) "Καταχώρηση" else "Record"
+                                        Localization.tr(lang, "Record", "Καταχώρηση")
                                     },
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
@@ -460,7 +461,7 @@ fun BankNotificationBanner(
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                             ) {
                                 Text(
-                                    text = if (isGreek) "Αγνόηση" else "Ignore",
+                                    text = Localization.tr(lang, "Ignore", "Αγνόηση"),
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,

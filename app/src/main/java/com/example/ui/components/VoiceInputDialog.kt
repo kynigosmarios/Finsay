@@ -173,18 +173,21 @@ fun VoiceInputDialog(
                 if (!isPro && remainingVoiceEntries in 1..5) {
                     Spacer(modifier = Modifier.height(10.dp))
                     val reminderColor = if (remainingVoiceEntries <= 2) Color(0xFFDC2626) else Color(0xFFD97706)
-                    val reminderText = if (lang == Localization.Language.ENGLISH) {
-                        if (remainingVoiceEntries == 1) {
-                            "1 of $monthlyFreeLimit free voice entries left this month"
-                        } else {
-                            "$remainingVoiceEntries of $monthlyFreeLimit free voice entries left this month"
-                        }
+                    val reminderText = if (remainingVoiceEntries == 1) {
+                        Localization.trFormat(
+                            lang,
+                            "1 of %1\$d free voice entries left this month",
+                            "Απομένει 1 από %1\$d δωρεάν φωνητικές καταχωρήσεις",
+                            monthlyFreeLimit
+                        )
                     } else {
-                        if (remainingVoiceEntries == 1) {
-                            "Απομένει 1 από $monthlyFreeLimit δωρεάν φωνητικές καταχωρήσεις"
-                        } else {
-                            "Απομένουν $remainingVoiceEntries από $monthlyFreeLimit δωρεάν φωνητικές καταχωρήσεις"
-                        }
+                        Localization.trFormat(
+                            lang,
+                            "%1\$d of %2\$d free voice entries left this month",
+                            "Απομένουν %1\$d από %2\$d δωρεάν φωνητικές καταχωρήσεις",
+                            remainingVoiceEntries,
+                            monthlyFreeLimit
+                        )
                     }
                     Surface(
                         shape = RoundedCornerShape(12.dp),
@@ -271,7 +274,11 @@ fun VoiceInputDialog(
 
                 // Dynamic Status Text
                 Text(
-                    text = if (isListening) (if (lang == Localization.Language.ENGLISH) "Listening... Speak now!" else "Σας ακούω... Μιλήστε τώρα!") else (if (lang == Localization.Language.ENGLISH) "Processing..." else "Επεξεργασία..."),
+                    text = if (isListening) {
+                        Localization.tr(lang, "Listening... Speak now!", "Σας ακούω... Μιλήστε τώρα!")
+                    } else {
+                        Localization.tr(lang, "Processing...", "Επεξεργασία...")
+                    },
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
                     color = if (isListening) Emerald700 else MaterialTheme.colorScheme.onSurface,
@@ -300,7 +307,7 @@ fun VoiceInputDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isListening) (if (lang == Localization.Language.ENGLISH) "Stop & Finish" else "Στοπ & Ολοκλήρωση") else Localization.tryAgainAction(lang),
+                        text = if (isListening) Localization.tr(lang, "Stop & Finish", "Στοπ & Ολοκλήρωση") else Localization.tryAgainAction(lang),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = Color.White

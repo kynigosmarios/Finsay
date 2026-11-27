@@ -8,7 +8,9 @@ data class CurrencyOption(
     val symbol: String,
     val nameEl: String,
     val nameEn: String
-)
+) {
+    fun localizedName(lang: Localization.Language): String = Localization.tr(lang, nameEn, nameEl)
+}
 
 object CurrencyFormatter {
     const val DEFAULT_CURRENCY_CODE = "EUR"

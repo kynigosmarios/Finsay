@@ -30,7 +30,7 @@ internal object ManualExpenseSaveResolver {
         val splitType = if (isAllFamily) "ALL_FAMILY" else "SPECIFIC_MEMBERS"
         val finalMemberIds = if (isAllFamily) members.map { it.id } else selectedMemberIds
         val memberDisplay = if (isAllFamily) {
-            if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
+            Localization.tr(lang, "All", "Όλοι")
         } else {
             val active = members.filter { finalMemberIds.contains(it.id) }
             Localization.resolveMemberGroupDisplay(active, members, lang)

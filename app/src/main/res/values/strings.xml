@@ -8,4 +8,5 @@
     <string name="shortcut_scan_long">Σάρωση Απόδειξης</string>
     <string name="shortcut_expense_short">Νέο Έξοδο</string>
     <string name="shortcut_expense_long">Νέο Έξοδο</string>
+    <string name="quick_expense_tile_label">Quick Expense</string>
 </resources>

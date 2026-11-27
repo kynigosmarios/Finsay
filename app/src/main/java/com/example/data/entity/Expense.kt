@@ -60,6 +60,142 @@ data class PayerShare(
     val amount: Double
 )
 
+internal fun resolveMembersFromDisplayLabel(
+    rawLabel: String,
+    members: List<FamilyMember>
+): List<FamilyMember> {
+    if (members.isEmpty()) return emptyList()
+    val clean = rawLabel.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
+    if (clean.isBlank()) return emptyList()
+
+    if (Localization.isAllMembersLabel(clean)) {
+        return members
+    }
+
+    if (Localization.isPluralRoleDisplay(clean)) {
+        val roleKey = Localization.canonicalRoleKey(clean)
+        val byRole = members.filter { Localization.canonicalRoleKey(it.role) == roleKey }
+        if (byRole.isNotEmpty()) return byRole
+    }
+
+    val parts = clean
+        .split(Regex("[,&+/]+|\\s+και\\s+|\\s+and\\s+", RegexOption.IGNORE_CASE))
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+
+    if (parts.isEmpty()) return emptyList()
+
+    val matched = mutableListOf<FamilyMember>()
+    val seenIds = HashSet<Long>()
+    for (part in parts) {
+        if (Localization.isPluralRoleDisplay(part)) {
+            val roleKey = Localization.canonicalRoleKey(part)
+            members.filter { Localization.canonicalRoleKey(it.role) == roleKey }.forEach { m ->
+                if (seenIds.add(m.id)) matched.add(m)
+            }
+            continue
+        }
+        val normPart = com.example.util.GreekVoiceParser.normalizeGreek(part.lowercase())
+        val found = members.find { it.name.equals(part, ignoreCase = true) }
+            ?: members.find { com.example.util.GreekVoiceParser.normalizeGreek(it.name.lowercase()) == normPart }
+            ?: members.find {
+                val normName = com.example.util.GreekVoiceParser.normalizeGreek(it.name.lowercase())
+                normName.isNotBlank() && normPart.length >= 2 && (normName.contains(normPart) || normPart.contains(normName))
+            }
+        if (found != null && seenIds.add(found.id)) {
+            matched.add(found)
+        }
+    }
+    return matched
+}
+
+/**
+ * Reconciles payer member IDs against current household [members] without silently dropping
+ * any payer whose numeric ID drifted/changed or whose legacy record only stored a single primary ID
+ * alongside a collective/multi-name label (e.g., "Γονείς", "Parents", "Μάριος & Βασιλική").
+ */
+fun Expense.resolveReconciledPayers(members: List<FamilyMember>): List<FamilyMember> {
+    if (members.isEmpty()) return emptyList()
+
+    val csvIds = when {
+        payerAmountsCsv.isNotBlank() -> payerAmountsCsv.split(",")
+            .mapNotNull { it.split(":").firstOrNull()?.trim()?.toLongOrNull() }
+            .filter { it > 0L }
+            .distinct()
+        payerMemberIdsCsv.isNotBlank() -> payerMemberIdsCsv.split(",")
+            .mapNotNull { it.trim().toLongOrNull() }
+            .filter { it > 0L }
+            .distinct()
+        payerMemberId > 0L -> listOf(payerMemberId)
+        else -> emptyList()
+    }
+
+    val matchedById = csvIds.mapNotNull { id -> members.find { it.id == id } }.distinctBy { it.id }
+    val matchedByLabel = resolveMembersFromDisplayLabel(payerMemberName, members)
+
+    val hasUnresolvedIds = csvIds.isNotEmpty() && matchedById.size < csvIds.size
+    if (hasUnresolvedIds && matchedByLabel.isNotEmpty()) {
+        // Reconcile missing/shifted ID(s) using the preserved payer label (e.g. "Γονείς" or "Μάριος & Βασιλική")
+        return (matchedById + matchedByLabel).distinctBy { it.id }
+    }
+
+    if (matchedById.isNotEmpty()) {
+        // Legacy single-ID fabrication safeguard:
+        // If only 1 ID was stored (e.g. payerMemberIdsCsv="1" or "") while payerMemberName explicitly
+        // records multiple payers or a collective group ("Γονείς", "Μάριος & Βασιλική") containing that member,
+        // expand to all members represented by the label instead of silently collapsing to 1 person.
+        val hasExplicitMultiAmounts = payerAmountsCsv.split(",").count { it.contains(":") } >= 2
+        if (csvIds.size == 1 && !hasExplicitMultiAmounts && matchedByLabel.size > 1 &&
+            matchedByLabel.any { it.id == matchedById.first().id }
+        ) {
+            return matchedByLabel
+        }
+        return matchedById
+    }
+
+    if (matchedByLabel.isNotEmpty()) return matchedByLabel
+
+    if (payerMemberId > 0L) {
+        members.find { it.id == payerMemberId }?.let { return listOf(it) }
+    }
+    return emptyList()
+}
+
+/**
+ * Reconciles beneficiary ("ποιον αφορά") member IDs against current household [members]
+ * without silently dropping any beneficiary whose numeric ID drifted/changed.
+ */
+fun Expense.resolveReconciledBeneficiaries(members: List<FamilyMember>): List<FamilyMember> {
+    if (members.isEmpty()) return emptyList()
+    val raw = memberNamesDisplay.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
+    val isAll = splitType == "ALL_FAMILY" || splitType == "ALL" ||
+        Localization.isAllMembersLabel(raw)
+    if (isAll) return members
+
+    val csvIds = if (memberIdsCsv.isNotBlank()) {
+        memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }.filter { it > 0L }.distinct()
+    } else emptyList()
+
+    val matchedById = csvIds.mapNotNull { id -> members.find { it.id == id } }.distinctBy { it.id }
+    val matchedByLabel = resolveMembersFromDisplayLabel(memberNamesDisplay, members)
+
+    val hasUnresolvedIds = csvIds.isNotEmpty() && matchedById.size < csvIds.size
+    if (hasUnresolvedIds && matchedByLabel.isNotEmpty()) {
+        return (matchedById + matchedByLabel).distinctBy { it.id }
+    }
+
+    if (matchedById.isNotEmpty()) {
+        if (csvIds.size == 1 && matchedByLabel.size > 1 &&
+            matchedByLabel.any { it.id == matchedById.first().id }
+        ) {
+            return matchedByLabel
+        }
+        return matchedById
+    }
+
+    return matchedByLabel
+}
+
 fun Expense.getPayerShares(members: List<FamilyMember> = emptyList()): List<PayerShare> {
     // Strip amount annotations in parentheses first, e.g. "(από 20,00 €)" or "(30,00 €)"
     // so that decimal commas inside currency numbers do not corrupt name splitting!
@@ -68,6 +204,8 @@ fun Expense.getPayerShares(members: List<FamilyMember> = emptyList()): List<Paye
         .split(Regex("[&,/]+"))
         .map { it.trim() }
         .filter { it.isNotBlank() }
+
+    val labelMembers = resolveMembersFromDisplayLabel(payerMemberName, members)
 
     // 1. If explicit custom amounts are stored in payerAmountsCsv (e.g. "1:30.00,2:10.00")
     if (payerAmountsCsv.isNotBlank()) {
@@ -80,36 +218,56 @@ fun Expense.getPayerShares(members: List<FamilyMember> = emptyList()): List<Paye
             } else null
         }
         if (parsed.isNotEmpty()) {
+            // Safeguard: if a legacy single-entry payerAmountsCsv ("1:20.00") conflicts with a multi-member
+            // collective label ("Γονείς", "Μάριος & Βασιλική") containing that member, split across reconciled payers.
+            if (parsed.size == 1 && labelMembers.size > 1 &&
+                labelMembers.any { it.id == parsed.first().first }
+            ) {
+                val totalAmt = if (amount > 0.0) amount else parsed.first().second
+                val equalAmt = totalAmt / labelMembers.size
+                return labelMembers.map { m -> PayerShare(memberId = m.id, memberName = m.name, amount = equalAmt) }
+            }
+
+            // Map any unresolved/shifted IDs in payerAmountsCsv to the remaining unmatched members from labelMembers
+            val directlyMatchedIds = parsed.mapNotNull { (id, _) -> members.find { it.id == id }?.id }.toSet()
+            val unmatchedLabelQueue = ArrayDeque(labelMembers.filter { !directlyMatchedIds.contains(it.id) })
+
             return parsed.mapIndexed { index, (id, amt) ->
-                val member = members.find { it.id == id }
+                val directMember = members.find { it.id == id }
+                val resolvedMember = directMember
                     ?: if (index < individualNames.size) members.find { it.name.equals(individualNames[index], ignoreCase = true) } else null
-                val name = member?.name
+                    ?: unmatchedLabelQueue.removeFirstOrNull()
+                val resolvedId = resolvedMember?.id ?: id
+                val resolvedName = resolvedMember?.name
                     ?: if (index < individualNames.size) individualNames[index]
                     else if (id == payerMemberId && cleanPayerString.isNotBlank() && !cleanPayerString.contains("&")) cleanPayerString
                     else "Μέλος #$id"
-                PayerShare(memberId = id, memberName = name, amount = amt)
+                PayerShare(memberId = resolvedId, memberName = resolvedName, amount = amt)
             }
         }
     }
 
-    // 2. If multiple payer IDs are stored in payerMemberIdsCsv (e.g. "1,2") without custom amounts -> equal split
+    // 2. Reconciled payers (handles multi-ID CSV, shifted/orphaned IDs, and collective labels like "Γονείς")
+    val reconciled = resolveReconciledPayers(members)
+    if (reconciled.isNotEmpty()) {
+        val shareAmt = if (amount > 0.0) amount / reconciled.size else 0.0
+        return reconciled.map { m -> PayerShare(memberId = m.id, memberName = m.name, amount = shareAmt) }
+    }
+
+    // 3. Fallback when members list is empty: parse raw IDs or multiple names
     if (payerMemberIdsCsv.isNotBlank()) {
         val ids = payerMemberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
         if (ids.isNotEmpty()) {
             val shareAmt = if (amount > 0.0) amount / ids.size else 0.0
             return ids.mapIndexed { index, id ->
-                val member = members.find { it.id == id }
-                    ?: if (index < individualNames.size) members.find { it.name.equals(individualNames[index], ignoreCase = true) } else null
-                val name = member?.name
-                    ?: if (index < individualNames.size) individualNames[index]
-                    else if (id == payerMemberId && cleanPayerString.isNotBlank() && !cleanPayerString.contains("&")) cleanPayerString
-                    else "Μέλος #$id"
+                val name = if (index < individualNames.size) individualNames[index]
+                else if (id == payerMemberId && cleanPayerString.isNotBlank() && !cleanPayerString.contains("&")) cleanPayerString
+                else "Μέλος #$id"
                 PayerShare(memberId = id, memberName = name, amount = shareAmt)
             }
         }
     }
 
-    // 3. If multiple names were in cleanPayerString (e.g. "Μάριος & Βασιλική")
     if (individualNames.size > 1) {
         val shareAmt = if (amount > 0.0) amount / individualNames.size else 0.0
         return individualNames.mapIndexed { index, name ->
@@ -133,9 +291,11 @@ fun Expense.getPayerShares(members: List<FamilyMember> = emptyList()): List<Paye
 }
 
 fun Expense.hasMultiplePayers(members: List<FamilyMember> = emptyList()): Boolean {
+    if (members.isNotEmpty() && resolveReconciledPayers(members).size > 1) return true
     if (payerMemberIdsCsv.isNotBlank() && payerMemberIdsCsv.split(",").filter { it.isNotBlank() }.size > 1) return true
     if (payerAmountsCsv.isNotBlank() && payerAmountsCsv.split(",").filter { it.isNotBlank() }.size > 1) return true
     if (payerMemberName.contains("&") || payerMemberName.contains(",")) return true
+    if (Localization.isPluralRoleDisplay(payerMemberName.replace(Regex("\\s*\\([^)]*\\)"), "").trim())) return true
     return false
 }
 
@@ -207,36 +367,12 @@ fun Expense.getPayerCategoryOrNamesDisplay(
     val cleanRawPayer = payerMemberName.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
 
     // 1. Explicit "All" collective labels
-    if (cleanRawPayer.equals("Οικογένεια", ignoreCase = true) || cleanRawPayer.equals("Family", ignoreCase = true) ||
-        cleanRawPayer.equals("Όλοι", ignoreCase = true) || cleanRawPayer.equals("All", ignoreCase = true)
-    ) {
-        return if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
+    if (Localization.isAllMembersLabel(cleanRawPayer)) {
+        return Localization.allMembersWord(lang)
     }
 
-    // 2. Resolve payer member objects by IDs first, then names in payerMemberName, then primary payerMemberId
-    val ids = if (payerMemberIdsCsv.isNotBlank()) {
-        payerMemberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-    } else emptyList()
-
-    val matchedById = if (ids.isNotEmpty() && members.isNotEmpty()) {
-        ids.mapNotNull { id -> members.find { it.id == id } }.distinctBy { it.id }
-    } else emptyList()
-
-    val matchedPayers: List<FamilyMember> = if (matchedById.isNotEmpty()) {
-        matchedById
-    } else if (cleanRawPayer.isNotBlank() && members.isNotEmpty()) {
-        val rawParts = cleanRawPayer.split(Regex("[,&+]+|\\s+και\\s+|\\s+and\\s+")).map { it.trim() }.filter { it.isNotBlank() }
-        rawParts.mapNotNull { namePart ->
-            val cleanName = namePart.replace(Regex("\\([^)]*\\)"), "").trim()
-            members.find {
-                it.name.equals(cleanName, ignoreCase = true) ||
-                it.name.contains(cleanName, ignoreCase = true) ||
-                cleanName.contains(it.name, ignoreCase = true)
-            }
-        }.distinctBy { it.id }
-    } else if (payerMemberId != 0L && members.isNotEmpty()) {
-        members.find { it.id == payerMemberId }?.let { listOf(it) } ?: emptyList()
-    } else emptyList()
+    // 2. Reconcile payer members without ever silently dropping shifted/missing IDs
+    val matchedPayers = resolveReconciledPayers(members)
 
     // 3. Resolved members -> apply exact role-group / all / individual-names rules
     if (matchedPayers.isNotEmpty()) {
@@ -247,7 +383,7 @@ fun Expense.getPayerCategoryOrNamesDisplay(
     Localization.translateCollectiveRoleLabel(cleanRawPayer, lang)?.let { return it }
 
     return cleanRawPayer.ifBlank {
-        if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
+        Localization.allMembersWord(lang)
     }
 }
 
@@ -258,40 +394,12 @@ fun Expense.getBeneficiaryCategoryOrNamesDisplay(
     val raw = memberNamesDisplay.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
 
     // 1. Explicit all-members keywords
-    if (splitType == "ALL_FAMILY" || splitType == "ALL" ||
-        raw.equals("Κοινό Οικογένειας", ignoreCase = true) ||
-        raw.equals("Family Shared", ignoreCase = true) ||
-        raw.equals("Οικογένεια", ignoreCase = true) ||
-        raw.equals("Family", ignoreCase = true) ||
-        raw.equals("Όλοι", ignoreCase = true) ||
-        raw.equals("All", ignoreCase = true) ||
-        raw.equals("Όλα τα μέλη", ignoreCase = true) ||
-        raw.equals("All members", ignoreCase = true)
-    ) {
-        return if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
+    if (splitType == "ALL_FAMILY" || splitType == "ALL" || Localization.isAllMembersLabel(raw)) {
+        return Localization.allMembersWord(lang)
     }
 
-    // 2. Resolve members by memberIdsCsv first, then fallback to names in memberNamesDisplay
-    val ids = if (memberIdsCsv.isNotBlank()) {
-        memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }
-    } else emptyList()
-
-    val matchedById = if (ids.isNotEmpty() && members.isNotEmpty()) {
-        ids.mapNotNull { id -> members.find { it.id == id } }.distinctBy { it.id }
-    } else emptyList()
-
-    val matchedMembers: List<FamilyMember> = if (matchedById.isNotEmpty()) {
-        matchedById
-    } else if (raw.isNotBlank() && members.isNotEmpty()) {
-        val rawParts = raw.split(Regex("[,&+]+|\\s+και\\s+|\\s+and\\s+")).map { it.trim() }.filter { it.isNotBlank() }
-        rawParts.mapNotNull { namePart ->
-            members.find {
-                it.name.equals(namePart, ignoreCase = true) ||
-                it.name.contains(namePart, ignoreCase = true) ||
-                namePart.contains(it.name, ignoreCase = true)
-            }
-        }.distinctBy { it.id }
-    } else emptyList()
+    // 2. Reconcile beneficiary members without ever silently dropping shifted/missing IDs
+    val matchedMembers = resolveReconciledBeneficiaries(members)
 
     // 3. Resolved members -> apply exact role-group / all / individual-names rules
     if (matchedMembers.isNotEmpty()) {
@@ -306,7 +414,7 @@ fun Expense.getBeneficiaryCategoryOrNamesDisplay(
         return raw
     }
 
-    return if (lang == Localization.Language.ENGLISH) "Personal" else "Ατομικό"
+    return Localization.tr(lang, "Personal", "Ατομικό")
 }
 
 

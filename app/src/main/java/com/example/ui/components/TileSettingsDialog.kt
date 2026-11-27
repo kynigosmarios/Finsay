@@ -107,13 +107,13 @@ fun TileSettingsDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Quick Settings Tile" else "Πλακίδιο Γρήγορων Ρυθμίσεων",
+                                text = Localization.tr(lang, "Quick Settings Tile", "Πλακίδιο Γρήγορων Ρυθμίσεων"),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Instant expense logging tile" else "Γρήγορη καταγραφή εξόδου",
+                                text = Localization.tr(lang, "Instant expense logging tile", "Γρήγορη καταγραφή εξόδου"),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -155,16 +155,16 @@ fun TileSettingsDialog(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Enable Quick Tile" else "Ενεργοποίηση Πλακιδίου",
+                                text = Localization.tr(lang, "Enable Quick Tile", "Ενεργοποίηση Πλακιδίου"),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = if (isTileFeatureEnabled) {
-                                    if (lang == Localization.Language.ENGLISH) "Active in phone quick settings" else "Ενεργό στις ρυθμίσεις του κινητού"
+                                    Localization.tr(lang, "Active in phone quick settings", "Ενεργό στις ρυθμίσεις του κινητού")
                                 } else {
-                                    if (lang == Localization.Language.ENGLISH) "Disabled" else "Ανενεργό"
+                                    Localization.tr(lang, "Disabled", "Ανενεργό")
                                 },
                                 fontSize = 11.sp,
                                 color = if (isTileFeatureEnabled) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant
@@ -197,16 +197,17 @@ fun TileSettingsDialog(
                                 context.mainExecutor
                             ) { result ->
                                 addTileStatusMessage = if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED) {
-                                    if (lang == Localization.Language.ENGLISH) "Tile added successfully!" else "Το πλακίδιο προστέθηκε επιτυχώς!"
+                                    Localization.tr(lang, "Tile added successfully!", "Το πλακίδιο προστέθηκε επιτυχώς!")
                                 } else {
-                                    if (lang == Localization.Language.ENGLISH) "You can add it manually by dragging down the notification bar." else "Μπορείτε να το προσθέσετε χειροκίνητα σέρνοντας τη μπάρα ειδοποιήσεων."
+                                    Localization.tr(lang, "You can add it manually by dragging down the notification bar.", "Μπορείτε να το προσθέσετε χειροκίνητα σέρνοντας τη μπάρα ειδοποιήσεων.")
                                 }
                             }
                         } else {
-                            addTileStatusMessage = if (lang == Localization.Language.ENGLISH)
-                                "Swipe down the notification shade, tap the edit pencil and drag the Finsay tile to active tiles."
-                            else
+                            addTileStatusMessage = Localization.tr(
+                                lang,
+                                "Swipe down the notification shade, tap the edit pencil and drag the Finsay tile to active tiles.",
                                 "Σύρετε τη μπάρα ειδοποιήσεων προς τα κάτω, πατήστε το μολύβι επεξεργασίας και σύρετε το πλακίδιο Finsay στα ενεργά."
+                            )
                         }
                     },
                     shape = RoundedCornerShape(14.dp),
@@ -217,7 +218,7 @@ fun TileSettingsDialog(
                 ) {
                     Icon(Icons.Default.OfflineBolt, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (lang == Localization.Language.ENGLISH) "Add to Notification Bar" else "Προσθήκη στη Μπάρα Ειδοποιήσεων", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(Localization.tr(lang, "Add to Notification Bar", "Προσθήκη στη Μπάρα Ειδοποιήσεων"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
 
                 if (addTileStatusMessage != null) {
@@ -245,7 +246,7 @@ fun TileSettingsDialog(
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (lang == Localization.Language.ENGLISH) "⚡ Test Quick Action Now" else "⚡ Δοκιμή Λειτουργίας Τώρα", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    Text(Localization.tr(lang, "⚡ Test Quick Action Now", "⚡ Δοκιμή Λειτουργίας Τώρα"), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -256,10 +257,11 @@ fun TileSettingsDialog(
 
                 // Explanatory bullets
                 Text(
-                    text = if (lang == Localization.Language.ENGLISH)
-                        "• Voice: Speak ➔ Confirmation / edit screen ➔ Save\n• Manual: Fill form ➔ Direct save"
-                    else
-                        "• Φωνή: Ομιλία ➔ Οθόνη επιβεβαίωσης / διόρθωσης ➔ Αποθήκευση\n• Χειροκίνητα: Συμπλήρωση ➔ Κατευθείαν αποθήκευση",
+                    text = Localization.tr(
+                        lang,
+                        "• Voice: Speak ➔ Confirmation / edit screen ➔ Save\n• Manual: Fill form ➔ Direct save",
+                        "• Φωνή: Ομιλία ➔ Οθόνη επιβεβαίωσης / διόρθωσης ➔ Αποθήκευση\n• Χειροκίνητα: Συμπλήρωση ➔ Κατευθείαν αποθήκευση"
+                    ),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp

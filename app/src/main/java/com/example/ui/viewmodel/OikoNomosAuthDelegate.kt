@@ -101,8 +101,11 @@ internal class OikoNomosAuthDelegate(
                 vm._isUserVerifiedState.value = true
                 vm._isAuthLoading.value = false
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "Email verified successfully! Welcome!"
-                    else "Το email επιβεβαιώθηκε επιτυχώς! Καλώς ήρθατε!"
+                    Localization.tr(
+                        vm._appLanguage.value,
+                        "Email verified successfully! Welcome!",
+                        "Το email επιβεβαιώθηκε επιτυχώς! Καλώς ήρθατε!"
+                    )
                 )
                 vm.loadUserProfileAndHousehold(refreshedUser)
                 onResult(true)
@@ -121,56 +124,71 @@ internal class OikoNomosAuthDelegate(
     }
 
     fun resendVerificationEmail(onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val user = vm.auth.currentUser ?: vm._currentUser.value
         if (user == null) {
-            onError(if (vm._appLanguage.value == "EN") "No signed-in user found" else "Δεν βρέθηκε συνδεδεμένος χρήστης")
+            onError(Localization.tr(lang, "No signed-in user found", "Δεν βρέθηκε συνδεδεμένος χρήστης"))
             return
         }
         vm._isAuthLoading.value = true
-        vm.auth.setLanguageCode(if (vm._appLanguage.value == "EN") "en" else "el")
+        vm.auth.setLanguageCode(lang.firebaseCode)
         user.sendEmailVerification()
             .addOnSuccessListener {
                 vm._isAuthLoading.value = false
                 vm.showSnackbar(
-                    if (vm._appLanguage.value == "EN") "A new verification email has been sent!"
-                    else "Στάλθηκε νέο email επιβεβαίωσης!"
+                    Localization.tr(
+                        lang,
+                        "A new verification email has been sent!",
+                        "Στάλθηκε νέο email επιβεβαίωσης!"
+                    )
                 )
                 onSuccess()
             }
             .addOnFailureListener { exc ->
                 vm._isAuthLoading.value = false
                 val msg = if (exc is FirebaseTooManyRequestsException) {
-                    if (vm._appLanguage.value == "EN") "Too many requests. Please wait a bit before resending."
-                    else "Πολλές αποστολές email σε σύντομο χρόνο. Παρακαλούμε περιμένετε λίγο και προσπαθήστε ξανά."
+                    Localization.tr(
+                        lang,
+                        "Too many requests. Please wait a bit before resending.",
+                        "Πολλές αποστολές email σε σύντομο χρόνο. Παρακαλούμε περιμένετε λίγο και προσπαθήστε ξανά."
+                    )
                 } else {
-                    exc.localizedMessage ?: (if (vm._appLanguage.value == "EN") "Failed to send verification email" else "Σφάλμα αποστολής email")
+                    exc.localizedMessage ?: Localization.tr(lang, "Failed to send verification email", "Σφάλμα αποστολής email")
                 }
                 onError(msg)
             }
     }
 
     fun sendPasswordResetEmail(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val clean = email.trim()
         if (clean.isBlank()) {
-            onError(if (vm._appLanguage.value == "EN") "Please enter your email" else "Παρακαλώ εισάγετε το email σας")
+            onError(Localization.tr(lang, "Please enter your email", "Παρακαλώ εισάγετε το email σας"))
             return
         }
         vm._isAuthLoading.value = true
-        vm.auth.setLanguageCode(if (vm._appLanguage.value == "EN") "en" else "el")
+        vm.auth.setLanguageCode(lang.firebaseCode)
         vm.auth.sendPasswordResetEmail(clean)
             .addOnSuccessListener {
                 vm._isAuthLoading.value = false
-                vm.showSnackbar(if (vm._appLanguage.value == "EN") "Password reset link sent to $clean!" else "Στάλθηκε σύνδεσμος επαναφοράς κωδικού στο $clean!")
+                vm.showSnackbar(
+                    Localization.trFormat(
+                        lang,
+                        "Password reset link sent to %1\$s!",
+                        "Στάλθηκε σύνδεσμος επαναφοράς κωδικού στο %1\$s!",
+                        clean
+                    )
+                )
                 onSuccess()
             }
             .addOnFailureListener { exc ->
                 vm._isAuthLoading.value = false
                 val msg = when {
                     exc.message?.contains("user-not-found") == true ->
-                        if (vm._appLanguage.value == "EN") "No account found with this email" else "Δεν βρέθηκε λογαριασμός με αυτό το email"
+                        Localization.tr(lang, "No account found with this email", "Δεν βρέθηκε λογαριασμός με αυτό το email")
                     exc.message?.contains("invalid-email") == true ->
-                        if (vm._appLanguage.value == "EN") "Invalid email address" else "Μη έγκυρη μορφή email"
-                    else -> exc.localizedMessage ?: (if (vm._appLanguage.value == "EN") "Error sending reset email" else "Σφάλμα αποστολής email")
+                        Localization.tr(lang, "Invalid email address", "Μη έγκυρη μορφή email")
+                    else -> exc.localizedMessage ?: Localization.tr(lang, "Error sending reset email", "Σφάλμα αποστολής email")
                 }
                 onError(msg)
             }
@@ -178,13 +196,13 @@ internal class OikoNomosAuthDelegate(
 
     fun signInWithEmail(email: String, pass: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
         val cleanEmail = email.trim()
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         if (cleanEmail.isBlank() || pass.isBlank()) {
-            onError(if (isEn) "Please enter your email and password" else "Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης")
+            onError(Localization.tr(lang, "Please enter your email and password", "Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης"))
             return
         }
         if (!Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
-            onError(if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email")
+            onError(Localization.tr(lang, "Invalid email address format", "Μη έγκυρη μορφή email"))
             return
         }
         vm._isAuthLoading.value = true
@@ -206,12 +224,15 @@ internal class OikoNomosAuthDelegate(
                 vm.recomputeProEntitlement()
                 vm._isAuthLoading.value = false
                 if (verified) {
-                    vm.showSnackbar(if (isEn) "Signed in successfully!" else "Συνδεθήκατε επιτυχώς!")
+                    vm.showSnackbar(Localization.tr(lang, "Signed in successfully!", "Συνδεθήκατε επιτυχώς!"))
                     vm.loadUserProfileAndHousehold(user)
                 } else {
                     vm.showSnackbar(
-                        if (isEn) "Email verification is required. Please click the link sent to your email."
-                        else "Απαιτείται επιβεβαίωση email. Πατήστε στον σύνδεσμο που στάλθηκε στο email σας."
+                        Localization.tr(
+                            lang,
+                            "Email verification is required. Please click the link sent to your email.",
+                            "Απαιτείται επιβεβαίωση email. Πατήστε στον σύνδεσμο που στάλθηκε στο email σας."
+                        )
                     )
                 }
                 onSuccess()
@@ -221,20 +242,29 @@ internal class OikoNomosAuthDelegate(
                 val code = (exc as? FirebaseAuthException)?.errorCode.orEmpty()
                 val msg = when {
                     code == "ERROR_USER_NOT_FOUND" || exc.message?.contains("user-not-found") == true ->
-                        if (isEn) "No registered account found with this email. Please Sign Up first."
-                        else "Δεν βρέθηκε εγγεγραμμένος λογαριασμός με αυτό το email. Κάντε πρώτα Εγγραφή."
+                        Localization.tr(
+                            lang,
+                            "No registered account found with this email. Please Sign Up first.",
+                            "Δεν βρέθηκε εγγεγραμμένος λογαριασμός με αυτό το email. Κάντε πρώτα Εγγραφή."
+                        )
                     code == "ERROR_WRONG_PASSWORD" || code == "ERROR_INVALID_CREDENTIAL" ||
                         exc.message?.contains("wrong-password") == true || exc.message?.contains("invalid-credential") == true ->
-                        if (isEn) "Incorrect email or password, or account is not registered."
-                        else "Λανθασμένο email ή κωδικός πρόσβασης, ή ο λογαριασμός δεν είναι εγγεγραμμένος."
+                        Localization.tr(
+                            lang,
+                            "Incorrect email or password, or account is not registered.",
+                            "Λανθασμένο email ή κωδικός πρόσβασης, ή ο λογαριασμός δεν είναι εγγεγραμμένος."
+                        )
                     code == "ERROR_INVALID_EMAIL" || exc.message?.contains("invalid-email") == true ->
-                        if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email"
+                        Localization.tr(lang, "Invalid email address format", "Μη έγκυρη μορφή email")
                     code == "ERROR_USER_DISABLED" ->
-                        if (isEn) "This account has been disabled." else "Αυτός ο λογαριασμός έχει απενεργοποιηθεί."
+                        Localization.tr(lang, "This account has been disabled.", "Αυτός ο λογαριασμός έχει απενεργοποιηθεί.")
                     exc is FirebaseTooManyRequestsException || code == "ERROR_TOO_MANY_REQUESTS" ->
-                        if (isEn) "Too many attempts. Please try again shortly."
-                        else "Πολλές αποτυχημένες προσπάθειες. Δοκιμάστε ξανά σε λίγο."
-                    else -> exc.localizedMessage ?: (if (isEn) "Sign in error" else "Σφάλμα σύνδεσης")
+                        Localization.tr(
+                            lang,
+                            "Too many attempts. Please try again shortly.",
+                            "Πολλές αποτυχημένες προσπάθειες. Δοκιμάστε ξανά σε λίγο."
+                        )
+                    else -> exc.localizedMessage ?: Localization.tr(lang, "Sign in error", "Σφάλμα σύνδεσης")
                 }
                 onError(msg)
             } finally {
@@ -257,30 +287,30 @@ internal class OikoNomosAuthDelegate(
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val cleanEmail = email.trim()
         if (firstName.isBlank() || lastName.isBlank()) {
-            onError(if (isEn) "Please enter First Name and Last Name" else "Παρακαλώ συμπληρώστε Όνομα και Επίθετο")
+            onError(Localization.tr(lang, "Please enter First Name and Last Name", "Παρακαλώ συμπληρώστε Όνομα και Επίθετο"))
             return
         }
         if (birthDate.isBlank()) {
-            onError(if (isEn) "Please select your Date of Birth" else "Παρακαλώ επιλέξτε την Ημερομηνία Γέννησής σας")
+            onError(Localization.tr(lang, "Please select your Date of Birth", "Παρακαλώ επιλέξτε την Ημερομηνία Γέννησής σας"))
             return
         }
         if (phoneNumber.isBlank() || phoneNumber.length < 10) {
-            onError(if (isEn) "Please enter a valid mobile phone (at least 10 digits)" else "Παρακαλώ εισάγετε έγκυρο κινητό τηλέφωνο (τουλάχιστον 10 ψηφία)")
+            onError(Localization.tr(lang, "Please enter a valid mobile phone (at least 10 digits)", "Παρακαλώ εισάγετε έγκυρο κινητό τηλέφωνο (τουλάχιστον 10 ψηφία)"))
             return
         }
         if (cleanEmail.isBlank() || pass.isBlank()) {
-            onError(if (isEn) "Please enter email and password" else "Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης")
+            onError(Localization.tr(lang, "Please enter email and password", "Παρακαλώ συμπληρώστε email και κωδικό πρόσβασης"))
             return
         }
         if (!Patterns.EMAIL_ADDRESS.matcher(cleanEmail).matches()) {
-            onError(if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email")
+            onError(Localization.tr(lang, "Invalid email address format", "Μη έγκυρη μορφή email"))
             return
         }
         if (pass.length < 6) {
-            onError(if (isEn) "Password must be at least 6 characters" else "Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες")
+            onError(Localization.tr(lang, "Password must be at least 6 characters", "Ο κωδικός πρέπει να έχει τουλάχιστον 6 χαρακτήρες"))
             return
         }
         val hasFreshConsent = acceptedLegalVersion == LegalConstants.CURRENT_LEGAL_VERSION
@@ -328,11 +358,11 @@ internal class OikoNomosAuthDelegate(
                 }
 
                 try {
-                    vm.auth.setLanguageCode(if (isEn) "en" else "el")
+                    vm.auth.setLanguageCode(lang.firebaseCode)
                     user.sendEmailVerification().await()
                 } catch (e: Exception) {
                     Log.e("OikoNomosVM", "sendEmailVerification error", e)
-                    vm.showSnackbar(e.localizedMessage ?: (if (isEn) "Failed to send verification email" else "Σφάλμα αποστολής email επιβεβαίωσης"))
+                    vm.showSnackbar(e.localizedMessage ?: Localization.tr(lang, "Failed to send verification email", "Σφάλμα αποστολής email επιβεβαίωσης"))
                 }
 
                 val verified = isUserVerified(user)
@@ -356,8 +386,12 @@ internal class OikoNomosAuthDelegate(
                 vm._isAuthLoading.value = false
                 if (!verified) {
                     vm.showSnackbar(
-                        if (isEn) "Verification link sent to ${user.email}!"
-                        else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
+                        Localization.trFormat(
+                            lang,
+                            "Verification link sent to %1\$s!",
+                            "Στάλθηκε σύνδεσμος επιβεβαίωσης στο %1\$s!",
+                            user.email.orEmpty()
+                        )
                     )
                 } else {
                     vm.loadUserProfileAndHousehold(user)
@@ -369,13 +403,16 @@ internal class OikoNomosAuthDelegate(
                 val code = (exc as? FirebaseAuthException)?.errorCode.orEmpty()
                 val msg = when {
                     code == "ERROR_EMAIL_ALREADY_IN_USE" || exc.message?.contains("email-already-in-use") == true ->
-                        if (isEn) "This email is already registered. Please switch to Sign In."
-                        else "Αυτό το email χρησιμοποιείται ήδη. Παρακαλούμε μεταβείτε στη Σύνδεση."
+                        Localization.tr(
+                            lang,
+                            "This email is already registered. Please switch to Sign In.",
+                            "Αυτό το email χρησιμοποιείται ήδη. Παρακαλούμε μεταβείτε στη Σύνδεση."
+                        )
                     code == "ERROR_WEAK_PASSWORD" || exc.message?.contains("weak-password") == true ->
-                        if (isEn) "Password is too weak" else "Ο κωδικός είναι πολύ αδύναμος"
+                        Localization.tr(lang, "Password is too weak", "Ο κωδικός είναι πολύ αδύναμος")
                     code == "ERROR_INVALID_EMAIL" || exc.message?.contains("invalid-email") == true ->
-                        if (isEn) "Invalid email address format" else "Μη έγκυρη μορφή email"
-                    else -> exc.localizedMessage ?: (if (isEn) "Error creating account" else "Σφάλμα δημιουργίας λογαριασμού")
+                        Localization.tr(lang, "Invalid email address format", "Μη έγκυρη μορφή email")
+                    else -> exc.localizedMessage ?: Localization.tr(lang, "Error creating account", "Σφάλμα δημιουργίας λογαριασμού")
                 }
                 onError(msg)
             } finally {
@@ -392,7 +429,7 @@ internal class OikoNomosAuthDelegate(
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val hasFreshConsent = acceptedLegalVersion == LegalConstants.CURRENT_LEGAL_VERSION
         val effectiveAcceptedAt = if (hasFreshConsent) {
             if (acceptedLegalAt > 0L) acceptedLegalAt else System.currentTimeMillis()
@@ -420,7 +457,7 @@ internal class OikoNomosAuthDelegate(
                     val newProfile = UserProfile(
                         uid = user.uid,
                         email = user.email.orEmpty().trim(),
-                        displayName = displayName.ifBlank { if (isEn) "Finsay User" else "Χρήστης Finsay" },
+                        displayName = displayName.ifBlank { Localization.finsayUser(lang) },
                         firstName = parts.firstOrNull().orEmpty(),
                         lastName = if (parts.size > 1) parts.drop(1).joinToString(" ") else "",
                         photoUrl = user.photoUrl?.toString().orEmpty(),
@@ -453,7 +490,7 @@ internal class OikoNomosAuthDelegate(
                     vm._isLegalStatusResolved.value = true
                     if (!googleVerified) {
                         try {
-                            vm.auth.setLanguageCode(if (isEn) "en" else "el")
+                            vm.auth.setLanguageCode(lang.firebaseCode)
                             user.sendEmailVerification().await()
                         } catch (e: Exception) {
                             Log.w("OikoNomosVM", "Google sendEmailVerification warning: ${e.message}")
@@ -467,16 +504,20 @@ internal class OikoNomosAuthDelegate(
                     vm._isAuthLoading.value = false
                     if (googleVerified) {
                         val welcomeMsg = if (isSignUpMode) {
-                            if (isEn) "Signed up with Google!" else "Η εγγραφή μέσω Google ολοκληρώθηκε!"
+                            Localization.tr(lang, "Signed up with Google!", "Η εγγραφή μέσω Google ολοκληρώθηκε!")
                         } else {
-                            if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!"
+                            Localization.tr(lang, "Signed in with Google!", "Συνδεθήκατε μέσω Google!")
                         }
                         vm.showSnackbar(welcomeMsg)
                         vm.loadUserProfileAndHousehold(user)
                     } else {
                         vm.showSnackbar(
-                            if (isEn) "Verification link sent to ${user.email}!"
-                            else "Στάλθηκε σύνδεσμος επιβεβαίωσης στο ${user.email}!"
+                            Localization.trFormat(
+                                lang,
+                                "Verification link sent to %1\$s!",
+                                "Στάλθηκε σύνδεσμος επιβεβαίωσης στο %1\$s!",
+                                user.email.orEmpty()
+                            )
                         )
                     }
                     onSuccess()
@@ -515,12 +556,16 @@ internal class OikoNomosAuthDelegate(
                         )
                     } else existingProfile
 
-                    if (resolvedProfile.appLanguage.isNotBlank()) {
-                        vm._appLanguage.value = resolvedProfile.appLanguage
-                        vm.prefs.edit().putString("app_language", resolvedProfile.appLanguage).apply()
+                    val resolvedLang = if (resolvedProfile.appLanguage.isNotBlank()) {
+                        val parsed = Localization.Language.fromCode(resolvedProfile.appLanguage)
+                        vm._appLanguage.value = parsed.code
+                        vm.prefs.edit().putString("app_language", parsed.code).apply()
                         try {
-                            vm.auth.setLanguageCode(if (resolvedProfile.appLanguage == "EN") "en" else "el")
+                            vm.auth.setLanguageCode(parsed.firebaseCode)
                         } catch (_: Throwable) {}
+                        parsed
+                    } else {
+                        lang
                     }
 
                     if (!googleVerified) {
@@ -529,8 +574,12 @@ internal class OikoNomosAuthDelegate(
                         vm._isUserVerifiedState.value = false
                         vm._isAuthLoading.value = false
                         vm.showSnackbar(
-                            if (isEn) "Please verify your email via the link sent to ${user.email}."
-                            else "Παρακαλούμε επιβεβαιώστε το email σας από τον σύνδεσμο στο ${user.email}."
+                            Localization.trFormat(
+                                resolvedLang,
+                                "Please verify your email via the link sent to %1\$s.",
+                                "Παρακαλούμε επιβεβαιώστε το email σας από τον σύνδεσμο στο %1\$s.",
+                                user.email.orEmpty()
+                            )
                         )
                         onSuccess()
                     } else {
@@ -543,7 +592,7 @@ internal class OikoNomosAuthDelegate(
                         vm._isUserVerifiedState.value = true
                         vm.recomputeProEntitlement()
                         vm._isAuthLoading.value = false
-                        vm.showSnackbar(if (isEn) "Signed in with Google!" else "Συνδεθήκατε μέσω Google!")
+                        vm.showSnackbar(Localization.tr(resolvedLang, "Signed in with Google!", "Συνδεθήκατε μέσω Google!"))
                         vm.loadUserProfileAndHousehold(user)
                         onSuccess()
                     }
@@ -551,7 +600,7 @@ internal class OikoNomosAuthDelegate(
             } catch (exc: Exception) {
                 if (exc is CancellationException) throw exc
                 vm._isAuthLoading.value = false
-                onError(exc.localizedMessage ?: (if (isEn) "Google sign-in error" else "Σφάλμα σύνδεσης Google"))
+                onError(exc.localizedMessage ?: Localization.tr(lang, "Google sign-in error", "Σφάλμα σύνδεσης Google"))
             } finally {
                 vm.suppressAuthStateListener = false
             }
@@ -601,7 +650,7 @@ internal class OikoNomosAuthDelegate(
                 }
             }
         }
-        val signOutMsg = if (vm._appLanguage.value == "EN") "Signed out successfully" else "Αποσυνδεθήκατε επιτυχώς"
+        val signOutMsg = Localization.tr(vm._appLanguage.value, "Signed out successfully", "Αποσυνδεθήκατε επιτυχώς")
         vm._currentUser.value = null
         vm._isUserVerifiedState.value = false
         vm._hasAcceptedCurrentLegal.value = false
@@ -733,8 +782,11 @@ internal class OikoNomosAuthDelegate(
                 vm.repository.clearAllData()
             }
             vm.showSnackbar(
-                if (vm._appLanguage.value == "EN") "App reset to clean initial state"
-                else "Η εφαρμογή επανήλθε σε αρχική καθαρή κατάσταση"
+                Localization.tr(
+                    vm._appLanguage.value,
+                    "App reset to clean initial state",
+                    "Η εφαρμογή επανήλθε σε αρχική καθαρή κατάσταση"
+                )
             )
         }
     }
@@ -755,11 +807,11 @@ internal class OikoNomosAuthDelegate(
         MerchantCategoryLearner.clearAll(vm.getApplication())
         BankNotificationHolder.wipeLocalStore(vm.getApplication())
         BankNotificationSystemManager.setAutoCatcherEnabled(vm.getApplication(), false)
-        val deleteSuccessMsg = if (vm._appLanguage.value == "EN") {
-            "Your account and personal data have been completely deleted"
-        } else {
+        val deleteSuccessMsg = Localization.tr(
+            vm._appLanguage.value,
+            "Your account and personal data have been completely deleted",
             "Ο λογαριασμός και όλα τα δεδομένα σας διαγράφηκαν επιτυχώς"
-        }
+        )
         vm.cancelAllSyncJobs()
         vm._currentUser.value = null
         vm._isUserVerifiedState.value = false
@@ -795,16 +847,16 @@ internal class OikoNomosAuthDelegate(
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val user = vm.auth.currentUser ?: vm._currentUser.value
         val uid = user?.uid
         val email = user?.email?.trim().orEmpty()
         if (user == null || uid.isNullOrBlank() || email.isBlank()) {
-            onError(if (isEn) "No active user session found" else "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης")
+            onError(Localization.tr(lang, "No active user session found", "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης"))
             return
         }
         if (password.isBlank()) {
-            onError(if (isEn) "Please enter your password to confirm deletion." else "Παρακαλούμε πληκτρολογήστε τον κωδικό σας για επιβεβαίωση.")
+            onError(Localization.tr(lang, "Please enter your password to confirm deletion.", "Παρακαλούμε πληκτρολογήστε τον κωδικό σας για επιβεβαίωση."))
             return
         }
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
@@ -817,29 +869,45 @@ internal class OikoNomosAuthDelegate(
                 onSuccess()
             } catch (e: FirebaseAuthInvalidCredentialsException) {
                 onError(
-                    if (isEn) "Incorrect password. Please try again."
-                    else "Λάθος κωδικός πρόσβασης. Παρακαλούμε δοκιμάστε ξανά."
+                    Localization.tr(
+                        lang,
+                        "Incorrect password. Please try again.",
+                        "Λάθος κωδικός πρόσβασης. Παρακαλούμε δοκιμάστε ξανά."
+                    )
                 )
             } catch (e: FirebaseTooManyRequestsException) {
                 onError(
-                    if (isEn) "Too many failed attempts. Please wait a moment and try again."
-                    else "Πάρα πολλές αποτυχημένες προσπάθειες. Περιμένετε λίγο και δοκιμάστε ξανά."
+                    Localization.tr(
+                        lang,
+                        "Too many failed attempts. Please wait a moment and try again.",
+                        "Πάρα πολλές αποτυχημένες προσπάθειες. Περιμένετε λίγο και δοκιμάστε ξανά."
+                    )
                 )
             } catch (e: FirebaseAuthRecentLoginRequiredException) {
                 onError(
-                    if (isEn) "Please sign out, sign in again, and retry account deletion."
-                    else "Παρακαλούμε αποσυνδεθείτε, συνδεθείτε ξανά και επαναλάβετε τη διαγραφή."
+                    Localization.tr(
+                        lang,
+                        "Please sign out, sign in again, and retry account deletion.",
+                        "Παρακαλούμε αποσυνδεθείτε, συνδεθείτε ξανά και επαναλάβετε τη διαγραφή."
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 val code = (e as? FirebaseAuthException)?.errorCode.orEmpty()
                 val msg = when {
                     code == "ERROR_WRONG_PASSWORD" || code == "ERROR_INVALID_CREDENTIAL" ->
-                        if (isEn) "Incorrect password. Please try again."
-                        else "Λάθος κωδικός πρόσβασης. Παρακαλούμε δοκιμάστε ξανά."
+                        Localization.tr(
+                            lang,
+                            "Incorrect password. Please try again.",
+                            "Λάθος κωδικός πρόσβασης. Παρακαλούμε δοκιμάστε ξανά."
+                        )
                     else ->
-                        if (isEn) "Account deletion failed: ${e.localizedMessage ?: "unknown error"}"
-                        else "Σφάλμα διαγραφής: ${e.localizedMessage ?: "άγνωστο σφάλμα"}"
+                        Localization.trFormat(
+                            lang,
+                            "Account deletion failed: %1\$s",
+                            "Σφάλμα διαγραφής: %1\$s",
+                            e.localizedMessage ?: Localization.tr(lang, "unknown error", "άγνωστο σφάλμα")
+                        )
                 }
                 onError(msg)
             }
@@ -851,11 +919,11 @@ internal class OikoNomosAuthDelegate(
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val isEn = vm._appLanguage.value == "EN"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
         val user = vm.auth.currentUser ?: vm._currentUser.value
         val uid = user?.uid
         if (user == null || uid.isNullOrBlank()) {
-            onError(if (isEn) "No active user session found" else "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης")
+            onError(Localization.tr(lang, "No active user session found", "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης"))
             return
         }
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
@@ -868,11 +936,12 @@ internal class OikoNomosAuthDelegate(
                 onSuccess()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val msg = if (isEn) {
-                    "Google verification failed: ${e.localizedMessage ?: "please try again"}"
-                } else {
-                    "Η επαλήθευση Google απέτυχε: ${e.localizedMessage ?: "δοκιμάστε ξανά"}"
-                }
+                val msg = Localization.trFormat(
+                    lang,
+                    "Google verification failed: %1\$s",
+                    "Η επαλήθευση Google απέτυχε: %1\$s",
+                    e.localizedMessage ?: Localization.tr(lang, "please try again", "δοκιμάστε ξανά")
+                )
                 onError(msg)
             }
         }
@@ -880,27 +949,32 @@ internal class OikoNomosAuthDelegate(
 
     fun deleteCurrentUserAccount() {
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            val isEn = vm._appLanguage.value == "EN"
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             val user = vm.auth.currentUser ?: vm._currentUser.value
             val uid = user?.uid
             if (user == null || uid.isNullOrBlank()) {
-                vm.showSnackbar(if (isEn) "No active user session found" else "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης")
+                vm.showSnackbar(Localization.tr(lang, "No active user session found", "Δεν βρέθηκε ενεργός συνδεδεμένος χρήστης"))
                 return@launch
             }
             try {
                 performPostReauthAccountDeletion(user, uid)
             } catch (e: FirebaseAuthRecentLoginRequiredException) {
                 vm.showSnackbar(
-                    if (isEn)
-                        "For your security, please sign out, sign in again, and retry Account Deletion."
-                    else
+                    Localization.tr(
+                        lang,
+                        "For your security, please sign out, sign in again, and retry Account Deletion.",
                         "Για λόγους ασφαλείας, παρακαλούμε αποσυνδεθείτε, συνδεθείτε ξανά και πατήστε πάλι Διαγραφή Λογαριασμού."
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 vm.showSnackbar(
-                    if (isEn) "Deletion error: ${e.localizedMessage ?: e.message}"
-                    else "Σφάλμα διαγραφής: ${e.localizedMessage ?: e.message}"
+                    Localization.trFormat(
+                        lang,
+                        "Deletion error: %1\$s",
+                        "Σφάλμα διαγραφής: %1\$s",
+                        e.localizedMessage ?: e.message.orEmpty()
+                    )
                 )
             }
         }
@@ -911,19 +985,27 @@ internal class OikoNomosAuthDelegate(
         val trimmed = newName.trim()
         if (trimmed.isBlank()) return
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            val isEn = vm._appLanguage.value == "EN"
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             try {
                 vm.firestoreSyncRepo.updateUserProfileName(user.uid, trimmed)
                 vm._userProfile.value = vm._userProfile.value?.copy(displayName = trimmed)
                 vm.showSnackbar(
-                    if (isEn) "Your name was updated to \"$trimmed\""
-                    else "Το όνομά σας ενημερώθηκε σε «$trimmed»"
+                    Localization.trFormat(
+                        lang,
+                        "Your name was updated to \"%1\$s\"",
+                        "Το όνομά σας ενημερώθηκε σε «%1\$s»",
+                        trimmed
+                    )
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 vm.showSnackbar(
-                    if (isEn) "Update error: ${e.localizedMessage ?: e.message}"
-                    else "Σφάλμα ενημέρωσης: ${e.localizedMessage ?: e.message}"
+                    Localization.trFormat(
+                        lang,
+                        "Update error: %1\$s",
+                        "Σφάλμα ενημέρωσης: %1\$s",
+                        e.localizedMessage ?: e.message.orEmpty()
+                    )
                 )
             }
         }
@@ -939,9 +1021,9 @@ internal class OikoNomosAuthDelegate(
         onSuccess: () -> Unit = {},
         onError: (String) -> Unit = {}
     ) {
-        val isEnNow = vm._appLanguage.value == "EN"
+        val langNow = Localization.Language.fromCode(vm._appLanguage.value)
         val user = vm.auth.currentUser ?: vm._currentUser.value ?: run {
-            onError(if (isEnNow) "No signed-in user found" else "Δεν βρέθηκε συνδεδεμένος χρήστης")
+            onError(Localization.tr(langNow, "No signed-in user found", "Δεν βρέθηκε συνδεδεμένος χρήστης"))
             return
         }
         val cleanFirst = firstName.trim()
@@ -955,7 +1037,7 @@ internal class OikoNomosAuthDelegate(
             }
         }
         val fullName = "$resolvedFirst $resolvedLast".trim().ifBlank {
-            user.displayName?.ifBlank { null } ?: if (isEnNow) "Finsay User" else "Χρήστης Finsay"
+            user.displayName?.ifBlank { null } ?: Localization.finsayUser(langNow)
         }
         val optimisticProfile = current.copy(
             displayName = fullName,
@@ -1003,19 +1085,18 @@ internal class OikoNomosAuthDelegate(
                     vm._userProfile.value = merged
                     saveUserProfileToPrefs(merged)
                     val lang = Localization.Language.fromCode(vm._appLanguage.value)
-                    vm.showSnackbar(if (lang == Localization.Language.ENGLISH) "Profile saved successfully!" else "Το προφίλ σας αποθηκεύτηκε επιτυχώς!")
+                    vm.showSnackbar(Localization.tr(lang, "Profile saved successfully!", "Το προφίλ σας αποθηκεύτηκε επιτυχώς!"))
                     onSuccess()
                 }.onFailure {
                     val lang = Localization.Language.fromCode(vm._appLanguage.value)
-                    vm.showSnackbar(if (lang == Localization.Language.ENGLISH) "Saved locally (syncing with cloud...)" else "Τα στοιχεία αποθηκεύτηκαν τοπικά (συγχρονισμός με cloud...)")
+                    vm.showSnackbar(Localization.tr(lang, "Saved locally (syncing with cloud...)", "Τα στοιχεία αποθηκεύτηκαν τοπικά (συγχρονισμός με cloud...)"))
                     onSuccess()
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val isEn = vm._appLanguage.value == "EN"
+                val lang = Localization.Language.fromCode(vm._appLanguage.value)
                 vm.showSnackbar(
-                    if (isEn) "Profile saved locally"
-                    else "Τα στοιχεία αποθηκεύτηκαν τοπικά"
+                    Localization.tr(lang, "Profile saved locally", "Τα στοιχεία αποθηκεύτηκαν τοπικά")
                 )
                 onSuccess()
             }
@@ -1025,19 +1106,17 @@ internal class OikoNomosAuthDelegate(
     fun updateUserProfilePhoto(photoUrl: String) {
         val user = vm._currentUser.value ?: return
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            val isEn = vm._appLanguage.value == "EN"
+            val lang = Localization.Language.fromCode(vm._appLanguage.value)
             try {
                 vm.firestoreSyncRepo.updateUserProfilePhoto(user.uid, photoUrl)
                 vm._userProfile.value = vm._userProfile.value?.copy(photoUrl = photoUrl)
                 vm.showSnackbar(
-                    if (isEn) "Profile photo updated successfully"
-                    else "Η εικόνα προφίλ ενημερώθηκε επιτυχώς"
+                    Localization.tr(lang, "Profile photo updated successfully", "Η εικόνα προφίλ ενημερώθηκε επιτυχώς")
                 )
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 vm.showSnackbar(
-                    if (isEn) "Failed to update profile photo"
-                    else "Αποτυχία ενημέρωσης εικόνας προφίλ"
+                    Localization.tr(lang, "Failed to update profile photo", "Αποτυχία ενημέρωσης εικόνας προφίλ")
                 )
             }
         }
@@ -1051,7 +1130,7 @@ internal class OikoNomosAuthDelegate(
             editor.putBoolean("gdpr_privacy_consent_accepted_$uid", true)
         }
         editor.apply()
-        vm.showSnackbar(if (vm._appLanguage.value == "EN") "Privacy settings saved" else "Η συγκατάθεση αποθηκεύτηκε επιτυχώς")
+        vm.showSnackbar(Localization.tr(vm._appLanguage.value, "Privacy settings saved", "Η συγκατάθεση αποθηκεύτηκε επιτυχώς"))
     }
 
     fun dismissOnboardingCarousel() {

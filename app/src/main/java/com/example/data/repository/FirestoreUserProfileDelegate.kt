@@ -192,9 +192,10 @@ internal class FirestoreUserProfileDelegate(
 
             val migratedPrivate = migrateLegacyPrivateFieldsIfPresent(uid, snapshot, privateSnap)
 
-            val existingLang = existing.appLanguage.ifBlank { requestedLang }
-            val defaultHouseholdName = if (existingLang.equals("EL", ignoreCase = true)) "Το Εξοδολόγιό μου" else "My Household Book"
-            val defaultDisplayName = if (existingLang.equals("EL", ignoreCase = true)) "Χρήστης Finsay" else "Finsay User"
+            val existingLangCode = existing.appLanguage.ifBlank { requestedLang }
+            val existingLang = com.example.util.Localization.Language.fromCode(existingLangCode)
+            val defaultHouseholdName = com.example.util.Localization.myExodologio(existingLang)
+            val defaultDisplayName = com.example.util.Localization.finsayUser(existingLang)
             val profileDisplayName = if (existing.displayName.isNotBlank()) existing.displayName else displayName.ifBlank { defaultDisplayName }
             val derivedFirst = if (existing.firstName.isNotBlank()) {
                 existing.firstName
@@ -289,8 +290,9 @@ internal class FirestoreUserProfileDelegate(
             }
             merged
         } else {
-            val defaultHouseholdName = if (requestedLang.equals("EL", ignoreCase = true)) "Το Εξοδολόγιό μου" else "My Household Book"
-            val defaultDisplayName = if (requestedLang.equals("EL", ignoreCase = true)) "Χρήστης Finsay" else "Finsay User"
+            val reqLang = com.example.util.Localization.Language.fromCode(requestedLang)
+            val defaultHouseholdName = com.example.util.Localization.myExodologio(reqLang)
+            val defaultDisplayName = com.example.util.Localization.finsayUser(reqLang)
             val allDiscovered = discoveredHids.filter { it.isNotBlank() }.distinct()
             val (initialHouseholdId, initialHouseholdIds) = if (allDiscovered.isNotEmpty()) {
                 val withExp = householdDelegate.findHouseholdWithExpenses(allDiscovered) ?: allDiscovered.first()

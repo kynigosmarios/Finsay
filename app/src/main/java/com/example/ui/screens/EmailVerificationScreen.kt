@@ -138,7 +138,7 @@ fun EmailVerificationScreen(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "Verify Your Email" else "Επιβεβαίωση Email",
+                        text = Localization.tr(lang, "Verify Your Email", "Επιβεβαίωση Email"),
                         fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -147,10 +147,11 @@ fun EmailVerificationScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH)
-                            "We sent a verification link to:"
-                        else
-                            "Έχουμε στείλει έναν σύνδεσμο επιβεβαίωσης στο:",
+                        text = Localization.tr(
+                            lang,
+                            "We sent a verification link to:",
+                            "Έχουμε στείλει έναν σύνδεσμο επιβεβαίωσης στο:"
+                        ),
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -175,10 +176,11 @@ fun EmailVerificationScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH)
-                            "Please click the link in your email to activate your account. If you cannot find it, please check your Spam or Junk folder."
-                        else
-                            "Παρακαλούμε ανοίξτε το email σας και πατήστε στον σύνδεσμο για να ενεργοποιηθεί ο λογαριασμός σας. Ελέγξτε και τον φάκελο Ανεπιθύμητα/Spam.",
+                        text = Localization.tr(
+                            lang,
+                            "Please click the link in your email to activate your account. If you cannot find it, please check your Spam or Junk folder.",
+                            "Παρακαλούμε ανοίξτε το email σας και πατήστε στον σύνδεσμο για να ενεργοποιηθεί ο λογαριασμός σας. Ελέγξτε και τον φάκελο Ανεπιθύμητα/Spam."
+                        ),
                         fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -216,16 +218,18 @@ fun EmailVerificationScreen(
                                 isChecking = false
                                 if (!verified) {
                                     isStatusError = true
-                                    statusMessage = if (lang == Localization.Language.ENGLISH)
-                                        "Email is not verified yet. Please check your inbox and click the link."
-                                    else
+                                    statusMessage = Localization.tr(
+                                        lang,
+                                        "Email is not verified yet. Please check your inbox and click the link.",
                                         "Το email δεν έχει επιβεβαιωθεί ακόμα. Ελέγξτε τα εισερχόμενά σας και πατήστε τον σύνδεσμο."
+                                    )
                                 } else {
                                     isStatusError = false
-                                    statusMessage = if (lang == Localization.Language.ENGLISH)
-                                        "Email verified! Entering your account..."
-                                    else
+                                    statusMessage = Localization.tr(
+                                        lang,
+                                        "Email verified! Entering your account...",
                                         "Το email επιβεβαιώθηκε! Είσοδος στον λογαριασμό σας..."
+                                    )
                                 }
                             }
                         },
@@ -247,7 +251,7 @@ fun EmailVerificationScreen(
                                 Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "I've Verified My Email" else "Έχω Επιβεβαιώσει το Email",
+                                    text = Localization.tr(lang, "I've Verified My Email", "Έχω Επιβεβαιώσει το Email"),
                                     fontSize = 14.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -266,10 +270,11 @@ fun EmailVerificationScreen(
                             viewModel.resendVerificationEmail(
                                 onSuccess = {
                                     isStatusError = false
-                                    statusMessage = if (lang == Localization.Language.ENGLISH)
-                                        "A new verification email has been sent!"
-                                    else
+                                    statusMessage = Localization.tr(
+                                        lang,
+                                        "A new verification email has been sent!",
                                         "Στάλθηκε νέο email επιβεβαίωσης! Ελέγξτε τα εισερχόμενά σας."
+                                    )
                                 },
                                 onError = { err ->
                                     isStatusError = true
@@ -289,7 +294,7 @@ fun EmailVerificationScreen(
                             Icon(Icons.Default.Send, contentDescription = null, tint = Emerald700, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Resend Verification Email" else "Επαναποστολή Email",
+                                text = Localization.tr(lang, "Resend Verification Email", "Επαναποστολή Email"),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Emerald700
@@ -313,7 +318,7 @@ fun EmailVerificationScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Sign Out / Use Another Account" else "Αποσύνδεση / Αλλαγή Λογαριασμού",
+                                text = Localization.tr(lang, "Sign Out / Use Another Account", "Αποσύνδεση / Αλλαγή Λογαριασμού"),
                                 color = MaterialTheme.colorScheme.error,
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Medium

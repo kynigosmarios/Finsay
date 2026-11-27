@@ -480,7 +480,7 @@ internal fun AnalyticsMemberDeficitAlertCard(
                                         color = Color(0xFF991B1B)
                                     )
                                     Text(
-                                        text = "Έσοδα: ${String.format(Locale.US, "%.1f", income)}$currencySymbol • Έξοδα: ${String.format(Locale.US, "%.1f", paid)}$currencySymbol",
+                                        text = "${Localization.incomes(lang)}: ${String.format(Locale.US, "%.1f", income)}$currencySymbol • ${Localization.expenses(lang)}: ${String.format(Locale.US, "%.1f", paid)}$currencySymbol",
                                         fontSize = 11.sp,
                                         color = Color(0xFFB91C1C)
                                     )
@@ -741,7 +741,7 @@ internal fun AnalyticsParentsForKidsCard(
                 icon = Icons.Default.FamilyRestroom,
                 iconTint = Color(0xFF4F46E5),
                 iconContainerColor = Color(0xFF6366F1).copy(alpha = 0.13f),
-                title = if (lang == Localization.Language.ENGLISH) "Parents' Expenses for Children" else "Έξοδα Γονέων για τα Παιδιά",
+                title = Localization.tr(lang, "Parents' Expenses for Children", "Έξοδα Γονέων για τα Παιδιά"),
                 trailing = {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -831,7 +831,7 @@ internal fun AnalyticsParentsForKidsCard(
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Text(
-                                                text = if (lang == Localization.Language.ENGLISH) "100% Covered by parents" else "🛡️ 100% Κάλυψη από γονείς",
+                                                text = Localization.tr(lang, "100% Covered by parents", "🛡️ 100% Κάλυψη από γονείς"),
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Medium,
                                                 color = Emerald700

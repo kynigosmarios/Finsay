@@ -174,7 +174,7 @@ internal fun ExpensesHeroDashboardCard(
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                text = if (lang == Localization.Language.ENGLISH) "All Months" else "Όλοι οι μήνες",
+                                                text = Localization.tr(lang, "All Months", "Όλοι οι μήνες"),
                                                 fontWeight = if (effectiveMonthKey == "ALL") FontWeight.Bold else FontWeight.Normal,
                                                 color = if (effectiveMonthKey == "ALL") Emerald700 else MaterialTheme.colorScheme.onSurface
                                             )
@@ -231,13 +231,15 @@ internal fun ExpensesHeroDashboardCard(
                                 )
                                 Text(
                                     text = if (isIncomeSelected) {
-                                        if (lang == Localization.Language.ENGLISH) "Income" else "Έσοδο"
+                                        Localization.tr(lang, "Income", "Έσοδο")
                                     } else {
-                                        if (lang == Localization.Language.ENGLISH) "Expense" else "Έξοδο"
+                                        Localization.tr(lang, "Expense", "Έξοδο")
                                     },
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -246,7 +248,7 @@ internal fun ExpensesHeroDashboardCard(
                     Spacer(modifier = Modifier.height(18.dp))
 
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "NET BALANCE" else "ΚΑΘΑΡΟ ΥΠΟΛΟΙΠΟ",
+                        text = Localization.tr(lang, "NET BALANCE", "ΚΑΘΑΡΟ ΥΠΟΛΟΙΠΟ"),
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFA7F3D0),
@@ -282,10 +284,11 @@ internal fun ExpensesHeroDashboardCard(
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Text(
-                                    text = if (isWithinBudget)
-                                        (if (lang == Localization.Language.ENGLISH) "Within budget" else "Εντός προϋπολογισμού")
-                                    else
-                                        (if (lang == Localization.Language.ENGLISH) "Over budget" else "Εκτός προϋπολογισμού"),
+                                    text = if (isWithinBudget) {
+                                        Localization.tr(lang, "Within budget", "Εντός προϋπολογισμού")
+                                    } else {
+                                        Localization.tr(lang, "Over budget", "Εκτός προϋπολογισμού")
+                                    },
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isWithinBudget) Color(0xFF6EE7B7) else Color(0xFFFCA5A5)
@@ -429,7 +432,9 @@ internal fun ExpensesHeroDashboardCard(
                                         text = "${Localization.expenses(lang)} ($heroExpensesCount)",
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (selectedTypeFilter == "EXPENSE") Color.White else Color(0xFFA7F3D0)
+                                        color = if (selectedTypeFilter == "EXPENSE") Color.White else Color(0xFFA7F3D0),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -450,7 +455,9 @@ internal fun ExpensesHeroDashboardCard(
                                         text = "${Localization.income(lang)} ($heroIncomesCount)",
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (selectedTypeFilter == "INCOME") Color.White else Color(0xFFA7F3D0)
+                                        color = if (selectedTypeFilter == "INCOME") Color.White else Color(0xFFA7F3D0),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -528,10 +535,12 @@ internal fun ExpensesHeroDashboardCard(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Shared" else "Κοινά Σπιτιού",
+                                        text = Localization.tr(lang, "Shared", "Κοινά Σπιτιού"),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFA7F3D0)
+                                        color = Color(0xFFA7F3D0),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -564,10 +573,12 @@ internal fun ExpensesHeroDashboardCard(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Personal" else "Ατομικά",
+                                        text = Localization.tr(lang, "Personal", "Ατομικά"),
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFA7F3D0)
+                                        color = Color(0xFFA7F3D0),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -879,7 +890,7 @@ internal fun ActiveSpecialFilterBadge(
                 )
                 Icon(
                     imageVector = Icons.Default.Close,
-                    contentDescription = if (lang == Localization.Language.ENGLISH) "Clear filter" else "Καθαρισμός φίλτρου",
+                    contentDescription = Localization.tr(lang, "Clear filter", "Καθαρισμός φίλτρου"),
                     tint = Emerald700,
                     modifier = Modifier.size(14.dp)
                 )

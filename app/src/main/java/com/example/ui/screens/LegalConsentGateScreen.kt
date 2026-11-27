@@ -78,7 +78,6 @@ fun LegalConsentGateScreen(
 ) {
     val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEn = lang == Localization.Language.ENGLISH
 
     var isChecked by remember { mutableStateOf(false) }
     var showCheckboxError by remember { mutableStateOf(false) }
@@ -170,7 +169,7 @@ fun LegalConsentGateScreen(
 
                         // Warm, non-repetitive editorial headline
                         Text(
-                            text = if (isEn) "Before we begin" else "Πριν ξεκινήσουμε",
+                            text = Localization.tr(lang, "Before we begin", "Πριν ξεκινήσουμε"),
                             fontFamily = ModernFontFamily,
                             fontSize = 26.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -182,10 +181,11 @@ fun LegalConsentGateScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
-                            text = if (isEn)
-                                "Your privacy and security always come first."
-                            else
-                                "Η ασφάλεια και το απόρρητό σας είναι πάντα προτεραιότητα.",
+                            text = Localization.tr(
+                                lang,
+                                "Your privacy and security always come first.",
+                                "Η ασφάλεια και το απόρρητό σας είναι πάντα προτεραιότητα."
+                            ),
                             fontSize = 15.sp,
                             lineHeight = 22.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -214,29 +214,32 @@ fun LegalConsentGateScreen(
                                 PrivacyPromiseRow(
                                     icon = Icons.Outlined.Lock,
                                     accentColor = brandAccent,
-                                    title = if (isEn) "Encrypted & GDPR compliant" else "Κρυπτογραφημένα δεδομένα",
-                                    subtitle = if (isEn)
-                                        "Protected storage built to European privacy standards."
-                                    else
+                                    title = Localization.tr(lang, "Encrypted & GDPR compliant", "Κρυπτογραφημένα δεδομένα"),
+                                    subtitle = Localization.tr(
+                                        lang,
+                                        "Protected storage built to European privacy standards.",
                                         "Ασφαλής αποθήκευση σύμφωνα με τα πρότυπα GDPR."
+                                    )
                                 )
                                 PrivacyPromiseRow(
                                     icon = Icons.Outlined.VerifiedUser,
                                     accentColor = brandAccent,
-                                    title = if (isEn) "Strictly private" else "Αυστηρά ιδιωτικά",
-                                    subtitle = if (isEn)
-                                        "We never sell or share your personal finances."
-                                    else
+                                    title = Localization.tr(lang, "Strictly private", "Αυστηρά ιδιωτικά"),
+                                    subtitle = Localization.tr(
+                                        lang,
+                                        "We never sell or share your personal finances.",
                                         "Δεν κοινοποιούμε ούτε πουλάμε τα δεδομένα σας."
+                                    )
                                 )
                                 PrivacyPromiseRow(
                                     icon = Icons.Outlined.Tune,
                                     accentColor = brandAccent,
-                                    title = if (isEn) "Always in your control" else "Πάντα στον έλεγχό σας",
-                                    subtitle = if (isEn)
-                                        "Export or delete your account whenever you want."
-                                    else
+                                    title = Localization.tr(lang, "Always in your control", "Πάντα στον έλεγχό σας"),
+                                    subtitle = Localization.tr(
+                                        lang,
+                                        "Export or delete your account whenever you want.",
                                         "Εξαγωγή ή διαγραφή λογαριασμού ανά πάσα στιγμή."
+                                    )
                                 )
                             }
                         }
@@ -270,48 +273,25 @@ fun LegalConsentGateScreen(
                             )
                         )
                         val consentAnnotated = buildAnnotatedString {
-                            if (isEn) {
-                                append("I agree to the ")
-                                withLink(
-                                    LinkAnnotation.Clickable(
-                                        tag = "TERMS",
-                                        styles = linkStyle,
-                                        linkInteractionListener = { legalDialogTab = "TERMS" }
-                                    )
-                                ) {
-                                    append("Terms & Conditions")
-                                }
-                                append(" and ")
-                                withLink(
-                                    LinkAnnotation.Clickable(
-                                        tag = "PRIVACY",
-                                        styles = linkStyle,
-                                        linkInteractionListener = { legalDialogTab = "PRIVACY" }
-                                    )
-                                ) {
-                                    append("Privacy Policy")
-                                }
-                            } else {
-                                append("Αποδέχομαι τους ")
-                                withLink(
-                                    LinkAnnotation.Clickable(
-                                        tag = "TERMS",
-                                        styles = linkStyle,
-                                        linkInteractionListener = { legalDialogTab = "TERMS" }
-                                    )
-                                ) {
-                                    append("Όρους & Προϋποθέσεις")
-                                }
-                                append(" και την ")
-                                withLink(
-                                    LinkAnnotation.Clickable(
-                                        tag = "PRIVACY",
-                                        styles = linkStyle,
-                                        linkInteractionListener = { legalDialogTab = "PRIVACY" }
-                                    )
-                                ) {
-                                    append("Πολιτική Απορρήτου")
-                                }
+                            append(Localization.tr(lang, "I agree to the ", "Αποδέχομαι τους "))
+                            withLink(
+                                LinkAnnotation.Clickable(
+                                    tag = "TERMS",
+                                    styles = linkStyle,
+                                    linkInteractionListener = { legalDialogTab = "TERMS" }
+                                )
+                            ) {
+                                append(Localization.tr(lang, "Terms & Conditions", "Όρους & Προϋποθέσεις"))
+                            }
+                            append(Localization.tr(lang, " and ", " και την "))
+                            withLink(
+                                LinkAnnotation.Clickable(
+                                    tag = "PRIVACY",
+                                    styles = linkStyle,
+                                    linkInteractionListener = { legalDialogTab = "PRIVACY" }
+                                )
+                            ) {
+                                append(Localization.tr(lang, "Privacy Policy", "Πολιτική Απορρήτου"))
                             }
                         }
 
@@ -367,10 +347,11 @@ fun LegalConsentGateScreen(
                             exit = fadeOut()
                         ) {
                             Text(
-                                text = if (isEn)
-                                    "Please check the box above to continue."
-                                else
-                                    "Παρακαλούμε επιλέξτε το παραπάνω πεδίο για να συνεχίσετε.",
+                                text = Localization.tr(
+                                    lang,
+                                    "Please check the box above to continue.",
+                                    "Παρακαλούμε επιλέξτε το παραπάνω πεδίο για να συνεχίσετε."
+                                ),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.Medium,
@@ -407,7 +388,7 @@ fun LegalConsentGateScreen(
                                 .testTag("legal_gate_accept_button")
                         ) {
                             Text(
-                                text = if (isEn) "Enter Finsay" else "Είσοδος στο Finsay",
+                                text = Localization.tr(lang, "Enter Finsay", "Είσοδος στο Finsay"),
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -430,7 +411,7 @@ fun LegalConsentGateScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isEn) "Back to Sign In" else "Επιστροφή στην αρχική οθόνη",
+                                text = Localization.tr(lang, "Back to Sign In", "Επιστροφή στην αρχική οθόνη"),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -515,55 +496,10 @@ private fun CompactLanguageToggle(
     accentColor: Color,
     onSelectLanguage: (String) -> Unit
 ) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-    ) {
-        Row(
-            modifier = Modifier.padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LanguageChip(
-                label = "ΕΛ",
-                selected = currentLanguage == "EL",
-                accentColor = accentColor,
-                onClick = { onSelectLanguage("EL") }
-            )
-            LanguageChip(
-                label = "EN",
-                selected = currentLanguage == "EN",
-                accentColor = accentColor,
-                onClick = { onSelectLanguage("EN") }
-            )
-        }
-    }
-}
-
-@Composable
-private fun LanguageChip(
-    label: String,
-    selected: Boolean,
-    accentColor: Color,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = if (selected) accentColor else Color.Transparent,
-        modifier = Modifier.height(36.dp)
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 14.dp)
-        ) {
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
+    com.example.ui.components.LanguageSelectorPill(
+        currentLanguageCode = currentLanguage,
+        onSelectLanguage = onSelectLanguage,
+        compact = true,
+        accentColor = accentColor
+    )
 }

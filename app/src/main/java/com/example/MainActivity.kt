@@ -17,11 +17,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.billing.BillingManager
 import com.example.ui.components.AppLockScreen
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.EmailVerificationScreen
@@ -106,6 +108,11 @@ class MainActivity : FragmentActivity() {
         setContent {
             val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
             val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+            val proPlanPrices by (if (::billingManager.isInitialized) {
+                billingManager.planPrices.collectAsStateWithLifecycle()
+            } else {
+                remember { mutableStateOf(BillingManager.ProPlanPrices()) }
+            })
             val isDarkTheme = when {
                 themeMode.equals("DARK", ignoreCase = true) -> true
                 themeMode.equals("LIGHT", ignoreCase = true) -> false
@@ -119,6 +126,7 @@ class MainActivity : FragmentActivity() {
                     Box(modifier = Modifier.fillMaxSize()) {
                         AppRootNavigator(
                             viewModel = viewModel,
+                            proPlanPrices = proPlanPrices,
                             onLaunchBilling = { act, planId ->
                                 try {
                                     if (::billingManager.isInitialized) {
@@ -257,6 +265,7 @@ private enum class RootScreen {
 @Composable
 fun AppRootNavigator(
     viewModel: OikoNomosViewModel,
+    proPlanPrices: BillingManager.ProPlanPrices = BillingManager.ProPlanPrices(),
     onLaunchBilling: (android.app.Activity, String) -> Boolean = { _, _ -> false }
 ) {
     val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
@@ -303,6 +312,7 @@ fun AppRootNavigator(
             RootScreen.MAIN -> {
                 MainScreen(
                     viewModel = viewModel,
+                    proPlanPrices = proPlanPrices,
                     onLaunchBilling = onLaunchBilling
                 )
             }

@@ -3,6 +3,7 @@ package com.example.util
 import com.example.data.entity.Expense
 import com.example.data.entity.FamilyMember
 import com.example.data.entity.getPayerShares
+import com.example.data.entity.resolveReconciledBeneficiaries
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.min
@@ -192,26 +193,8 @@ object SettleUpCalculator {
         if (splitType == "ALL_FAMILY" || splitType == "ALL") {
             return activeMembers
         }
-
-        // Check memberIdsCsv
-        if (expense.memberIdsCsv.isNotBlank()) {
-            val ids = expense.memberIdsCsv.split(",").mapNotNull { it.trim().toLongOrNull() }.toSet()
-            val matched = activeMembers.filter { ids.contains(it.id) }
-            if (matched.isNotEmpty()) return matched
-        }
-
-        // Check memberNamesDisplay
-        val raw = expense.memberNamesDisplay.replace(Regex("\\s*\\([^)]*\\)"), "").trim()
-        if (raw.isNotBlank() && !raw.equals("Κοινό Οικογένειας", ignoreCase = true) && !raw.equals("Family", ignoreCase = true)) {
-            val parts = raw.split(Regex("[,&+]+|\\s+και\\s+|\\s+and\\s+")).map { it.trim() }.filter { it.isNotBlank() }
-            val matched = activeMembers.filter { m ->
-                parts.any { p ->
-                    m.name.equals(p, ignoreCase = true) || m.name.contains(p, ignoreCase = true) || p.contains(m.name, ignoreCase = true)
-                }
-            }
-            if (matched.isNotEmpty()) return matched
-        }
-
+        val reconciled = expense.resolveReconciledBeneficiaries(activeMembers)
+        if (reconciled.isNotEmpty()) return reconciled
         return activeMembers
     }
 
@@ -220,59 +203,83 @@ object SettleUpCalculator {
         householdTitle: String,
         isGreek: Boolean = true,
         currencySymbol: String = CurrencyFormatter.currentSymbol
+    ): String = formatSummaryText(
+        result = result,
+        householdTitle = householdTitle,
+        lang = if (isGreek) Localization.Language.GREEK else Localization.Language.ENGLISH,
+        currencySymbol = currencySymbol
+    )
+
+    fun formatSummaryText(
+        result: SettleUpResult,
+        householdTitle: String,
+        lang: Localization.Language,
+        currencySymbol: String = CurrencyFormatter.currentSymbol
     ): String {
+        val locale = if (lang == Localization.Language.ENGLISH) Locale.US else Localization.getDateLocale(lang)
         val sb = StringBuilder()
-        if (isGreek) {
-            sb.appendLine("📊 ΕΚΚΑΘΑΡΙΣΗ ΕΞΟΔΩΝ - $householdTitle")
-            sb.appendLine("────────────────────────────")
-            sb.appendLine("Σύνολο Εξόδων: ${String.format(Locale.GERMANY, "%.2f", result.totalHouseholdExpenses)} $currencySymbol")
-            sb.appendLine()
-            sb.appendLine("👤 Συνοπτική Εικόνα:")
-            for (s in result.memberSummaries) {
-                val status = when {
-                    s.netBalance > 0.01 -> "(+${String.format(Locale.GERMANY, "%.2f", s.netBalance)} $currencySymbol επιστροφή)"
-                    s.netBalance < -0.01 -> "(-${String.format(Locale.GERMANY, "%.2f", abs(s.netBalance))} $currencySymbol οφειλή)"
-                    else -> "(τακτοποιημένο)"
-                }
-                sb.appendLine("• ${s.member.name}: Πλήρωσε ${String.format(Locale.GERMANY, "%.2f", s.totalPaid)} $currencySymbol | Μερίδιο ${String.format(Locale.GERMANY, "%.2f", s.totalShare)} $currencySymbol $status")
+        sb.appendLine(
+            Localization.trFormat(
+                lang,
+                "📊 EXPENSE SETTLEMENT - %1\$s",
+                "📊 ΕΚΚΑΘΑΡΙΣΗ ΕΞΟΔΩΝ - %1\$s",
+                householdTitle
+            )
+        )
+        sb.appendLine("────────────────────────────")
+        sb.appendLine(
+            Localization.trFormat(
+                lang,
+                "Total Expenses: %1\$s %2\$s",
+                "Σύνολο Εξόδων: %1\$s %2\$s",
+                String.format(locale, "%.2f", result.totalHouseholdExpenses),
+                currencySymbol
+            )
+        )
+        sb.appendLine()
+        sb.appendLine(Localization.tr(lang, "👤 Member Breakdown:", "👤 Συνοπτική Εικόνα:"))
+        for (s in result.memberSummaries) {
+            val status = when {
+                s.netBalance > 0.01 -> Localization.trFormat(
+                    lang,
+                    "(+%1\$s %2\$s get back)",
+                    "(+%1\$s %2\$s επιστροφή)",
+                    String.format(locale, "%.2f", s.netBalance),
+                    currencySymbol
+                )
+                s.netBalance < -0.01 -> Localization.trFormat(
+                    lang,
+                    "(-%1\$s %2\$s owes)",
+                    "(-%1\$s %2\$s οφειλή)",
+                    String.format(locale, "%.2f", abs(s.netBalance)),
+                    currencySymbol
+                )
+                else -> Localization.tr(lang, "(settled)", "(τακτοποιημένο)")
             }
-            sb.appendLine()
-            if (result.transfers.isEmpty()) {
-                sb.appendLine("✅ Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!")
-            } else {
-                sb.appendLine("🤝 Προτεινόμενες Μεταφορές:")
-                for (t in result.transfers) {
-                    sb.appendLine("👉 ${t.fromMember.name} ➜ ${t.toMember.name}: ${String.format(Locale.GERMANY, "%.2f", t.amount)} $currencySymbol")
-                }
-            }
-            sb.appendLine("────────────────────────────")
-            sb.appendLine("Υπολογίστηκε αυτόματα από το Finsay")
-        } else {
-            sb.appendLine("📊 EXPENSE SETTLEMENT - $householdTitle")
-            sb.appendLine("────────────────────────────")
-            sb.appendLine("Total Expenses: ${String.format(Locale.US, "%.2f", result.totalHouseholdExpenses)} $currencySymbol")
-            sb.appendLine()
-            sb.appendLine("👤 Member Breakdown:")
-            for (s in result.memberSummaries) {
-                val status = when {
-                    s.netBalance > 0.01 -> "(+${String.format(Locale.US, "%.2f", s.netBalance)} $currencySymbol get back)"
-                    s.netBalance < -0.01 -> "(-${String.format(Locale.US, "%.2f", abs(s.netBalance))} $currencySymbol owes)"
-                    else -> "(settled)"
-                }
-                sb.appendLine("• ${s.member.name}: Paid ${String.format(Locale.US, "%.2f", s.totalPaid)} $currencySymbol | Share ${String.format(Locale.US, "%.2f", s.totalShare)} $currencySymbol $status")
-            }
-            sb.appendLine()
-            if (result.transfers.isEmpty()) {
-                sb.appendLine("✅ All balances are settled up!")
-            } else {
-                sb.appendLine("🤝 Recommended Transfers:")
-                for (t in result.transfers) {
-                    sb.appendLine("👉 ${t.fromMember.name} ➜ ${t.toMember.name}: ${String.format(Locale.US, "%.2f", t.amount)} $currencySymbol")
-                }
-            }
-            sb.appendLine("────────────────────────────")
-            sb.appendLine("Calculated automatically via Finsay")
+            sb.appendLine(
+                Localization.trFormat(
+                    lang,
+                    "• %1\$s: Paid %2\$s %3\$s | Share %4\$s %3\$s %5\$s",
+                    "• %1\$s: Πλήρωσε %2\$s %3\$s | Μερίδιο %4\$s %3\$s %5\$s",
+                    s.member.name,
+                    String.format(locale, "%.2f", s.totalPaid),
+                    currencySymbol,
+                    String.format(locale, "%.2f", s.totalShare),
+                    status
+                )
+            )
         }
+        sb.appendLine()
+        if (result.transfers.isEmpty()) {
+            sb.appendLine(Localization.tr(lang, "✅ All balances are settled up!", "✅ Όλοι οι λογαριασμοί είναι απόλυτα ισοσκελισμένοι!"))
+        } else {
+            sb.appendLine(Localization.tr(lang, "🤝 Recommended Transfers:", "🤝 Προτεινόμενες Μεταφορές:"))
+            for (t in result.transfers) {
+                sb.appendLine("👉 ${t.fromMember.name} ➜ ${t.toMember.name}: ${String.format(locale, "%.2f", t.amount)} $currencySymbol")
+            }
+        }
+        sb.appendLine("────────────────────────────")
+        sb.appendLine(Localization.tr(lang, "Calculated automatically via Finsay", "Υπολογίστηκε αυτόματα από το Finsay"))
         return sb.toString()
     }
 

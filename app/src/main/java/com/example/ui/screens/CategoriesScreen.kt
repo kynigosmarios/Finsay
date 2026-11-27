@@ -85,7 +85,6 @@ fun CategoriesScreen(
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isGreek = lang != Localization.Language.ENGLISH
     val currencySymbol = LocalCurrencySymbol.current
     val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     var selectedCategoryType by remember { mutableStateOf("EXPENSE") }
@@ -131,10 +130,12 @@ fun CategoriesScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                         Text(
-                            text = if (isGreek) "Έξοδα" else "Expenses",
+                            text = Localization.expenses(lang),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (!isIncomeTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (!isIncomeTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -150,10 +151,12 @@ fun CategoriesScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                         Text(
-                            text = if (isGreek) "Έσοδα" else "Income",
+                            text = Localization.incomes(lang),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isIncomeTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (isIncomeTab) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -180,9 +183,9 @@ fun CategoriesScreen(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = if (isIncomeTab) {
-                            if (isGreek) "Κατηγορίες εσόδων" else "Income Categories"
+                            Localization.tr(lang, "Income Categories", "Κατηγορίες εσόδων")
                         } else {
-                            if (isGreek) "Κατηγορίες εξόδων" else "Expense Categories"
+                            Localization.tr(lang, "Expense Categories", "Κατηγορίες εξόδων")
                         },
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -191,11 +194,12 @@ fun CategoriesScreen(
                     if (!isPro) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (isGreek) {
-                                "${displayedCategories.size}/5 στη δωρεάν έκδοση • Pro για απεριόριστες"
-                            } else {
-                                "${displayedCategories.size}/5 in Free plan • Pro for unlimited"
-                            },
+                            text = Localization.trFormat(
+                                lang,
+                                "%1\$d/5 in Free plan • Pro for unlimited",
+                                "%1\$d/5 στη δωρεάν έκδοση • Pro για απεριόριστες",
+                                displayedCategories.size
+                            ),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -224,7 +228,7 @@ fun CategoriesScreen(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (isGreek) "Προσθήκη" else "Add",
+                            text = Localization.tr(lang, "Add", "Προσθήκη"),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -263,7 +267,7 @@ fun CategoriesScreen(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     Text(
-                        text = if (lang == Localization.Language.ENGLISH) "No categories found" else "Δεν υπάρχουν κατηγορίες",
+                        text = Localization.tr(lang, "No categories found", "Δεν υπάρχουν κατηγορίες"),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -284,7 +288,7 @@ fun CategoriesScreen(
                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Add Category" else "Προσθήκη",
+                                    text = Localization.tr(lang, "Add Category", "Προσθήκη"),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.5.sp
                                 )
@@ -301,7 +305,7 @@ fun CategoriesScreen(
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (lang == Localization.Language.ENGLISH) "Load Defaults" else "Έτοιμες Κατηγορίες",
+                                    text = Localization.tr(lang, "Load Defaults", "Έτοιμες Κατηγορίες"),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.5.sp
                                 )
@@ -327,7 +331,7 @@ fun CategoriesScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isGreek) "Διαγραμμένες Κατηγορίες (${displayedDeletedCategories.size})" else "Deleted Categories (${displayedDeletedCategories.size})",
+                                text = Localization.trFormat(lang, "Deleted Categories (%1\$d)", "Διαγραμμένες Κατηγορίες (%1\$d)", displayedDeletedCategories.size),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -536,7 +540,7 @@ fun CategoriesScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isGreek) "Διαγραμμένες Κατηγορίες (${displayedDeletedCategories.size})" else "Deleted Categories (${displayedDeletedCategories.size})",
+                                text = Localization.trFormat(lang, "Deleted Categories (%1\$d)", "Διαγραμμένες Κατηγορίες (%1\$d)", displayedDeletedCategories.size),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -555,21 +559,24 @@ fun CategoriesScreen(
     // 1. Soft-Delete Confirmation Dialog
     if (categoryToDelete != null) {
         val cat = categoryToDelete!!
+        val catDisplayName = Localization.translateCategory(cat.name, lang)
         AlertDialog(
             onDismissRequest = { categoryToDelete = null },
             shape = RoundedCornerShape(20.dp),
             title = {
                 Text(
-                    text = if (isGreek) "Διαγραφή Κατηγορίας;" else "Delete Category?",
+                    text = Localization.tr(lang, "Delete Category?", "Διαγραφή Κατηγορίας;"),
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = if (isGreek)
-                        "«${cat.name}» θα μεταφερθεί στις Διαγραμμένες. Τα έξοδα και στατιστικά διατηρούνται."
-                    else
-                        "\"${cat.name}\" will move to Deleted Categories. Existing expenses and stats remain intact.",
+                    text = Localization.trFormat(
+                        lang,
+                        "\"%1\$s\" will move to Deleted Categories. Existing expenses and stats remain intact.",
+                        "«%1\$s» θα μεταφερθεί στις Διαγραμμένες. Τα έξοδα και στατιστικά διατηρούνται.",
+                        catDisplayName
+                    ),
                     fontSize = 13.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -582,7 +589,7 @@ fun CategoriesScreen(
                     }
                 ) {
                     Text(
-                        text = if (isGreek) "Διαγραφή" else "Delete",
+                        text = Localization.delete(lang),
                         color = Color(0xFFEF4444),
                         fontWeight = FontWeight.Bold
                     )
@@ -590,7 +597,7 @@ fun CategoriesScreen(
             },
             dismissButton = {
                 TextButton(onClick = { categoryToDelete = null }) {
-                    Text(if (isGreek) "Ακύρωση" else "Cancel")
+                    Text(Localization.cancel(lang))
                 }
             }
         )
@@ -634,7 +641,7 @@ fun CategoriesScreen(
                             }
                         }
                         Text(
-                            text = if (isGreek) "Διαγραμμένες Κατηγορίες" else "Deleted Categories",
+                            text = Localization.tr(lang, "Deleted Categories", "Διαγραμμένες Κατηγορίες"),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -649,7 +656,7 @@ fun CategoriesScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (isGreek) "Δεν υπάρχουν διεγραμμένες κατηγορίες." else "No deleted categories.",
+                                text = Localization.tr(lang, "No deleted categories.", "Δεν υπάρχουν διεγραμμένες κατηγορίες."),
                                 fontSize = 13.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -697,7 +704,7 @@ fun CategoriesScreen(
                                             }
                                             Column {
                                                 Text(
-                                                    text = cat.name,
+                                                    text = Localization.translateCategory(cat.name, lang),
                                                     fontSize = 13.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = MaterialTheme.colorScheme.onSurface
@@ -733,7 +740,7 @@ fun CategoriesScreen(
                                                 )
                                                 Spacer(modifier = Modifier.width(3.dp))
                                                 Text(
-                                                    text = if (isGreek) "Επαναφορά" else "Restore",
+                                                    text = Localization.tr(lang, "Restore", "Επαναφορά"),
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold
                                                 )
@@ -768,10 +775,11 @@ fun CategoriesScreen(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                     ) {
                         Text(
-                            text = if (isGreek)
-                                "ℹ️ Η διαγραφή κατηγορίας δεν αλλοιώνει τα παλαιότερα στατιστικά και καταχωρημένα έξοδα."
-                            else
+                            text = Localization.tr(
+                                lang,
                                 "ℹ️ Deleting a category preserves all historical statistics and recorded expenses.",
+                                "ℹ️ Η διαγραφή κατηγορίας δεν αλλοιώνει τα παλαιότερα στατιστικά και καταχωρημένα έξοδα."
+                            ),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(10.dp)
@@ -783,7 +791,7 @@ fun CategoriesScreen(
                         modifier = Modifier.align(Alignment.End)
                     ) {
                         Text(
-                            text = if (isGreek) "Κλείσιμο" else "Close",
+                            text = Localization.close(lang),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -796,22 +804,25 @@ fun CategoriesScreen(
     // 3. Permanent Category Deletion Confirmation
     if (categoryToPermanentlyDelete != null) {
         val target = categoryToPermanentlyDelete!!
+        val targetDisplayName = Localization.translateCategory(target.name, lang)
         AlertDialog(
             onDismissRequest = { categoryToPermanentlyDelete = null },
             shape = RoundedCornerShape(20.dp),
             title = {
                 Text(
-                    text = if (isGreek) "Οριστική Διαγραφή;" else "Permanently Delete?",
+                    text = Localization.tr(lang, "Permanently Delete?", "Οριστική Διαγραφή;"),
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFFEF4444)
                 )
             },
             text = {
                 Text(
-                    text = if (isGreek)
-                        "Είστε βέβαιοι ότι θέλετε να καταργήσετε οριστικά την κατηγορία «${target.name}»; Τα ιστορικά έξοδα και τα στατιστικά δεν θα αλλοιωθούν."
-                    else
-                        "Are you sure you want to permanently remove category \"${target.name}\"? Historical expenses and stats will remain intact.",
+                    text = Localization.trFormat(
+                        lang,
+                        "Are you sure you want to permanently remove category \"%1\$s\"? Historical expenses and stats will remain intact.",
+                        "Είστε βέβαιοι ότι θέλετε να καταργήσετε οριστικά την κατηγορία «%1\$s»; Τα ιστορικά έξοδα και τα στατιστικά δεν θα αλλοιωθούν.",
+                        targetDisplayName
+                    ),
                     fontSize = 13.5.sp
                 )
             },
@@ -825,7 +836,7 @@ fun CategoriesScreen(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = if (isGreek) "Οριστική Διαγραφή" else "Permanently Delete",
+                        text = Localization.tr(lang, "Permanently Delete", "Οριστική Διαγραφή"),
                         color = Color.White,
                         fontWeight = FontWeight.Bold
                     )
@@ -833,7 +844,7 @@ fun CategoriesScreen(
             },
             dismissButton = {
                 TextButton(onClick = { categoryToPermanentlyDelete = null }) {
-                    Text(if (isGreek) "Ακύρωση" else "Cancel")
+                    Text(Localization.cancel(lang))
                 }
             }
         )

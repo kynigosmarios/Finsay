@@ -118,7 +118,6 @@ fun CategoryDialog(
     var hasShownVoiceKeywordsHint by remember { mutableStateOf(false) }
 
     if (showVoiceKeywordsHint) {
-        val isEnglish = lang == Localization.Language.ENGLISH
         AlertDialog(
             onDismissRequest = { showVoiceKeywordsHint = false },
             icon = {
@@ -131,18 +130,18 @@ fun CategoryDialog(
             },
             title = {
                 Text(
-                    text = if (isEnglish) "Voice Keywords" else "Φωνητικές Λέξεις",
+                    text = Localization.tr(lang, "Voice Keywords", "Φωνητικές Λέξεις"),
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold
                 )
             },
             text = {
                 Text(
-                    text = if (isEnglish) {
-                        "Enter words separated by commas (e.g. market, lidl, groceries). When you speak an expense, Finsay automatically matches this category whenever it hears any of these words."
-                    } else {
+                    text = Localization.tr(
+                        lang,
+                        "Enter words separated by commas (e.g. market, lidl, groceries). When you speak an expense, Finsay automatically matches this category whenever it hears any of these words.",
                         "Γράψτε λέξεις-κλειδιά χωρισμένες με κόμμα (π.χ. σούπερ μάρκετ, lidl, ψώνια). Όταν καταχωρείτε έξοδο φωνητικά, το Finsay αναγνωρίζει αυτόματα αυτή την κατηγορία μόλις ακούσει κάποια από αυτές."
-                    },
+                    ),
                     fontSize = 13.5.sp,
                     lineHeight = 19.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -154,7 +153,7 @@ fun CategoryDialog(
                     modifier = Modifier.testTag("category_voice_hint_ok_btn")
                 ) {
                     Text(
-                        text = if (isEnglish) "Got it" else "Κατάλαβα",
+                        text = Localization.tr(lang, "Got it", "Κατάλαβα"),
                         fontWeight = FontWeight.Bold,
                         color = Emerald700
                     )
@@ -192,9 +191,9 @@ fun CategoryDialog(
                 ) {
                     val headerTitle = if (effectiveIsIncome) {
                         if (categoryToEdit == null) {
-                            if (lang == Localization.Language.ENGLISH) "New Income Category" else "Νέα Κατηγορία Εσόδου"
+                            Localization.tr(lang, "New Income Category", "Νέα Κατηγορία Εσόδου")
                         } else {
-                            if (lang == Localization.Language.ENGLISH) "Edit Income Category" else "Επεξεργασία Κατηγορίας Εσόδου"
+                            Localization.tr(lang, "Edit Income Category", "Επεξεργασία Κατηγορίας Εσόδου")
                         }
                     } else {
                         if (categoryToEdit == null) Localization.addCategory(lang) else Localization.editCategoryTitle(lang)
@@ -240,7 +239,7 @@ fun CategoryDialog(
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
-                                text = if (lang == Localization.Language.ENGLISH) "Preview" else "Προεπισκόπηση",
+                                text = Localization.tr(lang, "Preview", "Προεπισκόπηση"),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -286,9 +285,9 @@ fun CategoryDialog(
                                         Text(
                                             text = name.ifBlank {
                                                 if (effectiveIsIncome) {
-                                                    if (lang == Localization.Language.ENGLISH) "Sample Income" else "Παράδειγμα Εσόδου"
+                                                    Localization.tr(lang, "Sample Income", "Παράδειγμα Εσόδου")
                                                 } else {
-                                                    if (lang == Localization.Language.ENGLISH) "Sample Expense" else "Παράδειγμα Εξόδου"
+                                                    Localization.tr(lang, "Sample Expense", "Παράδειγμα Εξόδου")
                                                 }
                                             },
                                             fontSize = 15.sp,
@@ -367,7 +366,7 @@ fun CategoryDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Category & Icon Color" else "Χρώμα Κατηγορίας & Εικονιδίου",
+                            text = Localization.tr(lang, "Category & Icon Color", "Χρώμα Κατηγορίας & Εικονιδίου"),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -537,7 +536,7 @@ fun CategoryDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.HelpOutline,
-                                    contentDescription = if (lang == Localization.Language.ENGLISH) "Voice keywords help" else "Οδηγίες φωνητικών λέξεων",
+                                    contentDescription = Localization.tr(lang, "Voice keywords help", "Οδηγίες φωνητικών λέξεων"),
                                     tint = Emerald700,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -593,11 +592,11 @@ fun CategoryDialog(
                         onClick = {
                             val parsedBudget = if (effectiveIsIncome) 0.0 else budgetText.toDoubleOrNull()
                             if (name.isBlank()) {
-                                errorText = if (lang == Localization.Language.ENGLISH) "Please enter category name" else "Συμπληρώστε όνομα κατηγορίας"
+                                errorText = Localization.tr(lang, "Please enter category name", "Συμπληρώστε όνομα κατηγορίας")
                                 return@Button
                             }
                             if (parsedBudget == null || parsedBudget < 0) {
-                                errorText = if (lang == Localization.Language.ENGLISH) "Please enter a valid budget" else "Συμπληρώστε έγκυρο budget"
+                                errorText = Localization.tr(lang, "Please enter a valid budget", "Συμπληρώστε έγκυρο budget")
                                 return@Button
                             }
 

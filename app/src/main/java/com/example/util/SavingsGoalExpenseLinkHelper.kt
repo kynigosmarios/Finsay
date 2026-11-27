@@ -56,23 +56,32 @@ object SavingsGoalExpenseLinkHelper {
         }
     }
 
-    fun buildDepositExpenseTitle(goalTitle: String, isEnglish: Boolean): String {
+    fun defaultSavingsCategoryName(lang: Localization.Language): String =
+        Localization.tr(lang, DEFAULT_SAVINGS_CATEGORY_NAME_EN, DEFAULT_SAVINGS_CATEGORY_NAME_EL)
+
+    fun buildDepositExpenseTitle(goalTitle: String, lang: Localization.Language): String {
         val clean = goalTitle.trim()
-        return if (isEnglish) {
-            if (clean.isNotBlank()) "Goal: $clean" else "Savings Goal Deposit"
+        return if (clean.isNotBlank()) {
+            Localization.trFormat(lang, "Goal: %1\$s", "Στόχος: %1\$s", clean)
         } else {
-            if (clean.isNotBlank()) "Στόχος: $clean" else "Κατάθεση σε Στόχο"
+            Localization.tr(lang, "Savings Goal Deposit", "Κατάθεση σε Στόχο")
         }
     }
 
-    fun buildDepositExpenseNote(goalTitle: String, userNote: String, isEnglish: Boolean): String {
+    fun buildDepositExpenseTitle(goalTitle: String, isEnglish: Boolean): String =
+        buildDepositExpenseTitle(goalTitle, if (isEnglish) Localization.Language.ENGLISH else Localization.Language.GREEK)
+
+    fun buildDepositExpenseNote(goalTitle: String, userNote: String, lang: Localization.Language): String {
         val trimmedNote = userNote.trim()
         if (trimmedNote.isNotBlank()) return trimmedNote
         val cleanTitle = goalTitle.trim()
-        return if (isEnglish) {
-            if (cleanTitle.isNotBlank()) "Deposit to savings goal \"$cleanTitle\"" else "Deposit to savings goal"
+        return if (cleanTitle.isNotBlank()) {
+            Localization.trFormat(lang, "Deposit to savings goal \"%1\$s\"", "Κατάθεση στον στόχο «%1\$s»", cleanTitle)
         } else {
-            if (cleanTitle.isNotBlank()) "Κατάθεση στον στόχο «$cleanTitle»" else "Κατάθεση σε στόχο αποταμίευσης"
+            Localization.tr(lang, "Deposit to savings goal", "Κατάθεση σε στόχο αποταμίευσης")
         }
     }
+
+    fun buildDepositExpenseNote(goalTitle: String, userNote: String, isEnglish: Boolean): String =
+        buildDepositExpenseNote(goalTitle, userNote, if (isEnglish) Localization.Language.ENGLISH else Localization.Language.GREEK)
 }

@@ -326,6 +326,9 @@ class FirestoreSyncRepository(
     fun observeMembers(householdId: String): Flow<List<FirebaseMember>> =
         structureDelegate.observeMembers(householdId)
 
+    suspend fun hasAnyMemberDocsOnServer(householdId: String): Boolean? =
+        structureDelegate.hasAnyMemberDocsOnServer(householdId)
+
     suspend fun syncMember(householdId: String, member: FirebaseMember) =
         structureDelegate.syncMember(householdId, member)
 
@@ -355,6 +358,9 @@ class FirestoreSyncRepository(
 
     fun observeCategories(householdId: String): Flow<List<FirebaseCategory>> =
         structureDelegate.observeCategories(householdId)
+
+    suspend fun hasAnyCategoryDocsOnServer(householdId: String, categoryType: String): Boolean? =
+        structureDelegate.hasAnyCategoryDocsOnServer(householdId, categoryType)
 
     suspend fun syncCategory(householdId: String, category: FirebaseCategory) =
         structureDelegate.syncCategory(householdId, category)

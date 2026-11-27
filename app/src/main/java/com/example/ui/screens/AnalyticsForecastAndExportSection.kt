@@ -196,7 +196,7 @@ internal fun AnalyticsMonthForecastCard(
                             "$pctSign$pct% "
                         } ?: ""
                         Text(
-                            text = "$pctText${if (lang == Localization.Language.ENGLISH) "vs prev." else "vs προηγ."}",
+                            text = "$pctText${Localization.tr(lang, "vs prev.", "vs προηγ.")}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -252,7 +252,7 @@ internal fun AnalyticsMonthForecastCard(
                             "$pctSign$pct% "
                         } ?: ""
                         Text(
-                            text = "$pctText${if (lang == Localization.Language.ENGLISH) "vs prev." else "vs προηγ."}",
+                            text = "$pctText${Localization.tr(lang, "vs prev.", "vs προηγ.")}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -379,7 +379,6 @@ internal fun AnalyticsDataExportCard(
     categories: List<ExpenseCategory>,
     members: List<FamilyMember>,
     isPro: Boolean,
-    isGreek: Boolean,
     lang: Localization.Language,
     context: Context,
     onShowPremiumPaywall: (String) -> Unit
@@ -484,10 +483,10 @@ internal fun AnalyticsDataExportCard(
     }
 
     val exportPeriodTitle = when (exportPeriodIndex) {
-        0 -> if (isGreek) "Τρέχων Μήνας" else "Current Month"
-        1 -> if (isGreek) "Προηγούμενος Μήνας" else "Previous Month"
+        0 -> Localization.tr(lang, "Current Month", "Τρέχων Μήνας")
+        1 -> Localization.tr(lang, "Previous Month", "Προηγούμενος Μήνας")
         2 -> "${dateSdf.format(exportRangeStart)} - ${dateSdf.format(exportRangeEnd)}"
-        else -> if (isGreek) "Όλα τα Έξοδα" else "All Expenses"
+        else -> Localization.tr(lang, "All Expenses", "Όλα τα Έξοδα")
     }
 
     Card(
@@ -508,7 +507,7 @@ internal fun AnalyticsDataExportCard(
                 icon = Icons.Default.TableChart,
                 iconTint = Emerald700,
                 iconContainerColor = Emerald100,
-                title = if (isGreek) "Εξαγωγή δεδομένων" else "Data Export",
+                title = Localization.tr(lang, "Data Export", "Εξαγωγή δεδομένων"),
                 badge = {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
@@ -526,7 +525,7 @@ internal fun AnalyticsDataExportCard(
                 },
                 trailing = {
                     Text(
-                        text = if (isGreek) "${filteredExportExpenses.size} έξοδα" else "${filteredExportExpenses.size} items",
+                        text = Localization.trFormat(lang, "%1\$d items", "%1\$d έξοδα", filteredExportExpenses.size),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -541,10 +540,10 @@ internal fun AnalyticsDataExportCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 listOf(
-                    if (isGreek) "Τρέχων" else "Current",
-                    if (isGreek) "Προηγ." else "Prev",
-                    if (isGreek) "Διάστημα" else "Range",
-                    if (isGreek) "Όλα" else "All"
+                    Localization.tr(lang, "Current", "Τρέχων"),
+                    Localization.tr(lang, "Prev", "Προηγ."),
+                    Localization.tr(lang, "Range", "Διάστημα"),
+                    Localization.tr(lang, "All", "Όλα")
                 ).forEachIndexed { idx, label ->
                     val isSel = exportPeriodIndex == idx
                     Surface(
@@ -561,7 +560,10 @@ internal fun AnalyticsDataExportCard(
                             fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
                             color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(vertical = 7.dp)
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(vertical = 7.dp, horizontal = 2.dp)
                         )
                     }
                 }
@@ -602,7 +604,7 @@ internal fun AnalyticsDataExportCard(
                                 }
                         ) {
                             Text(
-                                text = (if (isGreek) "Από: " else "From: ") + dateSdf.format(exportRangeStart),
+                                text = Localization.trFormat(lang, "From: %1\$s", "Από: %1\$s", dateSdf.format(exportRangeStart)),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Emerald700,
@@ -635,7 +637,7 @@ internal fun AnalyticsDataExportCard(
                                 }
                         ) {
                             Text(
-                                text = (if (isGreek) "Έως: " else "To: ") + dateSdf.format(exportRangeEnd),
+                                text = Localization.trFormat(lang, "To: %1\$s", "Έως: %1\$s", dateSdf.format(exportRangeEnd)),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Emerald700,
@@ -656,7 +658,7 @@ internal fun AnalyticsDataExportCard(
                 Box(modifier = Modifier.weight(1f)) {
                     val catName = categories.find { it.id == selectedExportCategoryId }?.let {
                         Localization.translateCategory(it.name, lang)
-                    } ?: if (isGreek) "Όλες οι κατηγορίες" else "All categories"
+                    } ?: Localization.tr(lang, "All categories", "Όλες οι κατηγορίες")
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -693,7 +695,7 @@ internal fun AnalyticsDataExportCard(
                         onDismissRequest = { showCategoryDropdown = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (isGreek) "Όλες οι κατηγορίες" else "All categories", fontSize = 12.sp) },
+                            text = { Text(Localization.tr(lang, "All categories", "Όλες οι κατηγορίες"), fontSize = 12.sp) },
                             onClick = {
                                 selectedExportCategoryId = null
                                 showCategoryDropdown = false
@@ -713,7 +715,7 @@ internal fun AnalyticsDataExportCard(
 
                 Box(modifier = Modifier.weight(1f)) {
                     val memName = members.find { it.id == selectedExportMemberId }?.name
-                        ?: if (isGreek) "Όλα τα μέλη" else "All members"
+                        ?: Localization.tr(lang, "All members", "Όλα τα μέλη")
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -750,7 +752,7 @@ internal fun AnalyticsDataExportCard(
                         onDismissRequest = { showMemberDropdown = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (isGreek) "Όλα τα μέλη" else "All members", fontSize = 12.sp) },
+                            text = { Text(Localization.tr(lang, "All members", "Όλα τα μέλη"), fontSize = 12.sp) },
                             onClick = {
                                 selectedExportMemberId = null
                                 showMemberDropdown = false
@@ -783,13 +785,13 @@ internal fun AnalyticsDataExportCard(
                             val hasFiltered = filteredExportExpenses.isNotEmpty() || filteredExportIncomes.isNotEmpty()
                             val targetList = if (hasFiltered) filteredExportExpenses else expenses
                             val targetIncomes = if (hasFiltered) filteredExportIncomes else incomes
-                            val targetTitle = if (hasFiltered) exportPeriodTitle else (if (isGreek) "Όλες οι Συναλλαγές" else "All Transactions")
+                            val targetTitle = if (hasFiltered) exportPeriodTitle else Localization.tr(lang, "All Transactions", "Όλες οι Συναλλαγές")
                             val startMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeStart else null
                             val endMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeEnd else null
                             if (targetList.isEmpty() && targetIncomes.isEmpty()) {
-                                Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένες συναλλαγές προς εξαγωγή" else "No transactions to export", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, Localization.tr(lang, "No transactions to export", "Δεν υπάρχουν καταχωρημένες συναλλαγές προς εξαγωγή"), Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση PDF..." else "Generating and sharing PDF...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, Localization.tr(lang, "Generating and sharing PDF...", "Δημιουργία και κοινοποίηση PDF..."), Toast.LENGTH_SHORT).show()
                                 ExpenseReportExporter.exportPdf(
                                     context = context,
                                     expenses = targetList,
@@ -799,7 +801,7 @@ internal fun AnalyticsDataExportCard(
                                     incomes = targetIncomes,
                                     members = members,
                                     currencySymbol = currencySymbol,
-                                    isEnglish = !isGreek
+                                    lang = lang
                                 )
                             }
                         }
@@ -831,13 +833,13 @@ internal fun AnalyticsDataExportCard(
                             val hasFiltered = filteredExportExpenses.isNotEmpty() || filteredExportIncomes.isNotEmpty()
                             val targetList = if (hasFiltered) filteredExportExpenses else expenses
                             val targetIncomes = if (hasFiltered) filteredExportIncomes else incomes
-                            val targetTitle = if (hasFiltered) exportPeriodTitle else (if (isGreek) "Όλες οι Συναλλαγές" else "All Transactions")
+                            val targetTitle = if (hasFiltered) exportPeriodTitle else Localization.tr(lang, "All Transactions", "Όλες οι Συναλλαγές")
                             val startMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeStart else null
                             val endMs = if (hasFiltered && exportPeriodIndex == 2) exportRangeEnd else null
                             if (targetList.isEmpty() && targetIncomes.isEmpty()) {
-                                Toast.makeText(context, if (isGreek) "Δεν υπάρχουν καταχωρημένες συναλλαγές προς εξαγωγή" else "No transactions to export", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, Localization.tr(lang, "No transactions to export", "Δεν υπάρχουν καταχωρημένες συναλλαγές προς εξαγωγή"), Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, if (isGreek) "Δημιουργία και κοινοποίηση CSV..." else "Generating and sharing CSV...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, Localization.tr(lang, "Generating and sharing CSV...", "Δημιουργία και κοινοποίηση CSV..."), Toast.LENGTH_SHORT).show()
                                 ExpenseReportExporter.exportCsv(
                                     context = context,
                                     expenses = targetList,
@@ -847,7 +849,7 @@ internal fun AnalyticsDataExportCard(
                                     incomes = targetIncomes,
                                     members = members,
                                     currencySymbol = currencySymbol,
-                                    isEnglish = !isGreek
+                                    lang = lang
                                 )
                             }
                         }

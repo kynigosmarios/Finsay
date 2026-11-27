@@ -1,19 +1,28 @@
 package com.example.service
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import com.example.MainActivity
+import com.example.util.Localization
 
 class QuickExpenseTileService : TileService() {
     override fun onStartListening() {
         super.onStartListening()
         val tile = qsTile
         if (tile != null) {
-            tile.label = "Γρήγορη καταχώρηση"
-            tile.contentDescription = "Γρήγορη καταχώρηση εξόδου"
+            val langCode = try {
+                getSharedPreferences("oikonomos_app_prefs", Context.MODE_PRIVATE)
+                    .getString("app_language", Localization.Language.ENGLISH.code)
+            } catch (_: Throwable) {
+                Localization.Language.ENGLISH.code
+            }
+            val lang = Localization.Language.fromCode(langCode)
+            tile.label = Localization.tr(lang, "Quick Expense", "Γρήγορη καταχώρηση")
+            tile.contentDescription = Localization.tr(lang, "Quick expense entry", "Γρήγορη καταχώρηση εξόδου")
             tile.state = Tile.STATE_ACTIVE
             tile.updateTile()
         }

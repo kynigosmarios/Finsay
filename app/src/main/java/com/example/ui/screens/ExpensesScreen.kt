@@ -189,10 +189,10 @@ fun ExpensesScreen(
 
     val currentMonthDisplay = remember(effectiveMonthKey, availableMonths, lang, locale) {
         when {
-            effectiveMonthKey == "ALL" -> if (lang == Localization.Language.ENGLISH) "All Months" else "Όλοι οι μήνες"
+            effectiveMonthKey == "ALL" -> Localization.tr(lang, "All Months", "Όλοι οι μήνες")
             effectiveMonthKey.startsWith("YEAR:") -> {
                 val y = effectiveMonthKey.removePrefix("YEAR:")
-                if (lang == Localization.Language.ENGLISH) "Year $y" else "Έτος $y"
+                Localization.trFormat(lang, "Year %1\$s", "Έτος %1\$s", y)
             }
             else -> {
                 availableMonths.find { it.first == effectiveMonthKey }?.second ?: try {
@@ -314,16 +314,12 @@ fun ExpensesScreen(
             val cleanPayer = stripParen(rawPayer)
             val isPayerGroup = cleanPayer.contains("&") || cleanPayer.contains(",") ||
                 Localization.isPluralRoleDisplay(cleanPayer) ||
-                cleanPayer.contains("Οικογένεια") ||
-                cleanPayer.equals("Όλοι", ignoreCase = true) || cleanPayer.equals("All", ignoreCase = true) ||
-                cleanPayer.contains("Family")
+                Localization.isAllMembersLabel(cleanPayer)
 
             val rawBeneficiary = exp.getBeneficiaryCategoryOrNamesDisplay(members, lang)
             val cleanBeneficiary = stripParen(rawBeneficiary)
             val isBeneficiaryGroup = Localization.isPluralRoleDisplay(cleanBeneficiary) ||
-                cleanBeneficiary.contains("Οικογένεια") ||
-                cleanBeneficiary.equals("Όλοι", ignoreCase = true) || cleanBeneficiary.equals("All", ignoreCase = true) ||
-                cleanBeneficiary.contains("Family") ||
+                Localization.isAllMembersLabel(cleanBeneficiary) ||
                 cleanBeneficiary.contains("&") || cleanBeneficiary.contains(",")
 
             val baseKey = if (exp.id > 0) "exp_${exp.id}" else "exp_c_${if (exp.cloudId.isNotBlank()) exp.cloudId else safeTs.toString()}_${exp.title.hashCode()}"
@@ -354,19 +350,16 @@ fun ExpensesScreen(
             val key = uniqueKey(baseKey)
             val rawIncomeMember = inc.memberName.trim()
             val displayIncomeMember = when {
-                rawIncomeMember.equals("Οικογένεια", ignoreCase = true) ||
-                    rawIncomeMember.equals("Family", ignoreCase = true) ||
-                    rawIncomeMember.equals("Όλοι", ignoreCase = true) ||
-                    rawIncomeMember.equals("All", ignoreCase = true) ||
+                Localization.isAllMembersLabel(rawIncomeMember) ||
                     (rawIncomeMember.isBlank() && inc.memberId == 0L) ->
-                    if (lang == Localization.Language.ENGLISH) "All" else "Όλοι"
+                    Localization.allMembersWord(lang)
                 else -> rawIncomeMember
             }
 
             return ActivityItem.IncomeItem(
                 income = inc,
                 titleText = inc.title,
-                categoryDisplay = inc.category.ifBlank { Localization.income(lang) },
+                categoryDisplay = if (inc.category.isNotBlank()) Localization.translateCategory(inc.category, lang) else Localization.income(lang),
                 formattedAmount = String.format(Locale.US, "+%.2f %s", inc.amount, currencySymbol),
                 formattedDate = dateStr,
                 memberName = displayIncomeMember,
@@ -404,8 +397,8 @@ fun ExpensesScreen(
                 itemCal.get(Calendar.DAY_OF_YEAR) == calYesterday.get(Calendar.DAY_OF_YEAR)
 
             val label = when {
-                isToday -> if (lang == Localization.Language.ENGLISH) "Today" else "Σήμερα"
-                isYesterday -> if (lang == Localization.Language.ENGLISH) "Yesterday" else "Χθες"
+                isToday -> Localization.tr(lang, "Today", "Σήμερα")
+                isYesterday -> Localization.tr(lang, "Yesterday", "Χθες")
                 else -> {
                     val raw = dayFormat.format(Date(safeTs))
                     raw.replaceFirstChar { if (it.isLowerCase()) it.titlecase(locale) else it.toString() }
@@ -600,11 +593,13 @@ fun ExpensesScreen(
             title = { Text(Localization.delete(lang)) },
             text = {
                 Text(
-                    if (lang == Localization.Language.ENGLISH) {
-                        "Delete \"${exp.title}\" (${String.format(Locale.US, "%.2f %s", exp.amount, currencySymbol)})?"
-                    } else {
-                        "Διαγραφή «${exp.title}» (${String.format(Locale.US, "%.2f %s", exp.amount, currencySymbol)});"
-                    }
+                    Localization.trFormat(
+                        lang,
+                        "Delete \"%1\$s\" (%2\$s)?",
+                        "Διαγραφή «%1\$s» (%2\$s);",
+                        exp.title,
+                        String.format(Locale.US, "%.2f %s", exp.amount, currencySymbol)
+                    )
                 )
             },
             confirmButton = {
@@ -632,11 +627,13 @@ fun ExpensesScreen(
             title = { Text(Localization.delete(lang)) },
             text = {
                 Text(
-                    if (lang == Localization.Language.ENGLISH) {
-                        "Delete \"${inc.title}\" (${String.format(Locale.US, "%.2f", inc.amount)} $currencySymbol)?"
-                    } else {
-                        "Διαγραφή «${inc.title}» (${String.format(Locale.US, "%.2f", inc.amount)} $currencySymbol);"
-                    }
+                    Localization.trFormat(
+                        lang,
+                        "Delete \"%1\$s\" (%2\$s)?",
+                        "Διαγραφή «%1\$s» (%2\$s);",
+                        inc.title,
+                        "${String.format(Locale.US, "%.2f", inc.amount)} $currencySymbol"
+                    )
                 )
             },
             confirmButton = {

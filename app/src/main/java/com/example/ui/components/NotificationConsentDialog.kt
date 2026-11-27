@@ -47,7 +47,6 @@ fun NotificationConsentDialog(
     onDismiss: () -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEnglish = lang == Localization.Language.ENGLISH
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -90,13 +89,13 @@ fun NotificationConsentDialog(
 
                     Column {
                         Text(
-                            text = if (isEnglish) "Entry Reminder" else "Υπενθύμιση Καταχώρησης",
+                            text = Localization.tr(lang, "Entry Reminder", "Υπενθύμιση Καταχώρησης"),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (isEnglish) "Never forget an expense" else "Μην ξεχνάτε καμία συναλλαγή",
+                            text = Localization.tr(lang, "Never forget an expense", "Μην ξεχνάτε καμία συναλλαγή"),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -106,10 +105,11 @@ fun NotificationConsentDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = if (isEnglish)
-                        "Enable notifications to receive a subtle daily prompt at your preferred time, and keep your budget organized without forgetting any transactions."
-                    else
-                        "Ενεργοποιήστε τις ειδοποιήσεις για να λαμβάνετε μια διακριτική καθημερινή υπενθύμιση την ώρα που επιθυμείτε, ώστε να διατηρείτε τον προϋπολογισμό σας πάντα οργανωμένο.",
+                    text = Localization.tr(
+                        lang,
+                        "Enable notifications to receive a subtle daily prompt at your preferred time, and keep your budget organized without forgetting any transactions.",
+                        "Ενεργοποιήστε τις ειδοποιήσεις για να λαμβάνετε μια διακριτική καθημερινή υπενθύμιση την ώρα που επιθυμείτε, ώστε να διατηρείτε τον προϋπολογισμό σας πάντα οργανωμένο."
+                    ),
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -119,16 +119,20 @@ fun NotificationConsentDialog(
 
                 NotificationItemRow(
                     icon = Icons.Default.Alarm,
-                    title = if (isEnglish) "Daily Prompt" else "Καθημερινή Υπενθύμιση",
-                    description = if (isEnglish) "At the time you choose in Settings." else "Την ώρα που επιλέγετε στις Ρυθμίσεις."
+                    title = Localization.tr(lang, "Daily Prompt", "Καθημερινή Υπενθύμιση"),
+                    description = Localization.tr(lang, "At the time you choose in Settings.", "Την ώρα που επιλέγετε στις Ρυθμίσεις.")
                 )
 
                 Spacer(modifier = Modifier.height(10.dp))
 
                 NotificationItemRow(
                     icon = Icons.Default.PieChart,
-                    title = if (isEnglish) "Budget Limit Alerts" else "Ειδοποιήσεις Ορίων",
-                    description = if (isEnglish) "Timely notices before you exceed category budgets." else "Έγκαιρη ενημέρωση όταν πλησιάζετε τα όρια κατηγοριών."
+                    title = Localization.tr(lang, "Budget Limit Alerts", "Ειδοποιήσεις Ορίων"),
+                    description = Localization.tr(
+                        lang,
+                        "Timely notices before you exceed category budgets.",
+                        "Έγκαιρη ενημέρωση όταν πλησιάζετε τα όρια κατηγοριών."
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -148,7 +152,7 @@ fun NotificationConsentDialog(
                             .testTag("notification_consent_cancel_btn")
                     ) {
                         Text(
-                            text = if (isEnglish) "Cancel" else "Άκυρο",
+                            text = Localization.cancel(lang),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -168,7 +172,7 @@ fun NotificationConsentDialog(
                             .testTag("notification_consent_accept_btn")
                     ) {
                         Text(
-                            text = if (isEnglish) "Enable" else "Ενεργοποίηση",
+                            text = Localization.tr(lang, "Enable", "Ενεργοποίηση"),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,

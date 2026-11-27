@@ -111,7 +111,6 @@ fun SavingsGoalDialog(
     onSave: (id: Long, title: String, targetAmount: Double, currentAmount: Double, deadline: String, note: String, recordAsExpense: Boolean) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isGreek = lang != Localization.Language.ENGLISH
 
     var title by remember(goalToEdit) { mutableStateOf(goalToEdit?.title ?: "") }
     var targetText by remember(goalToEdit) {
@@ -249,7 +248,7 @@ fun SavingsGoalDialog(
                     OutlinedTextField(
                         value = targetText,
                         onValueChange = { targetText = it },
-                        label = { Text(if (lang == Localization.Language.ENGLISH) "Goal ($currencySymbol)" else "Στόχος ($currencySymbol)") },
+                        label = { Text(Localization.trFormat(lang, "Goal (%1\$s)", "Στόχος (%1\$s)", currencySymbol)) },
                         placeholder = { Text("0") },
                         trailingIcon = { Text(currencySymbol, fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -262,7 +261,7 @@ fun SavingsGoalDialog(
                     OutlinedTextField(
                         value = currentText,
                         onValueChange = { currentText = it },
-                        label = { Text(if (lang == Localization.Language.ENGLISH) "Saved ($currencySymbol)" else "Μαζεμένα ($currencySymbol)") },
+                        label = { Text(Localization.trFormat(lang, "Saved (%1\$s)", "Μαζεμένα (%1\$s)", currencySymbol)) },
                         placeholder = { Text("0") },
                         trailingIcon = { Text(currencySymbol, fontWeight = FontWeight.Bold, color = Emerald700, modifier = Modifier.padding(end = 12.dp)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -306,13 +305,13 @@ fun SavingsGoalDialog(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = if (isGreek) "Προθεσμία" else "Deadline",
+                                    text = Localization.tr(lang, "Deadline", "Προθεσμία"),
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
                                     text = deadline.ifBlank {
-                                        if (isGreek) "Επιλογή από ημερολόγιο" else "Select from calendar"
+                                        Localization.tr(lang, "Select from calendar", "Επιλογή από ημερολόγιο")
                                     },
                                     fontSize = 14.sp,
                                     fontWeight = if (deadline.isNotBlank()) FontWeight.SemiBold else FontWeight.Normal,
@@ -331,7 +330,7 @@ fun SavingsGoalDialog(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
-                                        contentDescription = if (isGreek) "Καθαρισμός ημερομηνίας" else "Clear date",
+                                        contentDescription = Localization.tr(lang, "Clear date", "Καθαρισμός ημερομηνίας"),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -387,7 +386,7 @@ fun SavingsGoalDialog(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = if (isGreek) "Καταχώρηση (+$deltaStr) στα Έξοδα" else "Log (+$deltaStr) as Expense",
+                                    text = Localization.trFormat(lang, "Log (+%1\$s) as Expense", "Καταχώρηση (+%1\$s) στα Έξοδα", deltaStr),
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface,

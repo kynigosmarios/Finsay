@@ -16,6 +16,7 @@ import com.example.util.GreekVoiceParser
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
+import com.google.firebase.firestore.Source
 import com.google.firebase.firestore.snapshots
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -48,9 +49,29 @@ internal class FirestoreStructureDelegate(
                 }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
             }
             .catch { t ->
-                Log.w(TAG, "observeMembers flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeMembers flow error (preserving current state): ${t.message}")
             }
+    }
+
+    /**
+     * Authoritatively checks Firestore SERVER for any existing member docs (active OR soft-deleted).
+     * Returns true if at least 1 doc exists, false ONLY if server definitively confirms 0 docs,
+     * or null on offline/network error (caller must NEVER auto-seed defaults when null or true).
+     */
+    suspend fun hasAnyMemberDocsOnServer(householdId: String): Boolean? {
+        if (householdId.isBlank()) return null
+        return try {
+            val snap = db.collection("households").document(householdId)
+                .collection("members")
+                .limit(1)
+                .get(Source.SERVER)
+                .await()
+            !snap.isEmpty
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Log.w(TAG, "hasAnyMemberDocsOnServer error for $householdId: ${t.message}")
+            null
+        }
     }
 
     suspend fun syncMember(householdId: String, member: FirebaseMember) {
@@ -150,8 +171,7 @@ internal class FirestoreStructureDelegate(
                 }.sortedWith(compareBy<FirebaseMember> { it.sortOrder }.thenBy { it.id })
             }
             .catch { t ->
-                Log.w(TAG, "observeUserMembers flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeUserMembers flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -182,9 +202,32 @@ internal class FirestoreStructureDelegate(
                 }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
             }
             .catch { t ->
-                Log.w(TAG, "observeCategories flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeCategories flow error (preserving current state): ${t.message}")
             }
+    }
+
+    /**
+     * Authoritatively checks Firestore SERVER for any existing category docs of [categoryType]
+     * (active OR soft-deleted). Returns true if >=1 exists, false ONLY if server confirms 0,
+     * or null on offline/network error (caller must NEVER auto-seed defaults when null or true).
+     */
+    suspend fun hasAnyCategoryDocsOnServer(householdId: String, categoryType: String): Boolean? {
+        if (householdId.isBlank()) return null
+        val targetType = categoryType.ifBlank { "EXPENSE" }.uppercase()
+        return try {
+            val snap = db.collection("households").document(householdId)
+                .collection("categories")
+                .get(Source.SERVER)
+                .await()
+            snap.documents.any { doc ->
+                val docType = doc.getString("categoryType").orEmpty().ifBlank { "EXPENSE" }.uppercase()
+                docType == targetType
+            }
+        } catch (t: Throwable) {
+            if (t is CancellationException) throw t
+            Log.w(TAG, "hasAnyCategoryDocsOnServer error for $householdId/$targetType: ${t.message}")
+            null
+        }
     }
 
     suspend fun syncCategory(householdId: String, category: FirebaseCategory) {
@@ -299,8 +342,7 @@ internal class FirestoreStructureDelegate(
                 }.sortedWith(compareBy<FirebaseCategory> { it.sortOrder }.thenBy { it.id })
             }
             .catch { t ->
-                Log.w(TAG, "observeUserCategories flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeUserCategories flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -332,8 +374,7 @@ internal class FirestoreStructureDelegate(
                 }.sortedWith(compareBy<FirebaseSavingsGoal> { it.title.lowercase() }.thenBy { it.id })
             }
             .catch { t ->
-                Log.w(TAG, "observeSavingsGoals flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeSavingsGoals flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -349,8 +390,7 @@ internal class FirestoreStructureDelegate(
                 }.sortedWith(compareBy<FirebaseSavingsGoal> { it.title.lowercase() }.thenBy { it.id })
             }
             .catch { t ->
-                Log.w(TAG, "observeUserSavingsGoals flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeUserSavingsGoals flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -414,8 +454,7 @@ internal class FirestoreStructureDelegate(
                 refsToDelete.add(hDoc.collection("savingsGoals").document(goalId))
                 val byIdField = hDoc.collection("savings_goals").whereEqualTo("id", goalId).get().await()
                 byIdField.documents.forEach { refsToDelete.add(it.reference) }
-            }
-            if (title.isNotBlank()) {
+            } else if (title.isNotBlank()) {
                 val q1 = hDoc.collection("savings_goals").whereEqualTo("title", title).get().await()
                 q1.documents.forEach { refsToDelete.add(it.reference) }
                 val q2 = hDoc.collection("savingsGoals").whereEqualTo("title", title).get().await()
@@ -441,8 +480,7 @@ internal class FirestoreStructureDelegate(
                 refsToDelete.add(uDoc.collection("savingsGoals").document(goalId))
                 val byIdField = uDoc.collection("savings_goals").whereEqualTo("id", goalId).get().await()
                 byIdField.documents.forEach { refsToDelete.add(it.reference) }
-            }
-            if (title.isNotBlank()) {
+            } else if (title.isNotBlank()) {
                 val q1 = uDoc.collection("savings_goals").whereEqualTo("title", title).get().await()
                 q1.documents.forEach { refsToDelete.add(it.reference) }
                 val q2 = uDoc.collection("savingsGoals").whereEqualTo("title", title).get().await()
@@ -472,8 +510,7 @@ internal class FirestoreStructureDelegate(
                 }.sortedBy { it.title }
             }
             .catch { t ->
-                Log.w(TAG, "observeRecurringExpenses flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeRecurringExpenses flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -490,8 +527,7 @@ internal class FirestoreStructureDelegate(
                 }.sortedBy { it.title }
             }
             .catch { t ->
-                Log.w(TAG, "observeUserRecurringExpenses flow error: ${t.message}")
-                emit(emptyList())
+                Log.w(TAG, "observeUserRecurringExpenses flow error (preserving current state): ${t.message}")
             }
     }
 
@@ -679,8 +715,7 @@ internal class FirestoreStructureDelegate(
             if (recurringId.isNotBlank()) {
                 db.collection("households").document(householdId).collection("recurring_expenses").document(recurringId).delete().await()
                 db.collection("households").document(householdId).collection("recurringExpenses").document(recurringId).delete().await()
-            }
-            if (title.isNotBlank()) {
+            } else if (title.isNotBlank()) {
                 val q1 = db.collection("households").document(householdId).collection("recurring_expenses").whereEqualTo("title", title).get().await()
                 for (doc in q1.documents) doc.reference.delete().await()
                 val q2 = db.collection("households").document(householdId).collection("recurringExpenses").whereEqualTo("title", title).get().await()
@@ -695,8 +730,7 @@ internal class FirestoreStructureDelegate(
             if (recurringId.isNotBlank()) {
                 db.collection("users").document(userId).collection("recurring_expenses").document(recurringId).delete().await()
                 db.collection("users").document(userId).collection("recurringExpenses").document(recurringId).delete().await()
-            }
-            if (title.isNotBlank()) {
+            } else if (title.isNotBlank()) {
                 val q1 = db.collection("users").document(userId).collection("recurring_expenses").whereEqualTo("title", title).get().await()
                 for (doc in q1.documents) doc.reference.delete().await()
                 val q2 = db.collection("users").document(userId).collection("recurringExpenses").whereEqualTo("title", title).get().await()
@@ -719,20 +753,21 @@ internal class FirestoreStructureDelegate(
         member: FirebaseMember,
         oldName: String = ""
     ) {
-        val canonicalDocId = member.id.ifBlank { "1" }
-        val toSave = member.copy(id = canonicalDocId, createdAt = Timestamp.now())
-
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+        val canonicalDocId = member.id.ifBlank { UUID.randomUUID().toString() }
+        val toSave = member.copy(id = canonicalDocId, createdAt = member.createdAt ?: Timestamp.now())
+        // Strict single-household scoping: NEVER fan out a member write across unrelated households
+        // and NEVER hard-delete other member documents by name or isDefault.
+        val targetHid = householdIds.firstOrNull { it.isNotBlank() }
+        if (targetHid != null) {
             try {
-                db.collection("households").document(hId)
+                db.collection("households").document(targetHid)
                     .collection("members").document(canonicalDocId)
-                    .set(toSave.copy(householdId = hId)).await()
+                    .set(toSave.copy(householdId = targetHid)).await()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                Log.w(TAG, "Error syncing member to household $hId: ${e.message}")
+                Log.w(TAG, "Error syncing member to household $targetHid: ${e.message}")
             }
-        }
-        if (userId.isNotBlank()) {
+        } else if (userId.isNotBlank()) {
             try {
                 db.collection("users").document(userId)
                     .collection("members").document(canonicalDocId)
@@ -741,45 +776,6 @@ internal class FirestoreStructureDelegate(
                 if (e is CancellationException) throw e
                 Log.w(TAG, "Error syncing member to user $userId: ${e.message}")
             }
-        }
-
-        val namesToPurge = mutableListOf<String>()
-        if (oldName.isNotBlank() && !oldName.equals(member.name, ignoreCase = true)) {
-            namesToPurge.add(oldName.trim().lowercase())
-        }
-
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try {
-                val snapshot = db.collection("households").document(hId).collection("members").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    val remoteIsDef = doc.getBoolean("isDefault") ?: false
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (canonicalDocId == "1" && remoteIsDef) ||
-                        (remoteName == member.name.trim().lowercase())
-                    ) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-
-        if (userId.isNotBlank()) {
-            try {
-                val snapshot = db.collection("users").document(userId).collection("members").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    val remoteIsDef = doc.getBoolean("isDefault") ?: false
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (canonicalDocId == "1" && remoteIsDef) ||
-                        (remoteName == member.name.trim().lowercase())
-                    ) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (_: Exception) {}
         }
     }
 
@@ -824,19 +820,20 @@ internal class FirestoreStructureDelegate(
         oldName: String = ""
     ) {
         val canonicalDocId = category.id.ifBlank { UUID.randomUUID().toString() }
-        val toSave = category.copy(id = canonicalDocId, createdAt = Timestamp.now())
-
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
+        val toSave = category.copy(id = canonicalDocId, createdAt = category.createdAt ?: Timestamp.now())
+        // Strict single-household scoping: NEVER fan out a category write across unrelated households
+        // and NEVER hard-delete other category documents by name.
+        val targetHid = householdIds.firstOrNull { it.isNotBlank() }
+        if (targetHid != null) {
             try {
-                db.collection("households").document(hId)
+                db.collection("households").document(targetHid)
                     .collection("categories").document(canonicalDocId)
-                    .set(toSave.copy(householdId = hId)).await()
+                    .set(toSave.copy(householdId = targetHid)).await()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                Log.w(TAG, "Error syncing category to household $hId: ${e.message}")
+                Log.w(TAG, "Error syncing category to household $targetHid: ${e.message}")
             }
-        }
-        if (userId.isNotBlank()) {
+        } else if (userId.isNotBlank()) {
             try {
                 db.collection("users").document(userId)
                     .collection("categories").document(canonicalDocId)
@@ -845,46 +842,6 @@ internal class FirestoreStructureDelegate(
                 if (e is CancellationException) throw e
                 Log.w(TAG, "Error syncing category to user $userId: ${e.message}")
             }
-        }
-
-        val namesToPurge = mutableListOf<String>()
-        if (oldName.isNotBlank() && !oldName.equals(category.name, ignoreCase = true)) {
-            namesToPurge.add(oldName.trim().lowercase())
-        }
-
-        val targetTypeNorm = category.categoryType.ifBlank { "EXPENSE" }.uppercase()
-        for (hId in householdIds.filter { it.isNotBlank() }.distinct()) {
-            try {
-                val snapshot = db.collection("households").document(hId).collection("categories").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteType = doc.getString("categoryType").orEmpty().ifBlank { "EXPENSE" }.uppercase()
-                    if (remoteType != targetTypeNorm) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (remoteName == category.name.trim().lowercase())
-                    ) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (_: Exception) {}
-        }
-
-        if (userId.isNotBlank()) {
-            try {
-                val snapshot = db.collection("users").document(userId).collection("categories").get().await()
-                for (doc in snapshot.documents) {
-                    if (doc.id == canonicalDocId) continue
-                    val remoteType = doc.getString("categoryType").orEmpty().ifBlank { "EXPENSE" }.uppercase()
-                    if (remoteType != targetTypeNorm) continue
-                    val remoteName = doc.getString("name").orEmpty().trim().lowercase()
-                    if ((namesToPurge.isNotEmpty() && namesToPurge.contains(remoteName)) ||
-                        (remoteName == category.name.trim().lowercase())
-                    ) {
-                        doc.reference.delete().await()
-                    }
-                }
-            } catch (_: Exception) {}
         }
     }
 
@@ -898,17 +855,18 @@ internal class FirestoreStructureDelegate(
 
     suspend fun batchUpdateMemberSortOrder(householdIds: List<String>, userId: String, members: List<FirebaseMember>) {
         if (members.isEmpty()) return
-        val validHouseholdIds = householdIds.filter { it.isNotBlank() }.distinct()
+        // Strict single-household scope & update-only (never merge-creates nameless ghost docs)
+        val targetHid = householdIds.firstOrNull { it.isNotBlank() }
         try {
             val batch = db.batch()
             for (m in members) {
-                val docId = m.id.ifBlank { "1" }
+                val docId = m.id.trim()
+                if (docId.isBlank()) continue
                 val updates = mapOf("sortOrder" to m.sortOrder, "updatedAt" to Timestamp.now())
-                for (hId in validHouseholdIds) {
-                    batch.set(db.collection("households").document(hId).collection("members").document(docId), updates, SetOptions.merge())
-                }
-                if (userId.isNotBlank()) {
-                    batch.set(db.collection("users").document(userId).collection("members").document(docId), updates, SetOptions.merge())
+                if (targetHid != null) {
+                    batch.update(db.collection("households").document(targetHid).collection("members").document(docId), updates)
+                } else if (userId.isNotBlank()) {
+                    batch.update(db.collection("users").document(userId).collection("members").document(docId), updates)
                 }
             }
             batch.commit().await()
@@ -920,17 +878,18 @@ internal class FirestoreStructureDelegate(
 
     suspend fun batchUpdateCategorySortOrder(householdIds: List<String>, userId: String, categories: List<FirebaseCategory>) {
         if (categories.isEmpty()) return
-        val validHouseholdIds = householdIds.filter { it.isNotBlank() }.distinct()
+        // Strict single-household scope & update-only (never merge-creates nameless ghost docs)
+        val targetHid = householdIds.firstOrNull { it.isNotBlank() }
         try {
             val batch = db.batch()
             for (c in categories) {
-                val docId = c.id.ifBlank { "1" }
+                val docId = c.id.trim()
+                if (docId.isBlank()) continue
                 val updates = mapOf("sortOrder" to c.sortOrder, "updatedAt" to Timestamp.now())
-                for (hId in validHouseholdIds) {
-                    batch.set(db.collection("households").document(hId).collection("categories").document(docId), updates, SetOptions.merge())
-                }
-                if (userId.isNotBlank()) {
-                    batch.set(db.collection("users").document(userId).collection("categories").document(docId), updates, SetOptions.merge())
+                if (targetHid != null) {
+                    batch.update(db.collection("households").document(targetHid).collection("categories").document(docId), updates)
+                } else if (userId.isNotBlank()) {
+                    batch.update(db.collection("users").document(userId).collection("categories").document(docId), updates)
                 }
             }
             batch.commit().await()

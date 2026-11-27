@@ -123,7 +123,7 @@
                 <li><strong>Ευαίσθητα Στοιχεία Προφίλ (Αποκλειστικά Ιδιωτικά):</strong> Προαιρετικά στοιχεία όπως τηλέφωνο, ημερομηνία γέννησης, επάγγελμα και πόλη αποθηκεύονται απομονωμένα σε ιδιωτικό υπο-έγγραφο (<code>/users/{uid}/private/profile</code>) προσβάσιμο αποκλειστικά από τον ίδιο τον ταυτοποιημένο χρήστη. Δεν εκτίθενται ποτέ σε άλλους χρήστες κατά την αναζήτηση διαμοιρασμού εξοδολογίου.</li>
                 <li><strong>Οικονομικές Εγγραφές &amp; Προϋπολογισμός:</strong> Ποσά, τίτλοι/περιγραφές, κατηγορίες, ημερομηνίες, τρόποι πληρωμής, νόμισμα εξοδολογίου, έσοδα, μηνιαία όρια, πάγιοι λογαριασμοί, στόχοι αποταμίευσης και επιμερισμοί/εκκαθαρίσεις μελών που εισάγετε εθελοντικά.</li>
                 <li><strong>Κοινά Εξοδολόγια &amp; Ιστορικό Δραστηριότητας:</strong> Ψευδώνυμα μελών, ρόλοι (Δημιουργός, Συντάκτης, Καταχωρητής) και ιστορικό ενεργειών ορατό αποκλειστικά στα εξουσιοδοτημένα μέλη του εκάστοτε εξοδολογίου.</li>
-                <li><strong>Προτιμήσεις Συσκευής:</strong> Επιλογή γλώσσας (ΕΛ/EN), θέμα εμφάνισης, ρυθμίσεις υπενθυμίσεων και τοπική μνήμη κατηγορίας εμπόρων.</li>
+                <li><strong>Προτιμήσεις Συσκευής:</strong> Επιλογή γλώσσας (υποστηριζόμενες γλώσσες εφαρμογής), θέμα εμφάνισης, ρυθμίσεις υπενθυμίσεων και τοπική μνήμη κατηγορίας εμπόρων.</li>
             </ul>
 
             <h2>3. Ανάγνωση Τραπεζικών Ειδοποιήσεων Push (Προαιρετική, 100% Τοπικά)</h2>
@@ -147,7 +147,7 @@
 
             <h2>5. Βιομετρικό Κλείδωμα, Τοπική Μνήμη Εμπόρων &amp; Λειτουργίες Συσκευής</h2>
             <ul>
-                <li><strong>Προαιρετικό Κλείδωμα (Δακτυλικό Αποτύπωμα / PIN):</strong> Η βιομετρική ταυτοποίηση εκτελείται αποκλειστικά από το ασφαλές υλικό/λογισμικό του Android (<code>BiometricPrompt</code>). Το Finsay <strong>ΔΕΝ έχει πρόσβαση, ΔΕΝ συλλέγει και ΔΕΝ αποθηκεύει ποτέ βιομετρικά δεδομένα ή αποτυπώματα</strong> (πλήρης συμμόρφωση με GDPR Άρθρο 9 και νόμους ΗΠΑ όπως Illinois BIPA / Texas CUBI). Ο προαιρετικός 4-ψήφιος κωδικός PIN αποθηκεύεται αποκλειστικά τοπικά ως salted SHA-256 hash.</li>
+                <li><strong>Προαιρετικό Κλείδωμα (Δακτυλικό Αποτύπωμα / PIN):</strong> Η βιομετρική ταυτοποίηση εκτελείται αποκλειστικά από το ασφαλές υλικό/λογισμικό του Android (<code>BiometricPrompt</code>). Το Finsay <strong>ΔΕΝ έχει πρόσβαση, ΔΕΝ συλλέγει και ΔΕΝ αποθηκεύει ποτέ βιομετρικά δεδομένα ή αποτυπώματα</strong> (πλήρης συμμόρφωση με GDPR Άρθρο 9 και νόμους ΗΠΑ όπως Illinois BIPA / Texas CUBI). Ο προαιρετικός 4-ψήφιος κωδικός PIN αποθηκεύεται αποκλειστικά τοπικά ως salted PBKDF2-HMAC-SHA256 hash.</li>
                 <li><strong>Έξυπνη Μνήμη Κατηγορίας Εμπόρων:</strong> Οι προτιμήσεις κατηγορίας ανά έμπορο/ΑΦΜ αποθηκεύονται μόνο τοπικά στη συσκευή (<code>SharedPreferences</code>).</li>
                 <li><strong>Υπενθυμίσεις, Widget, Quick Tile &amp; App Shortcuts:</strong> Οι άδειες τοπικών ειδοποιήσεων (<code>POST_NOTIFICATIONS</code>, <code>RECEIVE_BOOT_COMPLETED</code>, <code>WAKE_LOCK</code>, <code>VIBRATE</code>) χρησιμοποιούνται αποκλειστικά για τις υπενθυμίσεις σας και τις ειδοποιήσεις τοπικών προσχεδίων.</li>
             </ul>
@@ -190,7 +190,7 @@
                 <li><strong>Private Profile Details (Strictly Owner-Only):</strong> Optional fields such as phone number, date of birth, occupation, and city are isolated in a private sub-document (<code>/users/{uid}/private/profile</code>) readable and writable exclusively by your authenticated account—never exposed to other users during ledger-sharing lookups.</li>
                 <li><strong>Financial &amp; Budget Records:</strong> Amounts, titles/descriptions, categories, dates, payment sources, selected ledger currency, incomes, monthly budgets, recurring bills, savings goals, and member split/settle-up entries voluntarily entered by you.</li>
                 <li><strong>Shared Household Data &amp; Activity Logs:</strong> Member nicknames, roles (Creator, Editor, Registar), shared ledger links, and an activity log of ledger edits visible only to authorized members of that ledger.</li>
-                <li><strong>Preferences &amp; Local Settings:</strong> Language (EL/EN), theme mode, reminder schedules, and local merchant-to-category memory.</li>
+                <li><strong>Preferences &amp; Local Settings:</strong> App language preference (all supported languages), theme mode, reminder schedules, and local merchant-to-category memory.</li>
             </ul>
 
             <h2>3. Bank &amp; Digital Wallet Push Notification Reader (Optional, 100% On-Device)</h2>
@@ -214,7 +214,7 @@
 
             <h2>5. Biometric App Lock, Local Merchant Memory &amp; Device Features</h2>
             <ul>
-                <li><strong>Optional Biometric &amp; PIN App Lock:</strong> Fingerprint/Face Unlock uses Android <code>BiometricPrompt</code> handled exclusively by your device's secure OS hardware. Finsay <strong>NEVER accesses, collects, stores, or transmits biometric identifiers or templates</strong> (compliant with GDPR Art. 9 and US state biometric laws such as Illinois BIPA / Texas CUBI). Any optional 4-digit PIN is stored strictly on-device as a salted SHA-256 hash.</li>
+                <li><strong>Optional Biometric &amp; PIN App Lock:</strong> Fingerprint/Face Unlock uses Android <code>BiometricPrompt</code> handled exclusively by your device's secure OS hardware. Finsay <strong>NEVER accesses, collects, stores, or transmits biometric identifiers or templates</strong> (compliant with GDPR Art. 9 and US state biometric laws such as Illinois BIPA / Texas CUBI). Any optional 4-digit PIN is stored strictly on-device as a salted PBKDF2-HMAC-SHA256 hash.</li>
                 <li><strong>Smart Merchant Category Memory:</strong> Category preferences per merchant/VAT ID are stored strictly locally on-device (<code>SharedPreferences</code>).</li>
                 <li><strong>Reminders, Widgets, Quick Tile &amp; App Shortcuts:</strong> Local notification permissions (<code>POST_NOTIFICATIONS</code>, <code>RECEIVE_BOOT_COMPLETED</code>, <code>WAKE_LOCK</code>, <code>VIBRATE</code>) deliver only your configured reminders and local draft alerts.</li>
             </ul>

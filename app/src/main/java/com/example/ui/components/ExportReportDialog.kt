@@ -73,7 +73,6 @@ fun ExportReportDialog(
     onShowMessage: (String) -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
-    val isEnglish = lang == Localization.Language.ENGLISH
     val currencySymbol = LocalCurrencySymbol.current
     val context = LocalContext.current
 
@@ -160,10 +159,10 @@ fun ExportReportDialog(
     }
 
     val periodTitle = when (selectedFilterIndex) {
-        0 -> if (isEnglish) "Current Month" else "Τρέχων Μήνας"
-        1 -> if (isEnglish) "Day: ${dateSdf.format(selectedSingleDayTimestamp)}" else "Ημέρα: ${dateSdf.format(selectedSingleDayTimestamp)}"
+        0 -> Localization.tr(lang, "Current Month", "Τρέχων Μήνας")
+        1 -> Localization.trFormat(lang, "Day: %1\$s", "Ημέρα: %1\$s", dateSdf.format(selectedSingleDayTimestamp))
         2 -> "${dateSdf.format(rangeStartTimestamp)} - ${dateSdf.format(rangeEndTimestamp)}"
-        else -> if (isEnglish) "All Transactions" else "Όλες οι Συναλλαγές"
+        else -> Localization.tr(lang, "All Transactions", "Όλες οι Συναλλαγές")
     }
 
     val totalAmount = targetExpenses.sumOf { it.amount }
@@ -262,7 +261,7 @@ fun ExportReportDialog(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = if (lang == Localization.Language.ENGLISH) "Export Report" else "Εξαγωγή Αναφοράς",
+                            text = Localization.tr(lang, "Export Report", "Εξαγωγή Αναφοράς"),
                             fontSize = 17.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -283,7 +282,7 @@ fun ExportReportDialog(
                     ) {
                         // Option 0: Current Month
                         FilterPill(
-                            title = if (lang == Localization.Language.ENGLISH) "This Month" else "Τρέχων Μήνας",
+                            title = Localization.tr(lang, "This Month", "Τρέχων Μήνας"),
                             isSelected = selectedFilterIndex == 0,
                             modifier = Modifier.weight(1f),
                             onClick = { selectedFilterIndex = 0 }
@@ -291,7 +290,7 @@ fun ExportReportDialog(
 
                         // Option 1: Single Day
                         FilterPill(
-                            title = if (lang == Localization.Language.ENGLISH) "Single Day" else "Συγκεκριμένη Ημέρα",
+                            title = Localization.tr(lang, "Single Day", "Συγκεκριμένη Ημέρα"),
                             isSelected = selectedFilterIndex == 1,
                             modifier = Modifier.weight(1f),
                             onClick = { selectedFilterIndex = 1 }
@@ -304,7 +303,7 @@ fun ExportReportDialog(
                     ) {
                         // Option 2: Custom Range
                         FilterPill(
-                            title = if (lang == Localization.Language.ENGLISH) "Date Range" else "Χρονικό Διάστημα",
+                            title = Localization.tr(lang, "Date Range", "Χρονικό Διάστημα"),
                             isSelected = selectedFilterIndex == 2,
                             modifier = Modifier.weight(1f),
                             onClick = { selectedFilterIndex = 2 }
@@ -312,7 +311,7 @@ fun ExportReportDialog(
 
                         // Option 3: All
                         FilterPill(
-                            title = if (lang == Localization.Language.ENGLISH) "All Time" else "Όλα τα Έξοδα",
+                            title = Localization.tr(lang, "All Time", "Όλα τα Έξοδα"),
                             isSelected = selectedFilterIndex == 3,
                             modifier = Modifier.weight(1f),
                             onClick = { selectedFilterIndex = 3 }
@@ -345,7 +344,7 @@ fun ExportReportDialog(
                                     Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Emerald700, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "Select day:" else "Επιλογή ημέρας:",
+                                        text = Localization.tr(lang, "Select day:", "Επιλογή ημέρας:"),
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -382,7 +381,7 @@ fun ExportReportDialog(
                             ) {
                                 Column(modifier = Modifier.padding(10.dp)) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "From" else "Από",
+                                        text = Localization.tr(lang, "From", "Από"),
                                         fontSize = 10.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -407,7 +406,7 @@ fun ExportReportDialog(
                             ) {
                                 Column(modifier = Modifier.padding(10.dp)) {
                                     Text(
-                                        text = if (lang == Localization.Language.ENGLISH) "To" else "Έως",
+                                        text = Localization.tr(lang, "To", "Έως"),
                                         fontSize = 10.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -438,7 +437,7 @@ fun ExportReportDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = if (isEnglish) "Period:" else "Περίοδος:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = Localization.tr(lang, "Period:", "Περίοδος:"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(text = periodTitle, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
@@ -446,7 +445,7 @@ fun ExportReportDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = if (isEnglish) "Expenses (${targetExpenses.size}):" else "Έξοδα (${targetExpenses.size}):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = Localization.trFormat(lang, "Expenses (%1\$d):", "Έξοδα (%1\$d):", targetExpenses.size), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
                                 text = "${String.format(Locale.US, "%.2f", totalAmount)} $currencySymbol",
                                 fontSize = 12.5.sp,
@@ -459,7 +458,7 @@ fun ExportReportDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = if (isEnglish) "Incomes (${targetIncomes.size}):" else "Έσοδα (${targetIncomes.size}):", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = Localization.trFormat(lang, "Incomes (%1\$d):", "Έσοδα (%1\$d):", targetIncomes.size), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(
                                 text = "+${String.format(Locale.US, "%.2f", totalIncomeAmount)} $currencySymbol",
                                 fontSize = 12.5.sp,
@@ -474,7 +473,7 @@ fun ExportReportDialog(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(text = if (isEnglish) "Net Balance:" else "Καθαρό Υπόλοιπο:", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = netColor)
+                            Text(text = Localization.tr(lang, "Net Balance:", "Καθαρό Υπόλοιπο:"), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = netColor)
                             Text(
                                 text = "$netSign${String.format(Locale.US, "%.2f", netBalance)} $currencySymbol",
                                 fontSize = 14.sp,
@@ -485,7 +484,7 @@ fun ExportReportDialog(
                         if (members.size > 1 && targetExpenses.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = if (isEnglish) "Includes member Settle-Up breakdown & transfers" else "Περιλαμβάνει εκκαθάριση μελών & προτεινόμενες μεταφορές",
+                                text = Localization.tr(lang, "Includes member Settle-Up breakdown & transfers", "Περιλαμβάνει εκκαθάριση μελών & προτεινόμενες μεταφορές"),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -518,8 +517,8 @@ fun ExportReportDialog(
                             incomes = targetIncomes,
                             members = members,
                             currencySymbol = currencySymbol,
-                            householdName = householdName,
-                            isEnglish = isEnglish
+                            householdName = Localization.translateHouseholdName(householdName, lang),
+                            lang = lang
                         )
                         onDismiss()
                     },
@@ -533,7 +532,7 @@ fun ExportReportDialog(
                     Icon(Icons.Default.TableChart, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isEnglish) "Export to Excel (.xls)" else "Εξαγωγή σε Excel (.xls)",
+                        text = Localization.tr(lang, "Export to Excel (.xls)", "Εξαγωγή σε Excel (.xls)"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = Color.White
@@ -554,8 +553,8 @@ fun ExportReportDialog(
                             incomes = targetIncomes,
                             members = members,
                             currencySymbol = currencySymbol,
-                            householdName = householdName,
-                            isEnglish = isEnglish
+                            householdName = Localization.translateHouseholdName(householdName, lang),
+                            lang = lang
                         )
                         onDismiss()
                     },
@@ -569,7 +568,7 @@ fun ExportReportDialog(
                     Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isEnglish) "Export to PDF (.pdf)" else "Εξαγωγή σε PDF (.pdf)",
+                        text = Localization.tr(lang, "Export to PDF (.pdf)", "Εξαγωγή σε PDF (.pdf)"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = Color.White
@@ -590,8 +589,8 @@ fun ExportReportDialog(
                             incomes = targetIncomes,
                             members = members,
                             currencySymbol = currencySymbol,
-                            householdName = householdName,
-                            isEnglish = isEnglish
+                            householdName = Localization.translateHouseholdName(householdName, lang),
+                            lang = lang
                         )
                         onDismiss()
                     },
@@ -605,7 +604,7 @@ fun ExportReportDialog(
                     Icon(Icons.Default.TableChart, contentDescription = null, tint = Emerald700, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isEnglish) "Export to CSV (.csv)" else "Εξαγωγή σε CSV (.csv)",
+                        text = Localization.tr(lang, "Export to CSV (.csv)", "Εξαγωγή σε CSV (.csv)"),
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.5.sp,
                         color = Emerald700
@@ -653,7 +652,8 @@ private fun FilterPill(
             color = textColor,
             modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            maxLines = 1
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
     }
 }

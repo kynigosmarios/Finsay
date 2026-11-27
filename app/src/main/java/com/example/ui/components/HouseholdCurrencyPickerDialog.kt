@@ -78,7 +78,6 @@ fun HouseholdCurrencyPickerDialog(
     onSelectCurrency: (CurrencyOption) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val isEn = lang == Localization.Language.ENGLISH
     val normalizedSelected = CurrencyFormatter.optionForCode(selectedCurrencyCode).code
 
     AlertDialog(
@@ -96,7 +95,7 @@ fun HouseholdCurrencyPickerDialog(
                     modifier = Modifier.size(22.dp)
                 )
                 Text(
-                    text = if (isEn) "Household Currency" else "Νόμισμα Εξοδολογίου",
+                    text = Localization.tr(lang, "Household Currency", "Νόμισμα Εξοδολογίου"),
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp
                 )
@@ -154,7 +153,7 @@ fun HouseholdCurrencyPickerDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = if (isEn) option.nameEn else option.nameEl,
+                                    text = option.localizedName(lang),
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

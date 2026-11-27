@@ -47,6 +47,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.Emerald500
 import com.example.ui.theme.Emerald700
 import com.example.ui.theme.ModernFontFamily
+import com.example.util.Localization
 
 /**
  * Clean, lightweight welcome dialog shown on first entry into Finsay.
@@ -59,7 +60,7 @@ fun WelcomeOnboardingCarouselDialog(
     onOpenProPaywall: (() -> Unit)? = null,
     onOpenLegalDocument: ((String) -> Unit)? = null
 ) {
-    val isEn = appLanguage.equals("EN", ignoreCase = true)
+    val lang = Localization.Language.fromCode(appLanguage)
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val brandAccent = if (isDark) Emerald500 else Emerald700
 
@@ -120,7 +121,7 @@ fun WelcomeOnboardingCarouselDialog(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         Text(
-                            text = if (isEn) "Welcome to Finsay!" else "Καλώς ήρθατε στο Finsay!",
+                            text = Localization.tr(lang, "Welcome to Finsay!", "Καλώς ήρθατε στο Finsay!"),
                             fontFamily = ModernFontFamily,
                             fontSize = 22.sp,
                             fontWeight = FontWeight.ExtraBold,
@@ -132,10 +133,11 @@ fun WelcomeOnboardingCarouselDialog(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = if (isEn)
-                                "Everything you need to manage your finances effortlessly."
-                            else
-                                "Όλα τα οικονομικά σας, απλά και οργανωμένα.",
+                            text = Localization.tr(
+                                lang,
+                                "Everything you need to manage your finances effortlessly.",
+                                "Όλα τα οικονομικά σας, απλά και οργανωμένα."
+                            ),
                             fontSize = 13.5.sp,
                             lineHeight = 19.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -152,38 +154,42 @@ fun WelcomeOnboardingCarouselDialog(
                             WelcomeFeatureItem(
                                 icon = Icons.Rounded.Mic,
                                 accentColor = brandAccent,
-                                title = if (isEn) "Log in seconds" else "Άμεση καταχώρηση",
-                                subtitle = if (isEn)
-                                    "By voice, receipt scan, or quick entry."
-                                else
+                                title = Localization.tr(lang, "Log in seconds", "Άμεση καταχώρηση"),
+                                subtitle = Localization.tr(
+                                    lang,
+                                    "By voice, receipt scan, or quick entry.",
                                     "Με φωνή, σάρωση απόδειξης ή ένα πάτημα."
+                                )
                             )
                             WelcomeFeatureItem(
                                 icon = Icons.Rounded.Groups,
                                 accentColor = brandAccent,
-                                title = if (isEn) "Shared expense books" else "Κοινά εξοδολόγια",
-                                subtitle = if (isEn)
-                                    "Track & split expenses with family or friends."
-                                else
+                                title = Localization.tr(lang, "Shared expense books", "Κοινά εξοδολόγια"),
+                                subtitle = Localization.tr(
+                                    lang,
+                                    "Track & split expenses with family or friends.",
                                     "Μοιραστείτε έξοδα με οικογένεια ή παρέα."
+                                )
                             )
                             WelcomeFeatureItem(
                                 icon = Icons.Rounded.PieChart,
                                 accentColor = brandAccent,
-                                title = if (isEn) "Charts & budgets" else "Γραφήματα & όρια",
-                                subtitle = if (isEn)
-                                    "Clear spending insights and monthly limits."
-                                else
+                                title = Localization.tr(lang, "Charts & budgets", "Γραφήματα & όρια"),
+                                subtitle = Localization.tr(
+                                    lang,
+                                    "Clear spending insights and monthly limits.",
                                     "Καθαρή εικόνα εξόδων και μηνιαία budget."
+                                )
                             )
                             WelcomeFeatureItem(
                                 icon = Icons.Rounded.NotificationsActive,
                                 accentColor = brandAccent,
-                                title = if (isEn) "Reminders & goals" else "Υπενθυμίσεις & στόχοι",
-                                subtitle = if (isEn)
-                                    "Stay on top of bills and savings goals."
-                                else
+                                title = Localization.tr(lang, "Reminders & goals", "Υπενθυμίσεις & στόχοι"),
+                                subtitle = Localization.tr(
+                                    lang,
+                                    "Stay on top of bills and savings goals.",
                                     "Πάγιοι λογαριασμοί και στόχοι αποταμίευσης."
+                                )
                             )
                         }
 
@@ -206,7 +212,7 @@ fun WelcomeOnboardingCarouselDialog(
                                 .testTag("welcome_get_started_btn")
                         ) {
                             Text(
-                                text = if (isEn) "Get Started" else "Ξεκινήστε",
+                                text = Localization.tr(lang, "Get Started", "Ξεκινήστε"),
                                 fontSize = 15.5.sp,
                                 fontWeight = FontWeight.Bold
                             )

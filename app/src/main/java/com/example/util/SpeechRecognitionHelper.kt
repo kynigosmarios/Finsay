@@ -105,15 +105,18 @@ class SpeechRecognitionHelper(
         // Always cleanly destroy any previous instance before allocating a new one
         cancelListening()
 
-        val isEnglish = languageProvider().equals("EN", ignoreCase = true)
+        val currentLang = Localization.Language.fromCode(languageProvider())
 
         if (!isRecognitionAvailable()) {
             isStarting = false
             mainHandler.post {
                 onListeningStateChanged(false)
                 onError(
-                    if (isEnglish) "Voice recognition is not available on this device. You can type or pick a quick example!"
-                    else "Η φωνητική αναγνώριση δεν είναι διαθέσιμη σε αυτή τη συσκευή. Μπορείτε να πληκτρολογήσετε ή να επιλέξετε ένα έτοιμο παράδειγμα!"
+                    Localization.tr(
+                        currentLang,
+                        "Voice recognition is not available on this device. You can type or pick a quick example!",
+                        "Η φωνητική αναγνώριση δεν είναι διαθέσιμη σε αυτή τη συσκευή. Μπορείτε να πληκτρολογήσετε ή να επιλέξετε ένα έτοιμο παράδειγμα!"
+                    )
                 )
             }
             return
@@ -151,18 +154,18 @@ class SpeechRecognitionHelper(
 
                 override fun onError(error: Int) {
                     removeWatchdog()
-                    val isEnNow = languageProvider().equals("EN", ignoreCase = true)
+                    val langNow = Localization.Language.fromCode(languageProvider())
                     val message = when (error) {
                         SpeechRecognizer.ERROR_NO_MATCH ->
-                            if (isEnNow) "No speech recognized. Please try again." else "Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά."
+                            Localization.tr(langNow, "No speech recognized. Please try again.", "Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά.")
                         SpeechRecognizer.ERROR_NETWORK ->
-                            if (isEnNow) "Network error during voice recognition." else "Σφάλμα σύνδεσης δικτύου κατά τη φωνητική αναγνώριση."
+                            Localization.tr(langNow, "Network error during voice recognition.", "Σφάλμα σύνδεσης δικτύου κατά τη φωνητική αναγνώριση.")
                         SpeechRecognizer.ERROR_AUDIO ->
-                            if (isEnNow) "Microphone audio error." else "Σφάλμα μικροφώνου."
+                            Localization.tr(langNow, "Microphone audio error.", "Σφάλμα μικροφώνου.")
                         SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
-                            if (isEnNow) "No speech heard." else "Δεν ακούστηκε ομιλία."
+                            Localization.tr(langNow, "No speech heard.", "Δεν ακούστηκε ομιλία.")
                         else ->
-                            if (isEnNow) "Voice recognition error ($error)" else "Σφάλμα φωνητικής αναγνώρισης ($error)"
+                            Localization.trFormat(langNow, "Voice recognition error (%1\$d)", "Σφάλμα φωνητικής αναγνώρισης (%1\$d)", error)
                     }
                     // Cleanly destroy recognizer on error to avoid leaked audio buffers
                     cancelListening()
@@ -174,7 +177,7 @@ class SpeechRecognitionHelper(
 
                 override fun onResults(results: Bundle?) {
                     removeWatchdog()
-                    val isEnNow = languageProvider().equals("EN", ignoreCase = true)
+                    val langNow = Localization.Language.fromCode(languageProvider())
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = matches?.firstOrNull()?.trim().orEmpty()
                     // Cleanly release recognizer once results are obtained
@@ -185,8 +188,11 @@ class SpeechRecognitionHelper(
                             onResult(text)
                         } else {
                             onError(
-                                if (isEnNow) "No speech recognized. Please try again."
-                                else "Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά."
+                                Localization.tr(
+                                    langNow,
+                                    "No speech recognized. Please try again.",
+                                    "Δεν αναγνωρίστηκε ομιλία. Δοκιμάστε ξανά."
+                                )
                             )
                         }
                     }
@@ -197,12 +203,12 @@ class SpeechRecognitionHelper(
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
 
-            val localeTag = if (isEnglish) "en-US" else "el-GR"
-            val promptText = if (isEnglish) {
-                "Speak your expense in English (e.g. \"15 euros supermarket\")"
-            } else {
+            val localeTag = currentLang.bcp47Tag
+            val promptText = Localization.tr(
+                currentLang,
+                "Speak your expense (e.g. \"15 euros supermarket\")",
                 "Πείτε το έξοδο στα ελληνικά (π.χ. «πέντε σαράντα σούπερ μάρκετ»)"
-            }
+            )
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeTag)
@@ -221,8 +227,12 @@ class SpeechRecognitionHelper(
             mainHandler.post {
                 onListeningStateChanged(false)
                 onError(
-                    if (isEnglish) "Voice recognition could not start (${t.localizedMessage ?: "unavailable"})."
-                    else "Η φωνητική αναγνώριση δεν μπόρεσε να ξεκινήσει (${t.localizedMessage ?: "μη διαθέσιμη"})."
+                    Localization.trFormat(
+                        currentLang,
+                        "Voice recognition could not start (%1\$s).",
+                        "Η φωνητική αναγνώριση δεν μπόρεσε να ξεκινήσει (%1\$s).",
+                        t.localizedMessage ?: Localization.tr(currentLang, "unavailable", "μη διαθέσιμη")
+                    )
                 )
             }
         }

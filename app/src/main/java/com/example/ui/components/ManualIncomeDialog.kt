@@ -115,11 +115,11 @@ fun ManualIncomeDialog(
         if (incomeCategories.isNotEmpty()) {
             incomeCategories
         } else {
-            val defaults = if (lang == Localization.Language.ENGLISH) DEFAULT_INCOME_CATEGORIES_EN else DEFAULT_INCOME_CATEGORIES_EL
-            defaults.mapIndexed { idx, name ->
+            DEFAULT_INCOME_CATEGORIES_EL.mapIndexed { idx, canonicalName ->
+                val localizedName = Localization.translateCategory(canonicalName, lang)
                 ExpenseCategory(
                     id = -(idx + 1).toLong(),
-                    name = name,
+                    name = localizedName,
                     iconKey = when (idx) {
                         0 -> "work"
                         1 -> "house"
@@ -302,14 +302,20 @@ fun ManualIncomeDialog(
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             modifier = Modifier.clickable {
                                 title = translatedSug
-                                if (selectedCategory == "Μισθός" && sug != "Μισθός") {
-                                    selectedCategory = when (sug) {
-                                        "Ενοίκιο" -> "Ενοίκιο"
-                                        "Freelance" -> "Επιχείρηση / Freelance"
-                                        "Επιδότηση" -> "Επιδότηση"
-                                        "Bonus" -> "Bonus / Δώρο"
-                                        else -> "Άλλο"
-                                    }
+                                val targetCanonical = when (sug) {
+                                    "Μισθός" -> "Μισθός"
+                                    "Ενοίκιο" -> "Ενοίκιο"
+                                    "Freelance" -> "Επιχείρηση / Freelance"
+                                    "Επιδότηση" -> "Επιδότηση"
+                                    "Bonus" -> "Bonus / Δώρο"
+                                    else -> "Άλλο"
+                                }
+                                val matchedCat = effectiveIncomeCategories.firstOrNull { cat ->
+                                    Localization.translateCategory(cat.name, Localization.Language.GREEK).equals(targetCanonical, ignoreCase = true) ||
+                                        cat.name.equals(Localization.translateCategory(targetCanonical, lang), ignoreCase = true)
+                                }
+                                if (matchedCat != null) {
+                                    selectedCategory = matchedCat.name
                                 }
                             }
                         ) {
