@@ -321,44 +321,135 @@ internal class FirestoreHouseholdDelegate(
         } catch (_: Exception) {}
     }
 
-    suspend fun joinHouseholdByCode(userUid: String, inviteCode: String, role: String? = null): Result<Household> {
-        val normalizedCode = inviteCode.trim().uppercase()
-        val querySnapshot = db.collection("households")
-            .whereEqualTo("inviteCode", normalizedCode)
-            .get()
-            .await()
-
-        if (querySnapshot.isEmpty) {
-            return Result.failure(Exception("Δεν βρέθηκε εξοδολόγιο με τον κωδικό: $normalizedCode"))
+    suspend fun createHouseholdInvite(
+        household: Household,
+        ownerUid: String,
+        role: HouseholdRole
+    ): Result<com.example.data.model.HouseholdInvite> {
+        if (household.id.isBlank() || ownerUid.isBlank()) {
+            return Result.failure(IllegalArgumentException("Invalid household or owner"))
         }
-
-        val doc = querySnapshot.documents.first()
-        val household = try { doc.toSafeHousehold() } catch (_: Exception) { null }
-            ?: return Result.failure(Exception("Σφάλμα ανάγνωσης στοιχείων εξοδολογίου"))
-
-        val assignedRole = role?.uppercase() ?: (doc.getString("pendingInviteRole") ?: "CONTRIBUTOR")
-        val updates = mutableMapOf<String, Any>(
-            "memberUids" to FieldValue.arrayUnion(userUid),
-            "memberRoles.$userUid" to assignedRole
+        val safeRole = if (role == HouseholdRole.EDITOR) HouseholdRole.EDITOR.key else HouseholdRole.REGISTAR.key
+        val code = com.example.util.QrCodeHelper.generateSecureInviteCode()
+        val now = System.currentTimeMillis()
+        val expiresAt = now + 7L * 24L * 60L * 60L * 1000L
+        val invite = com.example.data.model.HouseholdInvite(
+            code = code,
+            url = com.example.util.QrCodeHelper.buildInviteUrl(code),
+            householdId = household.id,
+            householdName = household.name,
+            ownerId = ownerUid,
+            role = safeRole,
+            isActive = true,
+            createdAt = now,
+            expiresAt = expiresAt
         )
-        try {
-            doc.reference.update(updates).await()
-        } catch (_: Exception) {
-            doc.reference.update("memberUids", FieldValue.arrayUnion(userUid)).await()
-        }
-
-        db.collection("users").document(userUid).update(
-            "householdId", household.id,
-            "householdIds", FieldValue.arrayUnion(household.id)
-        ).await()
-
-        val updatedRoles = household.memberRoles.toMutableMap().apply { put(userUid, assignedRole) }
-        return Result.success(
-            household.copy(
-                memberUids = (household.memberUids + userUid).distinct(),
-                memberRoles = updatedRoles
+        return try {
+            try { ensureHouseholdExists(household.id, ownerUid) } catch (_: Exception) {}
+            val payload = hashMapOf<String, Any>(
+                "code" to invite.code,
+                "householdId" to invite.householdId,
+                "householdName" to invite.householdName,
+                "ownerId" to invite.ownerId,
+                "role" to invite.role,
+                "isActive" to true,
+                "createdAt" to invite.createdAt,
+                "expiresAt" to invite.expiresAt
             )
-        )
+            db.collection("household_invites").document(code).set(payload).await()
+            Result.success(invite)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "createHouseholdInvite error: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun joinHouseholdByCode(
+        userUid: String,
+        inviteCode: String,
+        role: String? = null,
+        userEmail: String = "",
+        userDisplayName: String = ""
+    ): Result<Household> {
+        val extracted = com.example.util.QrCodeHelper.extractInviteCode(inviteCode)
+            ?: return Result.failure(IllegalArgumentException("INVALID_CODE"))
+        val normalizedCode = extracted.trim().uppercase()
+
+        return try {
+            val inviteSnap = db.collection("household_invites")
+                .document(normalizedCode)
+                .get()
+                .await()
+
+            if (!inviteSnap.exists()) {
+                return Result.failure(IllegalArgumentException("INVITE_NOT_FOUND"))
+            }
+
+            val isActive = inviteSnap.getBoolean("isActive") ?: false
+            val expiresAt = (inviteSnap.get("expiresAt") as? Number)?.toLong() ?: 0L
+            if (!isActive || (expiresAt > 0L && expiresAt < System.currentTimeMillis())) {
+                return Result.failure(IllegalStateException("INVITE_EXPIRED"))
+            }
+
+            val householdId = inviteSnap.getString("householdId").orEmpty().trim()
+            val inviteRole = inviteSnap.getString("role")?.uppercase()
+                ?.takeIf { it == HouseholdRole.EDITOR.key || it == HouseholdRole.REGISTAR.key }
+                ?: HouseholdRole.REGISTAR.key
+            if (householdId.isBlank()) {
+                return Result.failure(IllegalStateException("INVITE_INVALID"))
+            }
+
+            val householdRef = db.collection("households").document(householdId)
+            val alreadyMemberDoc = try {
+                householdRef.get().await().takeIf { it.exists() }
+            } catch (_: Exception) {
+                null
+            }
+
+            val finalHousehold = if (alreadyMemberDoc != null) {
+                val existing = alreadyMemberDoc.toSafeHousehold().apply {
+                    if (id.isBlank()) id = householdId
+                }
+                existing
+            } else {
+                val cleanEmail = userEmail.trim().take(160)
+                val cleanName = userDisplayName.trim().ifBlank { cleanEmail.substringBefore("@") }.take(120)
+                val updates = hashMapOf<String, Any>(
+                    "memberUids" to FieldValue.arrayUnion(userUid),
+                    "memberRoles.$userUid" to inviteRole,
+                    "memberEmails.$userUid" to cleanEmail,
+                    "memberNames.$userUid" to cleanName,
+                    "deletedForUsers" to FieldValue.arrayRemove(userUid),
+                    "lastJoinedInviteCode" to normalizedCode,
+                    "updatedAt" to Timestamp.now()
+                )
+                householdRef.update(updates).await()
+                val joinedSnap = householdRef.get().await()
+                joinedSnap.toSafeHousehold().apply {
+                    if (id.isBlank()) id = householdId
+                }
+            }
+
+            try {
+                db.collection("users").document(userUid).set(
+                    mapOf(
+                        "householdId" to finalHousehold.id,
+                        "householdIds" to FieldValue.arrayUnion(finalHousehold.id)
+                    ),
+                    SetOptions.merge()
+                ).await()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "joinHouseholdByCode user profile update notice: ${e.message}")
+            }
+
+            Result.success(finalHousehold)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "joinHouseholdByCode error: ${e.message}")
+            Result.failure(e)
+        }
     }
 
     fun observeHousehold(householdId: String): Flow<Household?> {
@@ -715,7 +806,7 @@ internal class FirestoreHouseholdDelegate(
                         val ownerId = hDoc.getString("ownerId") ?: ""
                         val members = (hDoc.get("memberUids") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
                         if (ownerId == userId && (members.isEmpty() || members == listOf(userId))) {
-                            val hSubs = listOf("expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses", "activity")
+                            val hSubs = listOf("expenses", "incomes", "categories", "members", "savings_goals", "recurring_expenses", "activity", "monthly_totals")
                             for (sub in hSubs) {
                                 try {
                                     val docs = hRef.collection(sub).get().await()

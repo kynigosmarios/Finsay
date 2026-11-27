@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Share
@@ -109,11 +110,15 @@ fun ExodologioDetailsDialog(
     onManageMembers: () -> Unit = {},
     onShowPremiumPaywall: (String) -> Unit,
     onClearExpenses: () -> Unit,
+    isGeneratingInvite: Boolean = false,
+    onGenerateInviteLink: ((Household, HouseholdRole) -> Unit)? = null,
+    onJoinHouseholdByCode: ((String) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
 
     var showCreateDialog by remember { mutableStateOf(false) }
+    var showJoinByCodeDialog by remember { mutableStateOf(false) }
     var newHouseholdName by remember { mutableStateOf("") }
     var newHouseholdCurrencyCode by remember { mutableStateOf("EUR") }
     var showCreateCurrencyPicker by remember { mutableStateOf(false) }
@@ -452,7 +457,9 @@ fun ExodologioDetailsDialog(
                                             onClearLookup = onClearLookup,
                                             onAddSharedUser = onAddSharedUser,
                                             onChangeSharedUserRole = onChangeSharedUserRole,
-                                            onRemoveSharedUser = onRemoveSharedUser
+                                            onRemoveSharedUser = onRemoveSharedUser,
+                                            isGeneratingInvite = isGeneratingInvite,
+                                            onGenerateInviteLink = onGenerateInviteLink
                                         )
                                     }
                                 }
@@ -512,6 +519,57 @@ fun ExodologioDetailsDialog(
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.ExtraBold,
                                         color = Amber700
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Join existing household via Invite Link / QR / Code
+                    if (onJoinHouseholdByCode != null) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Emerald700.copy(alpha = 0.08f),
+                            border = BorderStroke(1.1.dp, Emerald700.copy(alpha = 0.40f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { showJoinByCodeDialog = true }
+                                .testTag("join_exodologio_by_qr_button")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Emerald700.copy(alpha = 0.14f),
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.QrCodeScanner,
+                                            contentDescription = null,
+                                            tint = Emerald700,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = Localization.tr(lang, "Join via Link or QR", "Σύνδεση με Link ή QR"),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = Localization.tr(
+                                            lang,
+                                            "Scan a household QR code or paste an invite link",
+                                            "Σκανάρετε κωδικό QR ή επικολλήστε link πρόσκλησης"
+                                        ),
+                                        fontSize = 11.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -764,6 +822,17 @@ fun ExodologioDetailsDialog(
                     Text(text = Localization.cancel(lang))
                 }
             }
+        )
+    }
+
+    if (showJoinByCodeDialog && onJoinHouseholdByCode != null) {
+        JoinHouseholdByCodeOrQrDialog(
+            appLanguage = appLanguage,
+            onJoinWithCode = { code ->
+                showJoinByCodeDialog = false
+                onJoinHouseholdByCode(code)
+            },
+            onDismiss = { showJoinByCodeDialog = false }
         )
     }
 }

@@ -119,6 +119,11 @@ object BillReminderManager {
                 frequency = reminder.frequency,
                 anchorMonth = reminder.anchorMonth
             )
+            if (triggerAt <= 0L) {
+                cancelReminder(context, reminder.id)
+                Log.d(TAG, "Skipped past one-time reminder '${reminder.title}' (#${reminder.id})")
+                return
+            }
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

@@ -9,14 +9,22 @@ import com.example.data.entity.SavingsGoal
 import com.example.data.model.FirebaseExpense
 import com.example.data.model.FirebaseHouseholdActivity
 import com.example.data.model.FirebaseIncome
+import com.example.data.model.FirebaseMonthlyTotal
 import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
+import com.example.data.repository.FirestoreTransactionsDelegate
 import com.example.reminder.BillReminderManager
 import com.example.util.HouseholdActivityNotificationManager
+import com.example.util.Localization
 import com.example.util.RecurringExpenseAutoProcessor
 import com.example.util.StartupSafety
+import com.example.util.TelemetryHelper
 import com.google.firebase.auth.FirebaseUser
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +59,9 @@ internal class OikoNomosSyncDelegate(
         vm.lastUserCategories = emptyList()
         vm.lastHouseholdSavingsGoals = emptyList()
         vm.lastUserSavingsGoals = emptyList()
+        resetHistoryPaginationState()
+        vm._advancedFilter.value = AdvancedExpenseFilter()
+        vm._activeHouseholdInvite.value = null
 
         vm._allExpenses.value = emptyList()
         vm._allIncomes.value = emptyList()
@@ -138,6 +149,7 @@ internal class OikoNomosSyncDelegate(
             return
         }
 
+        val profileTrace = TelemetryHelper.startTrace("load_profile_household")
         vm.trackSyncStart()
         vm._isSyncing.value = true
         try {
@@ -268,6 +280,11 @@ internal class OikoNomosSyncDelegate(
             observeUserData(user.uid)
             observeHouseholdData(activeHousehold.id)
 
+            TelemetryHelper.setContextKeys(
+                appLanguage = vm._appLanguage.value,
+                isPro = vm._isProUser.value,
+                householdCount = finalHouseholds.size
+            )
             val householdIdsForProfile = finalHouseholds.map { it.id }.distinct()
             if (householdIdsForProfile.isNotEmpty() && householdIdsForProfile != profile.householdIds) {
                 try {
@@ -277,7 +294,9 @@ internal class OikoNomosSyncDelegate(
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             Log.e(tag, "loadUserProfileAndHousehold error: ${e.message}", e)
+            TelemetryHelper.recordNonFatal(tag, e)
         } finally {
+            TelemetryHelper.stopTrace(profileTrace)
             vm._isLegalStatusResolved.value = true
             vm._isSyncing.value = false
             vm._isInitialExpensesLoading.value = false
@@ -451,6 +470,7 @@ internal class OikoNomosSyncDelegate(
             vm.pendingDeletedSavingsGoals.clear()
             vm.inFlightCreateGoalKeys.clear()
             vm._allSavingsGoals.value = emptyList()
+            resetHistoryPaginationState()
         }
 
         vm.householdJob?.cancel()
@@ -461,6 +481,19 @@ internal class OikoNomosSyncDelegate(
         vm.savingsGoalsSyncJob?.cancel()
         vm.recurringSyncJob?.cancel()
         vm.activitySyncJob?.cancel()
+
+        // Refresh monthly aggregates (1 lightweight query) for quick historical context
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            try {
+                val totals = vm.firestoreSyncRepo.getMonthlyTotalsOnce(householdId)
+                if (vm._currentHousehold.value?.id == householdId) {
+                    vm._monthlyTotalsSummary.value = totals
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(tag, "getMonthlyTotalsOnce warning: ${e.message}")
+            }
+        }
 
         vm.householdJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             vm.firestoreSyncRepo.observeHousehold(householdId)
@@ -476,19 +509,33 @@ internal class OikoNomosSyncDelegate(
                 }
         }
 
+        val liveCutoff = vm.liveWindowCutoffMs
+        var liveSyncTrace = TelemetryHelper.startTrace("household_live_sync")
         vm.expensesSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            vm.firestoreSyncRepo.observeExpenses(householdId)
-                .catch { t -> Log.w(tag, "observeExpenses error: ${t.message}") }
+            vm.firestoreSyncRepo.observeExpenses(householdId, liveCutoff)
+                .catch { t ->
+                    Log.w(tag, "observeExpenses error: ${t.message}")
+                    TelemetryHelper.recordNonFatal("observeExpenses", t)
+                    TelemetryHelper.stopTrace(liveSyncTrace)
+                    liveSyncTrace = null
+                }
                 .collect { expenses ->
                     if (vm._currentHousehold.value?.id != householdId) return@collect
                     vm.lastHouseholdExpenses = expenses
                     applyResolvedExpenses()
+                    if (liveSyncTrace != null) {
+                        TelemetryHelper.stopTrace(liveSyncTrace, mapOf("expense_count" to expenses.size.toLong()))
+                        liveSyncTrace = null
+                    }
                 }
         }
 
         vm.incomesSyncJob = vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
-            vm.firestoreSyncRepo.observeIncomes(householdId)
-                .catch { t -> Log.w(tag, "observeIncomes error: ${t.message}") }
+            vm.firestoreSyncRepo.observeIncomes(householdId, liveCutoff)
+                .catch { t ->
+                    Log.w(tag, "observeIncomes error: ${t.message}")
+                    TelemetryHelper.recordNonFatal("observeIncomes", t)
+                }
                 .collect { incomes ->
                     if (vm._currentHousehold.value?.id != householdId) return@collect
                     vm.lastHouseholdIncomes = incomes
@@ -619,11 +666,181 @@ internal class OikoNomosSyncDelegate(
         }
     }
 
+    internal fun resetHistoryPaginationState() {
+        val freshCutoff = FirestoreTransactionsDelegate.defaultLiveWindowCutoffMs()
+        vm.liveWindowCutoffMs = freshCutoff
+        vm.olderExpensesCache = emptyList()
+        vm.olderIncomesCache = emptyList()
+        vm.oldestLoadedExpenseCursorMs = freshCutoff
+        vm.oldestLoadedIncomeCursorMs = freshCutoff
+        vm.hasMoreOlderExpenses = true
+        vm.hasMoreOlderIncomes = true
+        vm._hasMoreOlderHistory.value = true
+        vm._isLoadingOlderHistory.value = false
+        vm._monthlyTotalsSummary.value = emptyList()
+    }
+
+    fun loadOlderHistory(silent: Boolean = false) {
+        val householdId = vm._currentHousehold.value?.id.orEmpty()
+        if (householdId.isBlank()) return
+        if (vm._isLoadingOlderHistory.value) return
+        if (!vm.hasMoreOlderExpenses && !vm.hasMoreOlderIncomes) {
+            vm._hasMoreOlderHistory.value = false
+            return
+        }
+
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            vm._isLoadingOlderHistory.value = true
+            val trace = TelemetryHelper.startTrace("load_older_history")
+            var newlyLoadedCount = 0
+            try {
+                if (vm.hasMoreOlderExpenses) {
+                    val page = vm.firestoreSyncRepo.fetchOlderExpenses(
+                        householdId = householdId,
+                        beforeTimestampMs = vm.oldestLoadedExpenseCursorMs,
+                        limit = FirestoreTransactionsDelegate.OLDER_HISTORY_PAGE_SIZE
+                    )
+                    if (vm._currentHousehold.value?.id != householdId) return@launch
+                    if (page.rawDocumentCount > 0) {
+                        vm.oldestLoadedExpenseCursorMs = minOf(vm.oldestLoadedExpenseCursorMs, page.oldestRawTimestampMs)
+                    }
+                    if (page.items.isNotEmpty()) {
+                        newlyLoadedCount += page.items.size
+                        vm.olderExpensesCache = (vm.olderExpensesCache + page.items).distinctBy { it.id }
+                    }
+                    if (page.rawDocumentCount < FirestoreTransactionsDelegate.OLDER_HISTORY_PAGE_SIZE) {
+                        vm.hasMoreOlderExpenses = false
+                    }
+                }
+
+                if (vm.hasMoreOlderIncomes) {
+                    val page = vm.firestoreSyncRepo.fetchOlderIncomes(
+                        householdId = householdId,
+                        beforeTimestampMs = vm.oldestLoadedIncomeCursorMs,
+                        limit = FirestoreTransactionsDelegate.OLDER_HISTORY_PAGE_SIZE
+                    )
+                    if (vm._currentHousehold.value?.id != householdId) return@launch
+                    if (page.rawDocumentCount > 0) {
+                        vm.oldestLoadedIncomeCursorMs = minOf(vm.oldestLoadedIncomeCursorMs, page.oldestRawTimestampMs)
+                    }
+                    if (page.items.isNotEmpty()) {
+                        newlyLoadedCount += page.items.size
+                        vm.olderIncomesCache = (vm.olderIncomesCache + page.items).distinctBy { it.id }
+                    }
+                    if (page.rawDocumentCount < FirestoreTransactionsDelegate.OLDER_HISTORY_PAGE_SIZE) {
+                        vm.hasMoreOlderIncomes = false
+                    }
+                }
+
+                vm._hasMoreOlderHistory.value = vm.hasMoreOlderExpenses || vm.hasMoreOlderIncomes
+                if (newlyLoadedCount > 0) {
+                    applyResolvedExpenses()
+                    applyResolvedIncomes()
+                }
+                if (!silent) {
+                    val lang = Localization.Language.fromCode(vm._appLanguage.value)
+                    if (newlyLoadedCount > 0) {
+                        vm.showSnackbar(
+                            Localization.trFormat(
+                                lang,
+                                "Loaded %1\$d older transactions",
+                                "Φορτώθηκαν %1\$d παλαιότερες συναλλαγές",
+                                newlyLoadedCount
+                            )
+                        )
+                    } else {
+                        vm.showSnackbar(
+                            Localization.tr(
+                                lang,
+                                "All transaction history is already loaded",
+                                "Όλο το ιστορικό συναλλαγών έχει ήδη φορτωθεί"
+                            )
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(tag, "loadOlderHistory warning: ${e.message}")
+                TelemetryHelper.recordNonFatal("loadOlderHistory", e)
+            } finally {
+                TelemetryHelper.stopTrace(trace, mapOf("loaded_count" to newlyLoadedCount.toLong()))
+                vm._isLoadingOlderHistory.value = false
+            }
+        }
+    }
+
+    fun maybeAutoLoadOlderHistoryForPeriod(monthKey: String?) {
+        if (monthKey.isNullOrBlank()) return
+        if (!vm._hasMoreOlderHistory.value || vm._isLoadingOlderHistory.value) return
+        val cutoffCal = Calendar.getInstance().apply { timeInMillis = vm.liveWindowCutoffMs }
+        val cutoffYear = cutoffCal.get(Calendar.YEAR)
+        val cutoffMonth = cutoffCal.get(Calendar.MONTH) + 1
+        val needsOlder = when {
+            monthKey == "ALL" -> true
+            monthKey.startsWith("YEAR:") -> {
+                val yr = monthKey.removePrefix("YEAR:").toIntOrNull()
+                yr != null && yr <= cutoffYear
+            }
+            monthKey.length == 7 && monthKey[4] == '-' -> {
+                val yr = monthKey.substring(0, 4).toIntOrNull()
+                val mo = monthKey.substring(5, 7).toIntOrNull()
+                yr != null && mo != null && (yr < cutoffYear || (yr == cutoffYear && mo < cutoffMonth))
+            }
+            else -> false
+        }
+        if (needsOlder) {
+            loadOlderHistory(silent = true)
+        }
+    }
+
+    fun maybeAutoLoadOlderHistoryForTimestamp(timestampMs: Long?) {
+        if (timestampMs == null || timestampMs <= 0L) return
+        if (!vm._hasMoreOlderHistory.value || vm._isLoadingOlderHistory.value) return
+        if (timestampMs < vm.oldestLoadedExpenseCursorMs) {
+            loadOlderHistory(silent = true)
+        }
+    }
+
+    fun syncMonthlyTotalForTimestamp(householdId: String, timestampMs: Long) {
+        if (householdId.isBlank() || timestampMs <= 0L) return
+        // Only write monthly totals when we hold the complete month in memory (>= liveWindowCutoffMs or all history loaded)
+        if (timestampMs < vm.liveWindowCutoffMs && vm._hasMoreOlderHistory.value) return
+        val monthFormat = SimpleDateFormat("yyyy-MM", Locale.ROOT)
+        val monthKey = monthFormat.format(Date(timestampMs))
+
+        val monthExpenses = vm._allExpenses.value.filter { monthFormat.format(Date(it.timestamp)) == monthKey }
+        val monthIncomes = vm._allIncomes.value.filter { monthFormat.format(Date(it.timestamp)) == monthKey }
+        val summary = FirebaseMonthlyTotal(
+            monthKey = monthKey,
+            expenseTotal = monthExpenses.sumOf { it.amount },
+            incomeTotal = monthIncomes.sumOf { it.amount },
+            expenseCount = monthExpenses.size,
+            incomeCount = monthIncomes.size,
+            updatedAt = System.currentTimeMillis()
+        )
+        vm._monthlyTotalsSummary.value = (listOf(summary) + vm._monthlyTotalsSummary.value.filter { it.monthKey != monthKey })
+            .sortedByDescending { it.monthKey }
+
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            try {
+                vm.firestoreSyncRepo.upsertMonthlyTotal(householdId, summary)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(tag, "syncMonthlyTotalForTimestamp warning: ${e.message}")
+            }
+        }
+    }
+
     private suspend fun applyResolvedExpenses() {
         val activeHid = vm._currentHousehold.value?.id.orEmpty()
+        val combinedHouseholdExpenses = if (vm.olderExpensesCache.isEmpty()) {
+            vm.lastHouseholdExpenses
+        } else {
+            (vm.lastHouseholdExpenses + vm.olderExpensesCache).distinctBy { it.id }
+        }
         val authoritativeRemote = StartupSafety.resolveAuthoritativeExpenses(
             activeHouseholdId = activeHid,
-            householdExpenses = vm.lastHouseholdExpenses,
+            householdExpenses = combinedHouseholdExpenses,
             userExpenses = vm.lastUserExpenses,
             totalHouseholdCount = vm._userHouseholds.value.size
         )
@@ -656,9 +873,14 @@ internal class OikoNomosSyncDelegate(
 
     private suspend fun applyResolvedIncomes() {
         val activeHid = vm._currentHousehold.value?.id.orEmpty()
+        val combinedHouseholdIncomes = if (vm.olderIncomesCache.isEmpty()) {
+            vm.lastHouseholdIncomes
+        } else {
+            (vm.lastHouseholdIncomes + vm.olderIncomesCache).distinctBy { it.id }
+        }
         val authoritativeRemote = StartupSafety.resolveAuthoritativeIncomes(
             activeHouseholdId = activeHid,
-            householdIncomes = vm.lastHouseholdIncomes,
+            householdIncomes = combinedHouseholdIncomes,
             userIncomes = vm.lastUserIncomes,
             totalHouseholdCount = vm._userHouseholds.value.size
         )

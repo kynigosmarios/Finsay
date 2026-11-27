@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -119,6 +120,8 @@ fun HouseholdShareMask(
     onAddSharedUser: (householdId: String, targetUser: UserProfile, role: HouseholdRole) -> Unit,
     onChangeSharedUserRole: (householdId: String, targetUid: String, targetEmail: String, newRole: HouseholdRole) -> Unit,
     onRemoveSharedUser: (householdId: String, targetUid: String, targetEmail: String) -> Unit,
+    isGeneratingInvite: Boolean = false,
+    onGenerateInviteLink: ((Household, HouseholdRole) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val lang = Localization.Language.fromCode(appLanguage)
@@ -393,6 +396,95 @@ fun HouseholdShareMask(
             }
 
             is OikoNomosViewModel.VerifiedUserLookupState.Idle -> Unit
+        }
+
+        // Invite via Link or QR Code
+        if (onGenerateInviteLink != null) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(0.9.dp, Emerald700.copy(alpha = 0.28f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("share_invite_link_section_${household.id}")
+            ) {
+                Column(
+                    modifier = Modifier.padding(11.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode2,
+                            contentDescription = null,
+                            tint = Emerald700,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = Localization.tr(lang, "Invite via Link / QR", "Πρόσκληση με Link / QR"),
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = Localization.tr(
+                                    lang,
+                                    "Share a link or QR code without needing their email.",
+                                    "Κοινοποιήστε link ή QR χωρίς να χρειάζεστε το email τους."
+                                ),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    RoleSegmentedSelector(
+                        selectedRole = selectedNewRole,
+                        lang = lang,
+                        onSelectRole = { selectedNewRole = it },
+                        editorTag = "share_invite_role_editor_${household.id}",
+                        registarTag = "share_invite_role_registar_${household.id}"
+                    )
+
+                    Button(
+                        onClick = { onGenerateInviteLink(household, selectedNewRole) },
+                        enabled = !isGeneratingInvite,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Emerald700,
+                            contentColor = Color.White
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 48.dp)
+                            .testTag("share_generate_invite_btn_${household.id}")
+                    ) {
+                        if (isGeneratingInvite) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = Color.White
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.QrCode2,
+                                contentDescription = null,
+                                modifier = Modifier.size(17.dp)
+                            )
+                            Spacer(modifier = Modifier.width(7.dp))
+                        }
+                        Text(
+                            text = Localization.tr(lang, "Invite Link & QR", "Link & QR Πρόσκλησης"),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
 
         // Note: Creator's own default payer selector is rendered directly on the active household card

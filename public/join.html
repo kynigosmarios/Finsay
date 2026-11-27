@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Join Household — Finsay</title>
+  <style>
+    :root {
+      --emerald: #047857;
+      --emerald-dark: #065f46;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 28px 24px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+    }
+    .brand {
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--emerald);
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 0 0 20px;
+    }
+    .code-box {
+      background: #ecfdf5;
+      border: 1.5px dashed #10b981;
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+    }
+    .code-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--emerald-dark);
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .code-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: 1.5px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px 18px;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      margin-bottom: 10px;
+    }
+    .btn-primary {
+      background: var(--emerald);
+      color: #ffffff;
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: var(--text);
+    }
+    .hint {
+      margin-top: 14px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">Finsay</div>
+    <p class="subtitle">
+      You have been invited to join a shared household expense book.<br />
+      Έχετε προσκληθεί σε ένα κοινό εξοδολόγιο.
+    </p>
+
+    <div class="code-box" id="codeBox" style="display:none;">
+      <div class="code-label">Invite Code / Κωδικός Πρόσκλησης</div>
+      <div class="code-val" id="codeText"></div>
+    </div>
+
+    <a class="btn btn-primary" id="openAppBtn" href="finsay://join">
+      Open in Finsay / Άνοιγμα στο Finsay
+    </a>
+    <button class="btn btn-secondary" id="copyBtn" type="button" style="display:none;">
+      Copy Invite Code / Αντιγραφή Κωδικού
+    </button>
+    <a class="btn btn-secondary" href="https://play.google.com/store/apps/details?id=com.kynigos.oikonomos">
+      Download on Google Play
+    </a>
+
+    <p class="hint">
+      If Finsay is already installed, tap "Open in Finsay" above or enter the invite code inside Households &rarr; Join via Code / QR.
+    </p>
+  </div>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(window.location.search);
+      var rawCode = (params.get("code") || "").trim().toUpperCase();
+      var safeCode = rawCode.replace(/[^A-Z0-9_-]/g, "").slice(0, 24);
+      var openBtn = document.getElementById("openAppBtn");
+      var codeBox = document.getElementById("codeBox");
+      var codeText = document.getElementById("codeText");
+      var copyBtn = document.getElementById("copyBtn");
+      var playUrl = "https://play.google.com/store/apps/details?id=com.kynigos.oikonomos";
+      var isAndroid = /Android/i.test(navigator.userAgent || "");
+
+      function copyFallback(text) {
+        try {
+          var ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
+      if (safeCode.length >= 6) {
+        var encodedCode = encodeURIComponent(safeCode);
+        var schemeLink = "finsay://join?code=" + encodedCode;
+        var androidIntentLink =
+          "intent://join?code=" + encodedCode +
+          "#Intent;scheme=finsay;package=com.kynigos.oikonomos;S.browser_fallback_url=" +
+          encodeURIComponent(playUrl) + ";end";
+        openBtn.href = isAndroid ? androidIntentLink : schemeLink;
+        codeText.textContent = safeCode;
+        codeBox.style.display = "block";
+        copyBtn.style.display = "block";
+        copyBtn.addEventListener("click", function () {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(safeCode).then(function () {
+              copyBtn.textContent = "Copied! / Αντιγράφηκε!";
+            }).catch(function () {
+              if (copyFallback(safeCode)) {
+                copyBtn.textContent = "Copied! / Αντιγράφηκε!";
+              }
+            });
+          } else if (copyFallback(safeCode)) {
+            copyBtn.textContent = "Copied! / Αντιγράφηκε!";
+          }
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -12,10 +12,13 @@ import com.example.data.model.Household
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
 import com.example.data.repository.FirestoreSyncRepository
+import com.example.data.repository.FirestoreTransactionsDelegate
 import com.example.util.CurrencyFormatter
 import com.example.util.DefaultPayerHelper
 import com.example.util.Localization
+import com.example.util.QrCodeHelper
 import com.example.util.StartupSafety
+import com.example.util.TelemetryHelper
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -240,18 +243,85 @@ internal class OikoNomosHouseholdDelegate(
         }
     }
 
+    fun generateHouseholdInvite(household: Household, role: HouseholdRole) {
+        val user = vm._currentUser.value ?: vm.auth.currentUser ?: return
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
+        if (!vm.isUserCreatorOfHousehold(household)) {
+            vm.showSnackbar(
+                Localization.tr(
+                    lang,
+                    "Only the creator can share this household",
+                    "Μόνο ο δημιουργός μπορεί να κοινοποιήσει το εξοδολόγιο"
+                )
+            )
+            return
+        }
+        val safeRole = if (role == HouseholdRole.CREATOR) HouseholdRole.REGISTAR else role
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            vm._isGeneratingInvite.value = true
+            try {
+                val res = vm.firestoreSyncRepo.createHouseholdInvite(household, user.uid, safeRole)
+                res.onSuccess { invite ->
+                    vm._activeHouseholdInvite.value = invite
+                }.onFailure { err ->
+                    TelemetryHelper.recordNonFatal("generateHouseholdInvite", err)
+                    vm.showSnackbar(
+                        Localization.tr(
+                            lang,
+                            "Could not create invite link",
+                            "Δεν ήταν δυνατή η δημιουργία συνδέσμου πρόσκλησης"
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                TelemetryHelper.recordNonFatal("generateHouseholdInvite", e)
+                vm.showSnackbar(
+                    Localization.tr(
+                        lang,
+                        "Could not create invite link",
+                        "Δεν ήταν δυνατή η δημιουργία συνδέσμου πρόσκλησης"
+                    )
+                )
+            } finally {
+                vm._isGeneratingInvite.value = false
+            }
+        }
+    }
+
+    fun handleIncomingInviteCode(rawCode: String) {
+        val extracted = QrCodeHelper.extractInviteCode(rawCode) ?: return
+        vm._pendingIncomingInviteCode.value = extracted
+    }
+
     fun joinHousehold(code: String, role: String? = null) {
-        val user = vm._currentUser.value ?: return
+        val user = vm._currentUser.value ?: vm.auth.currentUser ?: return
+        val cleanCode = QrCodeHelper.extractInviteCode(code) ?: code.trim()
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
+        if (cleanCode.isBlank()) {
+            vm.showSnackbar(Localization.tr(lang, "Invalid invite code", "Μη έγκυρος κωδικός πρόσκλησης"))
+            return
+        }
         vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
             vm.trackSyncStart()
             try {
                 vm._isSyncing.value = true
-                val lang = Localization.Language.fromCode(vm._appLanguage.value)
-                val result = vm.firestoreSyncRepo.joinHouseholdByCode(user.uid, code, role)
+                val userEmail = user.email ?: vm._userProfile.value?.email.orEmpty()
+                val userDisplayName = vm._userProfile.value?.displayName?.ifBlank { null }
+                    ?: user.displayName?.ifBlank { null }
+                    ?: userEmail.substringBefore("@")
+                val result = vm.firestoreSyncRepo.joinHouseholdByCode(
+                    userUid = user.uid,
+                    inviteCode = cleanCode,
+                    role = role,
+                    userEmail = userEmail,
+                    userDisplayName = userDisplayName
+                )
                 result.onSuccess { h ->
-                    vm.prefs.edit().putString("last_household_id", h.id).apply()
-                    vm._currentHousehold.value = h
-                    vm.observeHouseholdData(h.id)
+                    vm._pendingIncomingInviteCode.value = null
+                    val mergedList = (vm._userHouseholds.value.filter { it.id != h.id } + h).distinctBy { it.id }
+                    vm._userHouseholds.value = mergedList
+                    switchExodologio(h)
                     vm.showSnackbar(
                         Localization.trFormat(
                             lang,
@@ -261,11 +331,17 @@ internal class OikoNomosHouseholdDelegate(
                         )
                     )
                 }.onFailure { err ->
-                    vm.showSnackbar(err.message ?: Localization.tr(lang, "Failed to join", "Αποτυχία σύνδεσης"))
+                    val localizedErr = when (err.message) {
+                        "INVALID_CODE" -> Localization.tr(lang, "Invalid invite code", "Μη έγκυρος κωδικός πρόσκλησης")
+                        "INVITE_NOT_FOUND" -> Localization.tr(lang, "Invite link not found or revoked", "Η πρόσκληση δεν βρέθηκε ή έχει ανακληθεί")
+                        "INVITE_EXPIRED" -> Localization.tr(lang, "Invite link has expired", "Η πρόσκληση έχει λήξει")
+                        else -> err.message ?: Localization.tr(lang, "Failed to join", "Αποτυχία σύνδεσης")
+                    }
+                    vm.showSnackbar(localizedErr)
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                val lang = Localization.Language.fromCode(vm._appLanguage.value)
+                TelemetryHelper.recordNonFatal("joinHousehold", e)
                 vm.showSnackbar(
                     Localization.trFormat(
                         lang,
@@ -923,12 +999,24 @@ internal class OikoNomosHouseholdDelegate(
                 vm.allRecurringExpenses.value.forEach { rec ->
                     com.example.reminder.BillReminderManager.cancelReminder(vm.getApplication(), rec.id)
                 }
+                val freshCutoff = FirestoreTransactionsDelegate.defaultLiveWindowCutoffMs()
+                vm.liveWindowCutoffMs = freshCutoff
+                vm.olderExpensesCache = emptyList()
+                vm.olderIncomesCache = emptyList()
+                vm.oldestLoadedExpenseCursorMs = freshCutoff
+                vm.oldestLoadedIncomeCursorMs = freshCutoff
+                vm.hasMoreOlderExpenses = true
+                vm.hasMoreOlderIncomes = true
+                vm._hasMoreOlderHistory.value = true
+                vm._isLoadingOlderHistory.value = false
+                vm._monthlyTotalsSummary.value = emptyList()
                 vm._homeSelectedMonthKey.value = null
                 vm._homeSelectedTypeFilter.value = "EXPENSE"
                 vm._selectedMemberFilter.value = null
                 vm._selectedCategoryFilter.value = null
                 vm._searchQuery.value = ""
                 vm._activeSpecialFilter.value = null
+                vm._advancedFilter.value = AdvancedExpenseFilter()
                 vm.repository.deleteAllExpenses()
                 vm.repository.deleteAllIncomes()
                 vm.repository.replaceAllMembers(emptyList())

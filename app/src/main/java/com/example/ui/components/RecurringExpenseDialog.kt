@@ -104,7 +104,12 @@ fun RecurringExpenseDialog(
     }
     var dayOfMonth by remember { mutableIntStateOf(recurringToEdit?.dayOfMonth ?: 1) }
     var anchorMonth by remember {
-        mutableIntStateOf((recurringToEdit?.anchorMonth ?: java.util.Calendar.getInstance().get(java.util.Calendar.MONTH)).coerceIn(0, 11))
+        mutableIntStateOf(
+            RecurringScheduleHelper.sanitizeAnchorMonth(
+                recurringToEdit?.frequency,
+                recurringToEdit?.anchorMonth ?: java.util.Calendar.getInstance().get(java.util.Calendar.MONTH)
+            )
+        )
     }
     var selectedCategoryId by remember { mutableLongStateOf(recurringToEdit?.categoryId ?: categories.firstOrNull()?.id ?: 1L) }
     var selectedCategoryName by remember { mutableStateOf(recurringToEdit?.categoryName ?: categories.firstOrNull()?.name ?: Localization.translateCategory("Σπίτι", lang)) }
@@ -157,6 +162,8 @@ fun RecurringExpenseDialog(
         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f)
     )
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isOnceMode = frequency == RecurringScheduleHelper.FREQ_ONCE
     val isWeeklyMode = frequency == RecurringScheduleHelper.FREQ_WEEKLY ||
         frequency == RecurringScheduleHelper.FREQ_BIWEEKLY
     val needsAnchorMonth = frequency == RecurringScheduleHelper.FREQ_QUARTERLY ||
@@ -238,10 +245,20 @@ fun RecurringExpenseDialog(
                             selected = isSelected,
                             onClick = {
                                 frequency = freqKey
-                                dayOfMonth = if (freqKey == RecurringScheduleHelper.FREQ_WEEKLY || freqKey == RecurringScheduleHelper.FREQ_BIWEEKLY) {
-                                    dayOfMonth.coerceIn(1, 7)
-                                } else {
-                                    dayOfMonth.coerceIn(1, 31)
+                                when (freqKey) {
+                                    RecurringScheduleHelper.FREQ_ONCE -> {
+                                        val (y, m) = RecurringScheduleHelper.decodeOnceAnchor(anchorMonth)
+                                        anchorMonth = RecurringScheduleHelper.encodeOnceAnchor(y, m)
+                                        dayOfMonth = dayOfMonth.coerceIn(1, 31)
+                                    }
+                                    RecurringScheduleHelper.FREQ_WEEKLY,
+                                    RecurringScheduleHelper.FREQ_BIWEEKLY -> {
+                                        dayOfMonth = dayOfMonth.coerceIn(1, 7)
+                                    }
+                                    else -> {
+                                        anchorMonth = RecurringScheduleHelper.sanitizeAnchorMonth(freqKey, anchorMonth)
+                                        dayOfMonth = dayOfMonth.coerceIn(1, 31)
+                                    }
                                 }
                             },
                             label = {
@@ -279,7 +296,34 @@ fun RecurringExpenseDialog(
                         modifier = Modifier.weight(1.2f)
                     )
 
-                    if (!isWeeklyMode) {
+                    if (isOnceMode) {
+                        val (onceYear, onceMonth) = RecurringScheduleHelper.decodeOnceAnchor(anchorMonth)
+                        val onceDay = dayOfMonth.coerceIn(1, 31)
+                        val formattedOnce = String.format(java.util.Locale.US, "%02d/%02d/%04d", onceDay, onceMonth + 1, onceYear)
+                        androidx.compose.material3.OutlinedButton(
+                            onClick = {
+                                android.app.DatePickerDialog(
+                                    context,
+                                    { _, sy, sm, sd ->
+                                        anchorMonth = RecurringScheduleHelper.encodeOnceAnchor(sy, sm)
+                                        dayOfMonth = sd.coerceIn(1, 31)
+                                    },
+                                    onceYear,
+                                    onceMonth,
+                                    onceDay
+                                ).show()
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp)
+                                .testTag("recurring_once_date_button")
+                        ) {
+                            Icon(Icons.Default.CalendarToday, contentDescription = null, tint = Emerald700, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(formattedOnce, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    } else if (!isWeeklyMode) {
                         OutlinedTextField(
                             value = dayOfMonth.coerceIn(1, 31).toString(),
                             onValueChange = { dayOfMonth = it.toIntOrNull()?.coerceIn(1, 31) ?: 1 },

@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.data.model.FirebaseExpense
 import com.example.data.model.FirebaseHouseholdActivity
 import com.example.data.model.FirebaseIncome
+import com.example.data.model.FirebaseMonthlyTotal
 import com.example.data.model.toSafeExpense
 import com.example.data.model.toSafeHouseholdActivity
 import com.example.data.model.toSafeIncome
@@ -20,12 +21,37 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 
+data class FirestoreHistoryPage<T>(
+    val items: List<T>,
+    val rawDocumentCount: Int,
+    val oldestRawTimestampMs: Long
+)
+
 internal class FirestoreTransactionsDelegate(
     private val db: FirebaseFirestore,
     private val householdDelegate: FirestoreHouseholdDelegate
 ) {
     companion object {
         private const val TAG = "FirestoreSyncRepo"
+        const val DEFAULT_LIVE_WINDOW_MONTHS = 12
+        const val OLDER_HISTORY_PAGE_SIZE = 200L
+
+        /**
+         * Returns the start-of-month epoch millis 12 months prior to [nowMs],
+         * bounding real-time snapshot listeners to recent history for low FinOps read costs.
+         */
+        fun defaultLiveWindowCutoffMs(nowMs: Long = System.currentTimeMillis()): Long {
+            val cal = java.util.Calendar.getInstance().apply {
+                timeInMillis = nowMs
+                add(java.util.Calendar.MONTH, -DEFAULT_LIVE_WINDOW_MONTHS)
+                set(java.util.Calendar.DAY_OF_MONTH, 1)
+                set(java.util.Calendar.HOUR_OF_DAY, 0)
+                set(java.util.Calendar.MINUTE, 0)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            return cal.timeInMillis
+        }
     }
 
     private fun sortExpenses(list: List<FirebaseExpense>): List<FirebaseExpense> =
@@ -42,10 +68,18 @@ internal class FirestoreTransactionsDelegate(
                 .thenByDescending { it.id }
         )
 
-    fun observeExpenses(householdId: String): Flow<List<FirebaseExpense>> {
+    fun observeExpenses(
+        householdId: String,
+        sinceTimestampMs: Long = defaultLiveWindowCutoffMs()
+    ): Flow<List<FirebaseExpense>> {
         if (householdId.isBlank()) return flowOf(emptyList())
-        return db.collection("households").document(householdId)
-            .collection("expenses")
+        val baseCol = db.collection("households").document(householdId).collection("expenses")
+        val query = if (sinceTimestampMs > 0L) {
+            baseCol.whereGreaterThanOrEqualTo("timestamp", sinceTimestampMs)
+        } else {
+            baseCol
+        }
+        return query
             .snapshots()
             .map { querySnapshot ->
                 sortExpenses(
@@ -64,6 +98,44 @@ internal class FirestoreTransactionsDelegate(
             }
     }
 
+    suspend fun fetchOlderExpenses(
+        householdId: String,
+        beforeTimestampMs: Long,
+        limit: Long = OLDER_HISTORY_PAGE_SIZE
+    ): FirestoreHistoryPage<FirebaseExpense> {
+        if (householdId.isBlank() || beforeTimestampMs <= 0L) {
+            return FirestoreHistoryPage(emptyList(), 0, beforeTimestampMs)
+        }
+        return try {
+            val snap = db.collection("households").document(householdId)
+                .collection("expenses")
+                .whereLessThan("timestamp", beforeTimestampMs)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(limit.coerceIn(1L, 500L))
+                .get()
+                .await()
+            val rawCount = snap.documents.size
+            val oldestRawTs = snap.documents.mapNotNull { (it.get("timestamp") as? Number)?.toLong() }
+                .filter { it > 0L }
+                .minOrNull() ?: beforeTimestampMs
+            val activeItems = sortExpenses(
+                snap.documents.mapNotNull { doc ->
+                    val obj = try { doc.toSafeExpense() } catch (_: Throwable) { null }
+                    if (obj != null) {
+                        if (obj.id.isBlank()) obj.id = doc.id
+                        if (obj.householdId.isBlank()) obj.householdId = householdId
+                    }
+                    obj?.takeIf { !it.isDeleted }
+                }
+            )
+            FirestoreHistoryPage(activeItems, rawCount, oldestRawTs)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "fetchOlderExpenses warning: ${e.message}")
+            FirestoreHistoryPage(emptyList(), 0, beforeTimestampMs)
+        }
+    }
+
     suspend fun syncExpense(expense: FirebaseExpense) {
         if (expense.householdId.isBlank()) return
         if (expense.createdByUid.isNotBlank()) {
@@ -75,6 +147,42 @@ internal class FirestoreTransactionsDelegate(
             .collection("expenses").document(docId)
             .set(expenseToSave)
             .await()
+    }
+
+    suspend fun syncExpensesBatch(householdId: String, expenses: List<FirebaseExpense>) {
+        if (householdId.isBlank() || expenses.isEmpty()) return
+        val firstCreator = expenses.firstOrNull { it.createdByUid.isNotBlank() }?.createdByUid.orEmpty()
+        if (firstCreator.isNotBlank()) {
+            try { householdDelegate.ensureHouseholdExists(householdId, firstCreator) } catch (_: Exception) {}
+        }
+        val col = db.collection("households").document(householdId).collection("expenses")
+        for (chunk in expenses.chunked(400)) {
+            val batch = db.batch()
+            chunk.forEach { expense ->
+                val docId = if (expense.id.isNotBlank()) expense.id else UUID.randomUUID().toString()
+                val expenseToSave = expense.copy(
+                    id = docId,
+                    householdId = householdId,
+                    createdAt = expense.createdAt ?: Timestamp.now()
+                )
+                batch.set(col.document(docId), expenseToSave)
+            }
+            batch.commit().await()
+        }
+    }
+
+    suspend fun syncUserExpensesBatch(userId: String, expenses: List<FirebaseExpense>) {
+        if (userId.isBlank() || expenses.isEmpty()) return
+        val col = db.collection("users").document(userId).collection("expenses")
+        for (chunk in expenses.chunked(400)) {
+            val batch = db.batch()
+            chunk.forEach { expense ->
+                val docId = if (expense.id.isNotBlank()) expense.id else UUID.randomUUID().toString()
+                val expenseToSave = expense.copy(id = docId, createdAt = expense.createdAt ?: Timestamp.now())
+                batch.set(col.document(docId), expenseToSave)
+            }
+            batch.commit().await()
+        }
     }
 
     suspend fun deleteExpense(householdId: String, expenseId: String) {
@@ -226,10 +334,18 @@ internal class FirestoreTransactionsDelegate(
         return restoredCount
     }
 
-    fun observeIncomes(householdId: String): Flow<List<FirebaseIncome>> {
+    fun observeIncomes(
+        householdId: String,
+        sinceTimestampMs: Long = defaultLiveWindowCutoffMs()
+    ): Flow<List<FirebaseIncome>> {
         if (householdId.isBlank()) return flowOf(emptyList())
-        return db.collection("households").document(householdId)
-            .collection("incomes")
+        val baseCol = db.collection("households").document(householdId).collection("incomes")
+        val query = if (sinceTimestampMs > 0L) {
+            baseCol.whereGreaterThanOrEqualTo("timestamp", sinceTimestampMs)
+        } else {
+            baseCol
+        }
+        return query
             .snapshots()
             .map { querySnapshot ->
                 sortIncomes(
@@ -246,6 +362,85 @@ internal class FirestoreTransactionsDelegate(
             .catch { t ->
                 Log.w(TAG, "observeIncomes flow error (preserving current state): ${t.message}")
             }
+    }
+
+    suspend fun fetchOlderIncomes(
+        householdId: String,
+        beforeTimestampMs: Long,
+        limit: Long = OLDER_HISTORY_PAGE_SIZE
+    ): FirestoreHistoryPage<FirebaseIncome> {
+        if (householdId.isBlank() || beforeTimestampMs <= 0L) {
+            return FirestoreHistoryPage(emptyList(), 0, beforeTimestampMs)
+        }
+        return try {
+            val snap = db.collection("households").document(householdId)
+                .collection("incomes")
+                .whereLessThan("timestamp", beforeTimestampMs)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+                .limit(limit.coerceIn(1L, 500L))
+                .get()
+                .await()
+            val rawCount = snap.documents.size
+            val oldestRawTs = snap.documents.mapNotNull { (it.get("timestamp") as? Number)?.toLong() }
+                .filter { it > 0L }
+                .minOrNull() ?: beforeTimestampMs
+            val activeItems = sortIncomes(
+                snap.documents.mapNotNull { doc ->
+                    val obj = try { doc.toSafeIncome() } catch (_: Throwable) { null }
+                    if (obj != null) {
+                        if (obj.id.isBlank()) obj.id = doc.id
+                        if (obj.householdId.isBlank()) obj.householdId = householdId
+                    }
+                    obj?.takeIf { !it.isDeleted }
+                }
+            )
+            FirestoreHistoryPage(activeItems, rawCount, oldestRawTs)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w(TAG, "fetchOlderIncomes warning: ${e.message}")
+            FirestoreHistoryPage(emptyList(), 0, beforeTimestampMs)
+        }
+    }
+
+    suspend fun upsertMonthlyTotal(householdId: String, summary: FirebaseMonthlyTotal) {
+        if (householdId.isBlank() || summary.monthKey.isBlank()) return
+        try {
+            db.collection("households").document(householdId)
+                .collection("monthly_totals").document(summary.monthKey)
+                .set(summary.copy(updatedAt = System.currentTimeMillis()))
+                .await()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.d(TAG, "upsertMonthlyTotal skipped: ${e.message}")
+        }
+    }
+
+    suspend fun getMonthlyTotalsOnce(householdId: String): List<FirebaseMonthlyTotal> {
+        if (householdId.isBlank()) return emptyList()
+        return try {
+            val snap = db.collection("households").document(householdId)
+                .collection("monthly_totals")
+                .get()
+                .await()
+            snap.documents.mapNotNull { doc ->
+                try {
+                    FirebaseMonthlyTotal(
+                        monthKey = doc.getString("monthKey")?.ifBlank { doc.id } ?: doc.id,
+                        expenseTotal = (doc.get("expenseTotal") as? Number)?.toDouble() ?: 0.0,
+                        incomeTotal = (doc.get("incomeTotal") as? Number)?.toDouble() ?: 0.0,
+                        expenseCount = (doc.get("expenseCount") as? Number)?.toInt() ?: 0,
+                        incomeCount = (doc.get("incomeCount") as? Number)?.toInt() ?: 0,
+                        updatedAt = (doc.get("updatedAt") as? Number)?.toLong() ?: 0L
+                    )
+                } catch (_: Throwable) {
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.d(TAG, "getMonthlyTotalsOnce skipped: ${e.message}")
+            emptyList()
+        }
     }
 
     suspend fun syncIncome(income: FirebaseIncome) {

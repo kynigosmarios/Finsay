@@ -5,8 +5,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -26,11 +28,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -168,6 +172,7 @@ internal object ExpenseSwipePolicy {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ExpenseCardItem(
     item: ActivityItem.ExpenseItem,
@@ -176,6 +181,10 @@ internal fun ExpenseCardItem(
     onSwipeDeleteExpense: ((Expense) -> Unit)? = null,
     onDuplicateExpense: ((Expense) -> Unit)? = null,
     lang: Localization.Language = Localization.Language.GREEK,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: ((Expense) -> Unit)? = null,
+    onLongPressSelect: ((Expense) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val expense = item.expense
@@ -183,6 +192,7 @@ internal fun ExpenseCardItem(
     val currentOnSwipeDelete by rememberUpdatedState(onSwipeDeleteExpense ?: onDeleteExpense)
     val currentOnDuplicate by rememberUpdatedState(onDuplicateExpense)
     val canDuplicate by rememberUpdatedState(onDuplicateExpense != null)
+    val currentSelectionMode by rememberUpdatedState(isSelectionMode)
 
     val density = LocalDensity.current
     val haptic = LocalHapticFeedback.current
@@ -213,6 +223,7 @@ internal fun ExpenseCardItem(
             .pointerInput(expense.id, horizontalStartSlopPx, verticalCancelSlopPx) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
+                    if (currentSelectionMode) return@awaitEachGesture
                     var totalDx = 0f
                     var totalDy = 0f
                     var lockedHorizontal = false
@@ -369,13 +380,30 @@ internal fun ExpenseCardItem(
 
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        color = if (isSelected) Emerald700.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            if (isSelected) 1.6.dp else 1.dp,
+            if (isSelected) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
         tonalElevation = 1.dp,
         modifier = Modifier
             .fillMaxWidth()
             .offset { IntOffset(animatedOffsetPx.roundToInt(), 0) }
-            .clickable { onEditExpense(expense) }
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelect?.invoke(expense)
+                    } else {
+                        onEditExpense(expense)
+                    }
+                },
+                onLongClick = {
+                    if (onLongPressSelect != null) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongPressSelect(expense)
+                    }
+                }
+            )
             .testTag("expense_card_${expense.id}")
     ) {
         Column(
@@ -387,6 +415,16 @@ internal fun ExpenseCardItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (isSelectionMode) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = if (isSelected) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(end = 10.dp)
+                            .size(22.dp)
+                    )
+                }
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = item.categoryColor.copy(alpha = 0.16f),
@@ -550,23 +588,46 @@ internal fun ExpenseCardItem(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun IncomeCardItem(
     item: ActivityItem.IncomeItem,
     onEditIncome: (Income) -> Unit,
     onDeleteIncome: (Income) -> Unit,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: ((Income) -> Unit)? = null,
+    onLongPressSelect: ((Income) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val income = item.income
+    val haptic = LocalHapticFeedback.current
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.3f)),
+        color = if (isSelected) Emerald700.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            if (isSelected) 1.6.dp else 1.dp,
+            if (isSelected) Emerald700 else Color(0xFF10B981).copy(alpha = 0.3f)
+        ),
         tonalElevation = 1.dp,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 2.dp)
-            .clickable { onEditIncome(income) }
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelect?.invoke(income)
+                    } else {
+                        onEditIncome(income)
+                    }
+                },
+                onLongClick = {
+                    if (onLongPressSelect != null) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongPressSelect(income)
+                    }
+                }
+            )
             .testTag("income_card_${income.id}")
     ) {
         Column(
@@ -578,6 +639,16 @@ internal fun IncomeCardItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                if (isSelectionMode) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = if (isSelected) Emerald700 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(end = 10.dp)
+                            .size(22.dp)
+                    )
+                }
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFFD1FAE5),

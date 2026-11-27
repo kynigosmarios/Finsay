@@ -14,13 +14,17 @@ import java.util.Locale
  * - For QUARTERLY / YEARLY: `anchorMonth` holds `0..11` (January..December anchor).
  */
 object RecurringScheduleHelper {
+    const val FREQ_ONCE = "ONCE"
     const val FREQ_WEEKLY = "WEEKLY"
     const val FREQ_BIWEEKLY = "BIWEEKLY"
     const val FREQ_MONTHLY = "MONTHLY"
     const val FREQ_QUARTERLY = "QUARTERLY"
     const val FREQ_YEARLY = "YEARLY"
 
+    private const val ONCE_ANCHOR_MIN = 2000 * 12
+
     val ALL_FREQUENCIES = listOf(
+        FREQ_ONCE,
         FREQ_WEEKLY,
         FREQ_BIWEEKLY,
         FREQ_MONTHLY,
@@ -29,11 +33,43 @@ object RecurringScheduleHelper {
     )
 
     fun normalizeFrequency(raw: String?): String = when (raw?.trim()?.uppercase(Locale.ROOT)) {
+        FREQ_ONCE -> FREQ_ONCE
         FREQ_WEEKLY -> FREQ_WEEKLY
         FREQ_BIWEEKLY -> FREQ_BIWEEKLY
         FREQ_QUARTERLY -> FREQ_QUARTERLY
         FREQ_YEARLY -> FREQ_YEARLY
         else -> FREQ_MONTHLY
+    }
+
+    fun isOnce(frequency: String?): Boolean = normalizeFrequency(frequency) == FREQ_ONCE
+
+    fun encodeOnceAnchor(year: Int, monthZeroIndexed: Int): Int {
+        val safeYear = year.coerceIn(2000, 2200)
+        val safeMonth = monthZeroIndexed.coerceIn(0, 11)
+        return safeYear * 12 + safeMonth
+    }
+
+    fun decodeOnceAnchor(anchorMonth: Int, fallbackNowMillis: Long = System.currentTimeMillis()): Pair<Int, Int> {
+        if (anchorMonth >= ONCE_ANCHOR_MIN) {
+            return Pair(anchorMonth / 12, anchorMonth % 12)
+        }
+        val cal = Calendar.getInstance().apply { timeInMillis = fallbackNowMillis }
+        val month = if (anchorMonth in 0..11) anchorMonth else cal.get(Calendar.MONTH)
+        return Pair(cal.get(Calendar.YEAR), month)
+    }
+
+    fun sanitizeAnchorMonth(
+        frequency: String?,
+        anchorMonth: Int,
+        fallbackNowMillis: Long = System.currentTimeMillis()
+    ): Int {
+        return if (isOnce(frequency)) {
+            val (y, m) = decodeOnceAnchor(anchorMonth, fallbackNowMillis)
+            encodeOnceAnchor(y, m)
+        } else {
+            if (anchorMonth >= ONCE_ANCHOR_MIN) (anchorMonth % 12).coerceIn(0, 11)
+            else anchorMonth.coerceIn(0, 11)
+        }
     }
 
     /**
@@ -76,6 +112,10 @@ object RecurringScheduleHelper {
         val year = cal.get(Calendar.YEAR)
         val monthZero = cal.get(Calendar.MONTH)
         return when (normalizeFrequency(recurring.frequency)) {
+            FREQ_ONCE -> {
+                val (targetYear, targetMonth) = decodeOnceAnchor(recurring.anchorMonth, nowMillis)
+                String.format(Locale.US, "ONCE-%04d-%02d-%02d", targetYear, targetMonth + 1, recurring.dayOfMonth.coerceIn(1, 31))
+            }
             FREQ_WEEKLY -> {
                 val weekYear = cal.weekYear
                 val week = cal.get(Calendar.WEEK_OF_YEAR)
@@ -109,6 +149,10 @@ object RecurringScheduleHelper {
 
     fun isMatchingScheduledMonth(recurring: RecurringExpense, monthZeroIndexed: Int): Boolean {
         return when (normalizeFrequency(recurring.frequency)) {
+            FREQ_ONCE -> {
+                val (_, targetMonth) = decodeOnceAnchor(recurring.anchorMonth)
+                monthZeroIndexed == targetMonth
+            }
             FREQ_MONTHLY, FREQ_WEEKLY, FREQ_BIWEEKLY -> true
             FREQ_QUARTERLY -> {
                 val anchor = recurring.anchorMonth.coerceIn(0, 11)
@@ -127,6 +171,21 @@ object RecurringScheduleHelper {
         val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
         val freq = normalizeFrequency(recurring.frequency)
         return when (freq) {
+            FREQ_ONCE -> {
+                val (targetYear, targetMonth) = decodeOnceAnchor(recurring.anchorMonth, nowMillis)
+                val targetCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, targetYear)
+                    set(Calendar.MONTH, targetMonth)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    val maxDay = getActualMaximum(Calendar.DAY_OF_MONTH)
+                    set(Calendar.DAY_OF_MONTH, recurring.dayOfMonth.coerceIn(1, maxDay))
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                nowMillis >= targetCal.timeInMillis
+            }
             FREQ_WEEKLY -> {
                 val targetIso = recurring.dayOfMonth.coerceIn(1, 7)
                 val currentIso = calendarDowToIso(cal.get(Calendar.DAY_OF_WEEK))
@@ -211,6 +270,14 @@ object RecurringScheduleHelper {
     ): Boolean {
         val freq = normalizeFrequency(recurring.frequency)
         return when (freq) {
+            FREQ_ONCE -> {
+                val (targetYear, targetMonth) = decodeOnceAnchor(recurring.anchorMonth, nowMillis)
+                val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                val effectiveDay = recurring.dayOfMonth.coerceIn(1, maxDay)
+                cal.get(Calendar.YEAR) == targetYear &&
+                    cal.get(Calendar.MONTH) == targetMonth &&
+                    cal.get(Calendar.DAY_OF_MONTH) == effectiveDay
+            }
             FREQ_WEEKLY -> {
                 val targetIso = recurring.dayOfMonth.coerceIn(1, 7)
                 val currentIso = calendarDowToIso(cal.get(Calendar.DAY_OF_WEEK))
@@ -253,6 +320,14 @@ object RecurringScheduleHelper {
         val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
         val freq = normalizeFrequency(recurring.frequency)
         when (freq) {
+            FREQ_ONCE -> {
+                val (targetYear, targetMonth) = decodeOnceAnchor(recurring.anchorMonth, nowMillis)
+                cal.set(Calendar.YEAR, targetYear)
+                cal.set(Calendar.MONTH, targetMonth)
+                cal.set(Calendar.DAY_OF_MONTH, 1)
+                val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                cal.set(Calendar.DAY_OF_MONTH, recurring.dayOfMonth.coerceIn(1, maxDay))
+            }
             FREQ_WEEKLY, FREQ_BIWEEKLY -> {
                 val targetCalDow = isoToCalendarDow(recurring.dayOfMonth.coerceIn(1, 7))
                 cal.set(Calendar.DAY_OF_WEEK, targetCalDow)
@@ -282,6 +357,21 @@ object RecurringScheduleHelper {
         val freq = normalizeFrequency(frequency)
 
         return when (freq) {
+            FREQ_ONCE -> {
+                val (targetYear, targetMonth) = decodeOnceAnchor(anchorMonth, nowMillis)
+                val cal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, targetYear)
+                    set(Calendar.MONTH, targetMonth)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    val maxDay = getActualMaximum(Calendar.DAY_OF_MONTH)
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth.coerceIn(1, maxDay))
+                    set(Calendar.HOUR_OF_DAY, safeHour)
+                    set(Calendar.MINUTE, safeMinute)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                if (cal.timeInMillis <= nowMillis) -1L else cal.timeInMillis
+            }
             FREQ_WEEKLY -> {
                 val targetCalDow = isoToCalendarDow(dayOfMonth.coerceIn(1, 7))
                 val cal = Calendar.getInstance().apply {
@@ -404,6 +494,12 @@ object RecurringScheduleHelper {
         val freq = normalizeFrequency(recurring.frequency)
 
         return when (freq) {
+            FREQ_ONCE -> {
+                val (targetYear, targetMonth) = decodeOnceAnchor(recurring.anchorMonth)
+                if (targetYear != year || targetMonth != monthZeroIndexed) return 0
+                val effectiveDay = recurring.dayOfMonth.coerceIn(1, maxDays)
+                if (effectiveDay > afterDayOfMonth) 1 else 0
+            }
             FREQ_WEEKLY -> {
                 val targetCalDow = isoToCalendarDow(recurring.dayOfMonth.coerceIn(1, 7))
                 var count = 0
@@ -442,6 +538,7 @@ object RecurringScheduleHelper {
 
     fun frequencyLabel(frequency: String, lang: Localization.Language): String {
         return when (normalizeFrequency(frequency)) {
+            FREQ_ONCE -> Localization.tr(lang, "Once", "Μία φορά")
             FREQ_WEEKLY -> Localization.tr(lang, "Weekly", "Εβδομαδιαία")
             FREQ_BIWEEKLY -> Localization.tr(lang, "Biweekly", "Δεκαπενθήμερη")
             FREQ_QUARTERLY -> Localization.tr(lang, "Quarterly", "Τριμηνιαία")
@@ -471,6 +568,11 @@ object RecurringScheduleHelper {
 
     fun scheduleSummary(recurring: RecurringExpense, lang: Localization.Language): String {
         return when (normalizeFrequency(recurring.frequency)) {
+            FREQ_ONCE -> {
+                val (y, m) = decodeOnceAnchor(recurring.anchorMonth)
+                val formattedDate = String.format(Locale.US, "%02d/%02d/%04d", recurring.dayOfMonth.coerceIn(1, 31), m + 1, y)
+                Localization.trFormat(lang, "Once (%1\$s)", "Μία φορά (%1\$s)", formattedDate)
+            }
             FREQ_WEEKLY -> {
                 val wd = weekdayName(recurring.dayOfMonth, lang)
                 Localization.trFormat(lang, "Weekly (%1\$s)", "Κάθε εβδομάδα (%1\$s)", wd)

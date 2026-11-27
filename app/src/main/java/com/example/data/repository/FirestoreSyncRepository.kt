@@ -8,9 +8,11 @@ import com.example.data.model.FirebaseExpense
 import com.example.data.model.FirebaseHouseholdActivity
 import com.example.data.model.FirebaseIncome
 import com.example.data.model.FirebaseMember
+import com.example.data.model.FirebaseMonthlyTotal
 import com.example.data.model.FirebaseRecurringExpense
 import com.example.data.model.FirebaseSavingsGoal
 import com.example.data.model.Household
+import com.example.data.model.HouseholdInvite
 import com.example.data.model.HouseholdRole
 import com.example.data.model.UserProfile
 import com.google.firebase.firestore.FirebaseFirestore
@@ -103,8 +105,21 @@ class FirestoreSyncRepository(
     suspend fun updateHouseholdInviteRole(householdId: String, role: String) =
         householdDelegate.updateHouseholdInviteRole(householdId, role)
 
-    suspend fun joinHouseholdByCode(userUid: String, inviteCode: String, role: String? = null): Result<Household> =
-        householdDelegate.joinHouseholdByCode(userUid, inviteCode, role)
+    suspend fun createHouseholdInvite(
+        household: Household,
+        ownerUid: String,
+        role: HouseholdRole
+    ): Result<HouseholdInvite> =
+        householdDelegate.createHouseholdInvite(household, ownerUid, role)
+
+    suspend fun joinHouseholdByCode(
+        userUid: String,
+        inviteCode: String,
+        role: String? = null,
+        userEmail: String = "",
+        userDisplayName: String = ""
+    ): Result<Household> =
+        householdDelegate.joinHouseholdByCode(userUid, inviteCode, role, userEmail, userDisplayName)
 
     fun observeHousehold(householdId: String): Flow<Household?> =
         householdDelegate.observeHousehold(householdId)
@@ -225,11 +240,24 @@ class FirestoreSyncRepository(
         userProfileDelegate.resolveUserProfilesByUids(uids)
 
     // Transactions & Shared Activity Feed
-    fun observeExpenses(householdId: String): Flow<List<FirebaseExpense>> =
-        transactionsDelegate.observeExpenses(householdId)
+    fun observeExpenses(
+        householdId: String,
+        sinceTimestampMs: Long = FirestoreTransactionsDelegate.defaultLiveWindowCutoffMs()
+    ): Flow<List<FirebaseExpense>> =
+        transactionsDelegate.observeExpenses(householdId, sinceTimestampMs)
+
+    suspend fun fetchOlderExpenses(
+        householdId: String,
+        beforeTimestampMs: Long,
+        limit: Long = FirestoreTransactionsDelegate.OLDER_HISTORY_PAGE_SIZE
+    ): FirestoreHistoryPage<FirebaseExpense> =
+        transactionsDelegate.fetchOlderExpenses(householdId, beforeTimestampMs, limit)
 
     suspend fun syncExpense(expense: FirebaseExpense) =
         transactionsDelegate.syncExpense(expense)
+
+    suspend fun syncExpensesBatch(householdId: String, expenses: List<FirebaseExpense>) =
+        transactionsDelegate.syncExpensesBatch(householdId, expenses)
 
     suspend fun deleteExpense(householdId: String, expenseId: String) =
         transactionsDelegate.deleteExpense(householdId, expenseId)
@@ -239,6 +267,9 @@ class FirestoreSyncRepository(
 
     suspend fun syncUserExpense(userId: String, expense: FirebaseExpense) =
         transactionsDelegate.syncUserExpense(userId, expense)
+
+    suspend fun syncUserExpensesBatch(userId: String, expenses: List<FirebaseExpense>) =
+        transactionsDelegate.syncUserExpensesBatch(userId, expenses)
 
     suspend fun deleteUserExpense(userId: String, expenseId: String) =
         transactionsDelegate.deleteUserExpense(userId, expenseId)
@@ -259,8 +290,24 @@ class FirestoreSyncRepository(
         return txRestored + structRestored
     }
 
-    fun observeIncomes(householdId: String): Flow<List<FirebaseIncome>> =
-        transactionsDelegate.observeIncomes(householdId)
+    fun observeIncomes(
+        householdId: String,
+        sinceTimestampMs: Long = FirestoreTransactionsDelegate.defaultLiveWindowCutoffMs()
+    ): Flow<List<FirebaseIncome>> =
+        transactionsDelegate.observeIncomes(householdId, sinceTimestampMs)
+
+    suspend fun fetchOlderIncomes(
+        householdId: String,
+        beforeTimestampMs: Long,
+        limit: Long = FirestoreTransactionsDelegate.OLDER_HISTORY_PAGE_SIZE
+    ): FirestoreHistoryPage<FirebaseIncome> =
+        transactionsDelegate.fetchOlderIncomes(householdId, beforeTimestampMs, limit)
+
+    suspend fun upsertMonthlyTotal(householdId: String, summary: FirebaseMonthlyTotal) =
+        transactionsDelegate.upsertMonthlyTotal(householdId, summary)
+
+    suspend fun getMonthlyTotalsOnce(householdId: String): List<FirebaseMonthlyTotal> =
+        transactionsDelegate.getMonthlyTotalsOnce(householdId)
 
     suspend fun syncIncome(income: FirebaseIncome) =
         transactionsDelegate.syncIncome(income)

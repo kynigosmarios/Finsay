@@ -257,8 +257,10 @@ fun ManualExpenseDialog(
     var reminderDayOfMonth by remember(expenseToEdit, initialReminderDayOfMonth) {
         mutableIntStateOf(initialReminderDayOfMonth.coerceIn(1, 31))
     }
-    var reminderAnchorMonth by remember(expenseToEdit, initialReminderAnchorMonth) {
-        mutableIntStateOf(initialReminderAnchorMonth.coerceIn(0, 11))
+    var reminderAnchorMonth by remember(expenseToEdit, initialReminderAnchorMonth, initialReminderFrequency) {
+        mutableIntStateOf(
+            RecurringScheduleHelper.sanitizeAnchorMonth(initialReminderFrequency, initialReminderAnchorMonth)
+        )
     }
     var reminderHour by remember(expenseToEdit, initialReminderHour) {
         mutableIntStateOf(initialReminderHour.coerceIn(0, 23))

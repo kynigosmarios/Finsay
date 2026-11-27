@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -24,10 +26,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,9 +42,13 @@ import com.example.data.entity.Income
 import com.example.data.entity.getBeneficiaryCategoryOrNamesDisplay
 import com.example.data.entity.getPayerCategoryOrNamesDisplay
 import com.example.ui.theme.Emerald700
+import com.example.ui.viewmodel.AdvancedExpenseFilter
 import com.example.util.AnalyticsSpecialFilter
+import com.example.util.ExpenseReportExporter
 import com.example.util.LocalCurrencySymbol
 import com.example.util.Localization
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -128,8 +136,17 @@ fun ExpensesScreen(
     onAddCategory: () -> Unit,
     onSeedStandardCategories: () -> Unit,
     isInitialLoading: Boolean,
+    advancedFilter: AdvancedExpenseFilter = AdvancedExpenseFilter(),
+    onAdvancedFilterChange: (AdvancedExpenseFilter) -> Unit = {},
+    onBulkUpdateExpenseCategory: (Set<Long>, ExpenseCategory) -> Unit = { _, _ -> },
+    householdName: String = "",
+    hasMoreOlderHistory: Boolean = false,
+    isLoadingOlderHistory: Boolean = false,
+    onLoadOlderHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val lang = Localization.Language.fromCode(appLanguage)
     val locale = Localization.getDateLocale(lang)
     val currencySymbol = LocalCurrencySymbol.current
@@ -141,6 +158,21 @@ fun ExpensesScreen(
     var expenseToDelete by remember { mutableStateOf<Expense?>(null) }
     var incomeToDelete by remember { mutableStateOf<Income?>(null) }
     var isMonthlyListExpanded by remember { mutableStateOf(true) }
+    var showAdvancedFiltersDialog by remember { mutableStateOf(false) }
+
+    // Long-press bulk multi-selection state
+    var selectedExpenseIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var selectedIncomeIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var showBulkCategoryDialog by remember { mutableStateOf(false) }
+    var showBulkExportDialog by remember { mutableStateOf(false) }
+
+    val isSelectionMode = selectedExpenseIds.isNotEmpty() || selectedIncomeIds.isNotEmpty()
+    val totalSelectedCount = selectedExpenseIds.size + selectedIncomeIds.size
+
+    BackHandler(enabled = isSelectionMode) {
+        selectedExpenseIds = emptySet()
+        selectedIncomeIds = emptySet()
+    }
 
     val listState = rememberLazyListState()
 
@@ -229,9 +261,10 @@ fun ExpensesScreen(
         }
     }
 
-    val monthExpenses = remember(expenses, effectiveMonthKey) {
+    val hasCustomDateRange = advancedFilter.startDateMs != null || advancedFilter.endDateMs != null
+    val monthExpenses = remember(expenses, effectiveMonthKey, hasCustomDateRange) {
         when {
-            effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> expenses
+            hasCustomDateRange || effectiveMonthKey.isBlank() || effectiveMonthKey == "ALL" -> expenses
             effectiveMonthKey.startsWith("YEAR:") -> {
                 val targetYear = effectiveMonthKey.removePrefix("YEAR:")
                 expenses.filter { it.timestamp > 0L && yearKeyFormat.format(Date(it.timestamp)) == targetYear }
@@ -433,6 +466,40 @@ fun ExpensesScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        AnimatedVisibility(visible = isSelectionMode) {
+            val visibleExpenseIds = remember(displayItems) {
+                displayItems.filterIsInstance<ActivityItem.ExpenseItem>().map { it.expense.id }.toSet()
+            }
+            val visibleIncomeIds = remember(displayItems) {
+                displayItems.filterIsInstance<ActivityItem.IncomeItem>().map { it.income.id }.toSet()
+            }
+            val allVisibleSelected = (visibleExpenseIds.isEmpty() || selectedExpenseIds.containsAll(visibleExpenseIds)) &&
+                (visibleIncomeIds.isEmpty() || selectedIncomeIds.containsAll(visibleIncomeIds)) &&
+                (visibleExpenseIds.isNotEmpty() || visibleIncomeIds.isNotEmpty())
+
+            BulkSelectionActionBar(
+                selectedCount = totalSelectedCount,
+                canChangeCategory = selectedExpenseIds.isNotEmpty() && categories.isNotEmpty(),
+                allSelected = allVisibleSelected,
+                lang = lang,
+                onToggleSelectAll = {
+                    if (allVisibleSelected) {
+                        selectedExpenseIds = emptySet()
+                        selectedIncomeIds = emptySet()
+                    } else {
+                        selectedExpenseIds = visibleExpenseIds
+                        selectedIncomeIds = visibleIncomeIds
+                    }
+                },
+                onChangeCategoryClick = { showBulkCategoryDialog = true },
+                onExportSelectedClick = { showBulkExportDialog = true },
+                onCloseSelection = {
+                    selectedExpenseIds = emptySet()
+                    selectedIncomeIds = emptySet()
+                }
+            )
+        }
+
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -468,7 +535,9 @@ fun ExpensesScreen(
                 ExpensesSearchBar(
                     searchQuery = searchQuery,
                     lang = lang,
-                    onSearchQueryChange = onSearchQueryChange
+                    onSearchQueryChange = onSearchQueryChange,
+                    activeAdvancedFilterCount = advancedFilter.activeCount,
+                    onOpenAdvancedFilters = { showAdvancedFiltersDialog = true }
                 )
             }
 
@@ -482,6 +551,18 @@ fun ExpensesScreen(
                     onMemberFilterChange = onMemberFilterChange,
                     onCategoryFilterChange = onCategoryFilterChange
                 )
+            }
+
+            if (advancedFilter.isActive) {
+                item(key = "active_advanced_filters_row", contentType = "advanced_filter") {
+                    ActiveAdvancedFiltersSummaryRow(
+                        filter = advancedFilter,
+                        members = members,
+                        lang = lang,
+                        onEditFilters = { showAdvancedFiltersDialog = true },
+                        onClearFilters = { onAdvancedFilterChange(AdvancedExpenseFilter()) }
+                    )
+                }
             }
 
             if (activeSpecialFilter != null && activeSpecialFilter.badgeLabel.isNotBlank()) {
@@ -561,6 +642,7 @@ fun ExpensesScreen(
                     ) { item ->
                         when (item) {
                             is ActivityItem.ExpenseItem -> {
+                                val expId = item.expense.id
                                 ExpenseCardItem(
                                     item = item,
                                     onEditExpense = onEditExpense,
@@ -568,14 +650,47 @@ fun ExpensesScreen(
                                     onSwipeDeleteExpense = { onDeleteExpense(it) },
                                     onDuplicateExpense = onDuplicateExpense,
                                     lang = lang,
+                                    isSelectionMode = isSelectionMode,
+                                    isSelected = selectedExpenseIds.contains(expId),
+                                    onToggleSelect = { exp ->
+                                        selectedExpenseIds = if (selectedExpenseIds.contains(exp.id)) {
+                                            selectedExpenseIds - exp.id
+                                        } else {
+                                            selectedExpenseIds + exp.id
+                                        }
+                                    },
+                                    onLongPressSelect = { exp ->
+                                        selectedExpenseIds = if (selectedExpenseIds.contains(exp.id)) {
+                                            selectedExpenseIds - exp.id
+                                        } else {
+                                            selectedExpenseIds + exp.id
+                                        }
+                                    },
                                     modifier = Modifier.animateItem()
                                 )
                             }
                             is ActivityItem.IncomeItem -> {
+                                val incId = item.income.id
                                 IncomeCardItem(
                                     item = item,
                                     onEditIncome = onEditIncome,
                                     onDeleteIncome = { incomeToDelete = it },
+                                    isSelectionMode = isSelectionMode,
+                                    isSelected = selectedIncomeIds.contains(incId),
+                                    onToggleSelect = { inc ->
+                                        selectedIncomeIds = if (selectedIncomeIds.contains(inc.id)) {
+                                            selectedIncomeIds - inc.id
+                                        } else {
+                                            selectedIncomeIds + inc.id
+                                        }
+                                    },
+                                    onLongPressSelect = { inc ->
+                                        selectedIncomeIds = if (selectedIncomeIds.contains(inc.id)) {
+                                            selectedIncomeIds - inc.id
+                                        } else {
+                                            selectedIncomeIds + inc.id
+                                        }
+                                    },
                                     modifier = Modifier.animateItem()
                                 )
                             }
@@ -583,7 +698,120 @@ fun ExpensesScreen(
                     }
                 }
             }
+
+            if (hasMoreOlderHistory && !isInitialLoading) {
+                item(key = "load_older_history_footer", contentType = "older_history_footer") {
+                    OlderHistoryFooterCard(
+                        isLoading = isLoadingOlderHistory,
+                        lang = lang,
+                        onLoadOlderHistory = onLoadOlderHistory
+                    )
+                }
+            }
         }
+    }
+
+    if (showAdvancedFiltersDialog) {
+        AdvancedFiltersDialog(
+            currentFilter = advancedFilter,
+            selectedCategoryFilter = selectedCategoryFilter,
+            members = members,
+            categories = categories,
+            lang = lang,
+            onApply = { updatedFilter, updatedCatId ->
+                onAdvancedFilterChange(updatedFilter)
+                onCategoryFilterChange(updatedCatId)
+            },
+            onReset = {
+                onAdvancedFilterChange(AdvancedExpenseFilter())
+                onCategoryFilterChange(null)
+            },
+            onDismiss = { showAdvancedFiltersDialog = false }
+        )
+    }
+
+    if (showBulkCategoryDialog && selectedExpenseIds.isNotEmpty()) {
+        BulkCategoryPickerDialog(
+            selectedCount = selectedExpenseIds.size,
+            categories = categories,
+            lang = lang,
+            onSelectCategory = { targetCat ->
+                val ids = selectedExpenseIds
+                showBulkCategoryDialog = false
+                selectedExpenseIds = emptySet()
+                selectedIncomeIds = emptySet()
+                onBulkUpdateExpenseCategory(ids, targetCat)
+            },
+            onDismiss = { showBulkCategoryDialog = false }
+        )
+    }
+
+    if (showBulkExportDialog && totalSelectedCount > 0) {
+        val selectedExpensesList = remember(selectedExpenseIds, allExpenses) {
+            allExpenses.filter { selectedExpenseIds.contains(it.id) }
+        }
+        val selectedIncomesList = remember(selectedIncomeIds, allIncomes) {
+            allIncomes.filter { selectedIncomeIds.contains(it.id) }
+        }
+        val selectedTitle = Localization.trFormat(
+            lang,
+            "Selected (%1\$d)",
+            "Επιλεγμένα (%1\$d)",
+            totalSelectedCount
+        )
+        BulkExportFormatDialog(
+            selectedCount = totalSelectedCount,
+            lang = lang,
+            onExportCsv = {
+                selectedExpenseIds = emptySet()
+                selectedIncomeIds = emptySet()
+                coroutineScope.launch(Dispatchers.IO) {
+                    ExpenseReportExporter.exportCsv(
+                        context = context,
+                        expenses = selectedExpensesList,
+                        periodTitle = selectedTitle,
+                        incomes = selectedIncomesList,
+                        members = members,
+                        currencySymbol = currencySymbol,
+                        householdName = householdName,
+                        lang = lang
+                    )
+                }
+            },
+            onExportExcel = {
+                selectedExpenseIds = emptySet()
+                selectedIncomeIds = emptySet()
+                coroutineScope.launch(Dispatchers.IO) {
+                    ExpenseReportExporter.exportExcel(
+                        context = context,
+                        expenses = selectedExpensesList,
+                        periodTitle = selectedTitle,
+                        incomes = selectedIncomesList,
+                        members = members,
+                        currencySymbol = currencySymbol,
+                        householdName = householdName,
+                        lang = lang
+                    )
+                }
+            },
+            onExportPdf = {
+                selectedExpenseIds = emptySet()
+                selectedIncomeIds = emptySet()
+                coroutineScope.launch(Dispatchers.IO) {
+                    ExpenseReportExporter.exportPdf(
+                        context = context,
+                        expenses = selectedExpensesList,
+                        periodTitle = selectedTitle,
+                        incomes = selectedIncomesList,
+                        members = members,
+                        currencySymbol = currencySymbol,
+                        householdName = householdName,
+                        lang = lang
+                    )
+                }
+            },
+            onDismiss = { showBulkExportDialog = false }
+        )
     }
 
     if (expenseToDelete != null) {

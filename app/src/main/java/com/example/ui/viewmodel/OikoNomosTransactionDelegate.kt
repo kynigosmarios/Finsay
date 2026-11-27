@@ -353,6 +353,7 @@ internal class OikoNomosTransactionDelegate(
                 val fbExpense = saved.toFirebaseExpense(householdId, user?.uid ?: "", creatorName)
                 if (householdId.isNotBlank()) {
                     vm.firestoreSyncRepo.syncExpense(fbExpense)
+                    vm.syncMonthlyTotalForTimestamp(householdId, timestamp)
                 } else if (user != null) {
                     vm.firestoreSyncRepo.syncUserExpense(user.uid, fbExpense)
                 }
@@ -476,6 +477,10 @@ internal class OikoNomosTransactionDelegate(
                 val fbExpense = saved.toFirebaseExpense(householdId, user?.uid ?: "", creatorName)
                 if (householdId.isNotBlank()) {
                     vm.firestoreSyncRepo.syncExpense(fbExpense)
+                    vm.syncMonthlyTotalForTimestamp(householdId, timestamp)
+                    if (existing != null && existing.timestamp != timestamp) {
+                        vm.syncMonthlyTotalForTimestamp(householdId, existing.timestamp)
+                    }
                 } else if (user != null) {
                     vm.firestoreSyncRepo.syncUserExpense(user.uid, fbExpense)
                 }
@@ -534,6 +539,7 @@ internal class OikoNomosTransactionDelegate(
                 vm.repository.deleteExpenseById(expense.id)
                 if (householdId.isNotBlank()) {
                     vm.firestoreSyncRepo.deleteExpense(householdId, resolvedCloudId)
+                    vm.syncMonthlyTotalForTimestamp(householdId, expense.timestamp)
                 }
                 if (user != null) {
                     vm.firestoreSyncRepo.deleteUserExpense(user.uid, resolvedCloudId)
@@ -619,6 +625,10 @@ internal class OikoNomosTransactionDelegate(
                 )
                 if (householdId.isNotBlank()) {
                     vm.firestoreSyncRepo.syncIncome(fbIncome)
+                    vm.syncMonthlyTotalForTimestamp(householdId, timestamp)
+                    if (existing != null && existing.timestamp != timestamp) {
+                        vm.syncMonthlyTotalForTimestamp(householdId, existing.timestamp)
+                    }
                 } else if (user != null) {
                     vm.firestoreSyncRepo.syncUserIncome(user.uid, fbIncome)
                 }
@@ -676,6 +686,7 @@ internal class OikoNomosTransactionDelegate(
                 vm.repository.deleteIncomeById(income.id)
                 if (householdId.isNotBlank()) {
                     vm.firestoreSyncRepo.deleteIncome(householdId, resolvedCloudId)
+                    vm.syncMonthlyTotalForTimestamp(householdId, income.timestamp)
                 }
                 if (user != null) {
                     vm.firestoreSyncRepo.deleteUserIncome(user.uid, resolvedCloudId)
@@ -748,8 +759,10 @@ internal class OikoNomosTransactionDelegate(
                     vm.adjustLinkedGoalForExpenseDelta(docId, restored.amount)
 
                     val fbExpense = restored.toFirebaseExpense(householdId, user?.uid ?: "", creatorName)
-                    if (householdId.isNotBlank()) vm.firestoreSyncRepo.syncExpense(fbExpense)
-                    else if (user != null) vm.firestoreSyncRepo.syncUserExpense(user.uid, fbExpense)
+                    if (householdId.isNotBlank()) {
+                        vm.firestoreSyncRepo.syncExpense(fbExpense)
+                        vm.syncMonthlyTotalForTimestamp(householdId, restored.timestamp)
+                    } else if (user != null) vm.firestoreSyncRepo.syncUserExpense(user.uid, fbExpense)
 
                     vm.logHouseholdActivity(
                         actionType = "EXPENSE_RESTORED",
@@ -781,8 +794,10 @@ internal class OikoNomosTransactionDelegate(
                         createdByUid = user?.uid ?: "",
                         createdByName = creatorName
                     )
-                    if (householdId.isNotBlank()) vm.firestoreSyncRepo.syncIncome(fbIncome)
-                    else if (user != null) vm.firestoreSyncRepo.syncUserIncome(user.uid, fbIncome)
+                    if (householdId.isNotBlank()) {
+                        vm.firestoreSyncRepo.syncIncome(fbIncome)
+                        vm.syncMonthlyTotalForTimestamp(householdId, restored.timestamp)
+                    } else if (user != null) vm.firestoreSyncRepo.syncUserIncome(user.uid, fbIncome)
 
                     vm.logHouseholdActivity(
                         actionType = "INCOME_RESTORED",
@@ -929,6 +944,7 @@ internal class OikoNomosTransactionDelegate(
                 val fbExpense = saved.toFirebaseExpense(householdId, user?.uid ?: "", creatorName)
                 if (householdId.isNotBlank()) {
                     vm.firestoreSyncRepo.syncExpense(fbExpense)
+                    vm.syncMonthlyTotalForTimestamp(householdId, saved.timestamp)
                 } else if (user != null) {
                     vm.firestoreSyncRepo.syncUserExpense(user.uid, fbExpense)
                 }
@@ -959,6 +975,68 @@ internal class OikoNomosTransactionDelegate(
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(tag, "duplicateExpenseToday error: ${e.message}")
+            } finally {
+                vm.trackSyncEnd()
+            }
+        }
+    }
+
+    fun bulkUpdateExpenseCategory(expenseIds: Set<Long>, targetCategory: ExpenseCategory) {
+        if (expenseIds.isEmpty()) return
+        val targets = vm._allExpenses.value.filter { expenseIds.contains(it.id) }
+        if (targets.isEmpty()) return
+        val user = vm._currentUser.value
+        val householdId = vm.getOrEnsureHouseholdId(user)
+        val creatorName = vm._userProfile.value?.displayName?.ifBlank { null }
+            ?: user?.displayName?.ifBlank { null }
+            ?: "Μέλος"
+        val lang = Localization.Language.fromCode(vm._appLanguage.value)
+
+        val updatedMap = targets.associate { exp ->
+            val cloudId = exp.cloudId.ifBlank { UUID.randomUUID().toString() }
+            exp.id to exp.copy(
+                cloudId = cloudId,
+                categoryId = targetCategory.id,
+                categoryName = targetCategory.name
+            )
+        }
+
+        val nowMs = System.currentTimeMillis()
+        updatedMap.values.forEach { vm.pendingLocalExpenseIds[it.cloudId] = nowMs }
+        vm._allExpenses.value = vm._allExpenses.value.map { updatedMap[it.id] ?: it }
+
+        vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
+            vm.trackSyncStart()
+            try {
+                val updatedList = updatedMap.values.toList()
+                updatedList.forEach { updated ->
+                    vm.repository.saveOrUpdateExpense(updated)
+                }
+                val fbExpenses = updatedList.map { it.toFirebaseExpense(householdId, user?.uid ?: "", creatorName) }
+                if (householdId.isNotBlank()) {
+                    vm.firestoreSyncRepo.syncExpensesBatch(householdId, fbExpenses)
+                } else if (user != null) {
+                    vm.firestoreSyncRepo.syncUserExpensesBatch(user.uid, fbExpenses)
+                }
+                vm.logHouseholdActivity(
+                    actionType = "EXPENSE_UPDATED",
+                    targetType = "EXPENSE",
+                    summaryEl = "Μαζική αλλαγή κατηγορίας (${updatedMap.size}) → ${targetCategory.name}",
+                    summaryEn = "Bulk category update (${updatedMap.size}) → ${targetCategory.name}",
+                    amount = updatedMap.values.sumOf { it.amount },
+                    householdIdOverride = householdId
+                )
+                vm.showSnackbar(
+                    Localization.trFormat(
+                        lang,
+                        "Updated category for %1\$d expenses",
+                        "Η κατηγορία ενημερώθηκε για %1\$d έξοδα",
+                        updatedMap.size
+                    )
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(tag, "bulkUpdateExpenseCategory error: ${e.message}")
             } finally {
                 vm.trackSyncEnd()
             }

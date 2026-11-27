@@ -140,6 +140,59 @@ service cloud.firestore {
         !(request.auth.uid in incoming().get('memberDefaultPayers', {}));
     }
 
+    function safeMap(data, key) {
+      return (key in data && data[key] is map) ? data[key] : {};
+    }
+
+    function safeList(data, key) {
+      return (key in data && data[key] is list) ? data[key] : [];
+    }
+
+    function isJoiningViaValidInvite(householdId) {
+      let code = incoming().get('lastJoinedInviteCode', '');
+      let invitePath = /databases/$(database)/documents/household_invites/$(code);
+      let existingUids = safeList(existing(), 'memberUids');
+      let existingRoles = safeMap(existing(), 'memberRoles');
+      let incomingRoles = safeMap(incoming(), 'memberRoles');
+      let existingEmails = safeMap(existing(), 'memberEmails');
+      let incomingEmails = safeMap(incoming(), 'memberEmails');
+      let existingNames = safeMap(existing(), 'memberNames');
+      let incomingNames = safeMap(incoming(), 'memberNames');
+      let existingDeleted = safeList(existing(), 'deletedForUsers');
+      let incomingDeleted = safeList(incoming(), 'deletedForUsers');
+      return !isHouseholdMemberData(existing()) &&
+        code is string &&
+        code.size() >= 10 &&
+        code.size() <= 32 &&
+        exists(invitePath) &&
+        get(invitePath).data.householdId == householdId &&
+        get(invitePath).data.isActive == true &&
+        get(invitePath).data.get('expiresAt', 0) is int &&
+        get(invitePath).data.get('expiresAt', 0) > request.time.toMillis() &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().get('name', '') == existing().get('name', '') &&
+        incoming().get('isPremium', false) == existing().get('isPremium', false) &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'memberUids', 'memberRoles', 'memberEmails', 'memberNames', 'deletedForUsers', 'lastJoinedInviteCode', 'updatedAt'
+        ]) &&
+        incoming().memberUids is list &&
+        request.auth.uid in incoming().memberUids &&
+        incoming().memberUids.hasAll(existingUids) &&
+        incoming().memberUids.size() == existingUids.size() + 1 &&
+        incomingRoles.diff(existingRoles).affectedKeys().hasOnly([request.auth.uid]) &&
+        incomingRoles[request.auth.uid] == get(invitePath).data.role &&
+        incomingRoles[request.auth.uid] in ['EDITOR', 'REGISTAR'] &&
+        incomingEmails.diff(existingEmails).affectedKeys().hasOnly([request.auth.uid]) &&
+        (!(request.auth.uid in incomingEmails) || (incomingEmails[request.auth.uid] is string && incomingEmails[request.auth.uid].size() <= 160)) &&
+        incomingNames.diff(existingNames).affectedKeys().hasOnly([request.auth.uid]) &&
+        (!(request.auth.uid in incomingNames) || (incomingNames[request.auth.uid] is string && incomingNames[request.auth.uid].size() <= 120)) &&
+        (!('deletedForUsers' in incoming().diff(existing()).affectedKeys()) || (
+          !(request.auth.uid in incomingDeleted) &&
+          existingDeleted.hasAll(incomingDeleted) &&
+          incomingDeleted.size() == (request.auth.uid in existingDeleted ? existingDeleted.size() - 1 : existingDeleted.size())
+        ));
+    }
+
     function isValidExpenseOrIncomeWrite() {
       return incoming().title is string &&
         incoming().amount is number &&
@@ -189,7 +242,8 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isValidHouseholdCreatorUpdate() ||
         isSelfUpdatingOwnDefaultPayer() ||
-        isSelfLeavingHousehold()
+        isSelfLeavingHousehold() ||
+        isJoiningViaValidInvite(householdId)
       );
       allow delete: if isAuthenticated() && existing().ownerId == request.auth.uid;
 
@@ -252,6 +306,40 @@ service cloud.firestore {
           householdExists(householdId) &&
           householdDoc(householdId).data.ownerId == request.auth.uid;
       }
+
+      // Pre-aggregated monthly totals for FinOps-efficient historical summaries
+      match /monthly_totals/{monthKey} {
+        allow read: if isHouseholdMember(householdId);
+        allow create, update: if isHouseholdMember(householdId) &&
+          incoming().monthKey is string &&
+          incoming().expenseTotal is number &&
+          incoming().expenseTotal >= 0 &&
+          incoming().incomeTotal is number &&
+          incoming().incomeTotal >= 0;
+        allow delete: if isAuthenticated() &&
+          householdExists(householdId) &&
+          householdDoc(householdId).data.ownerId == request.auth.uid;
+      }
+    }
+
+    // 3. Household Invite Codes (Link / QR Join) - get-only by exact code (no list/enumeration)
+    match /household_invites/{inviteCode} {
+      allow get: if isAuthenticated();
+      allow list: if false;
+      allow create: if isAuthenticated() &&
+        inviteCode.size() >= 10 &&
+        inviteCode.size() <= 32 &&
+        incoming().code == inviteCode &&
+        incoming().ownerId == request.auth.uid &&
+        incoming().householdId is string &&
+        householdExists(incoming().householdId) &&
+        householdDoc(incoming().householdId).data.ownerId == request.auth.uid &&
+        incoming().role in ['EDITOR', 'REGISTAR'] &&
+        incoming().isActive == true &&
+        incoming().expiresAt is int &&
+        incoming().expiresAt > request.time.toMillis() &&
+        incoming().expiresAt <= request.time.toMillis() + 608400000;
+      allow update, delete: if isAuthenticated() && existing().ownerId == request.auth.uid;
     }
   }
 }

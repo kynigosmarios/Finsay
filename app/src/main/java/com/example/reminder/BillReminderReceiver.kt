@@ -30,22 +30,24 @@ class BillReminderReceiver : BroadcastReceiver() {
                 frequency = frequency,
                 anchorMonth = anchorMonth
             )
-            BillReminderManager.scheduleReminder(
-                context,
-                RecurringExpense(
-                    id = id,
-                    title = title,
-                    amount = amount,
-                    categoryId = 0L,
-                    categoryName = "",
-                    frequency = frequency,
-                    dayOfMonth = day,
-                    reminderHour = hour,
-                    reminderMinute = minute,
-                    isActive = true,
-                    anchorMonth = anchorMonth
+            if (!com.example.util.RecurringScheduleHelper.isOnce(frequency)) {
+                BillReminderManager.scheduleReminder(
+                    context,
+                    RecurringExpense(
+                        id = id,
+                        title = title,
+                        amount = amount,
+                        categoryId = 0L,
+                        categoryName = "",
+                        frequency = frequency,
+                        dayOfMonth = day,
+                        reminderHour = hour,
+                        reminderMinute = minute,
+                        isActive = true,
+                        anchorMonth = anchorMonth
+                    )
                 )
-            )
+            }
         }
     }
 }

@@ -12,19 +12,23 @@ import com.example.data.entity.FamilyMember
 import com.example.data.entity.Income
 import com.example.data.entity.RecurringExpense
 import com.example.data.entity.SavingsGoal
+import com.example.data.entity.resolveReconciledPayers
 import com.example.data.model.ConnectedHouseholdUser
 import com.example.data.model.FirebaseCategory
 import com.example.data.model.FirebaseExpense
 import com.example.data.model.FirebaseHouseholdActivity
 import com.example.data.model.FirebaseIncome
 import com.example.data.model.FirebaseMember
+import com.example.data.model.FirebaseMonthlyTotal
 import com.example.data.model.FirebaseSavingsGoal
 import com.example.data.model.Household
+import com.example.data.model.HouseholdInvite
 import com.example.data.model.HouseholdRole
 import com.example.data.model.SyncStatusState
 import com.example.data.model.UserProfile
 import com.example.data.repository.ExpenseRepository
 import com.example.data.repository.FirestoreSyncRepository
+import com.example.data.repository.FirestoreTransactionsDelegate
 import com.example.util.AnalyticsExpenseFilterHelper
 import com.example.util.AnalyticsSpecialFilter
 import com.example.util.BankNotificationHolder
@@ -39,6 +43,7 @@ import com.example.util.PendingBankTransaction
 import com.example.util.RecurringExpenseAutoProcessor
 import com.example.util.RecurringScheduleHelper
 import com.example.util.StartupSafety
+import com.example.util.TelemetryHelper
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
@@ -77,10 +82,31 @@ data class PendingUndoDeletion(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+data class AdvancedExpenseFilter(
+    val minAmount: Double? = null,
+    val maxAmount: Double? = null,
+    val startDateMs: Long? = null,
+    val endDateMs: Long? = null,
+    val payerMemberId: Long? = null
+) {
+    val isActive: Boolean
+        get() = minAmount != null || maxAmount != null || startDateMs != null || endDateMs != null || payerMemberId != null
+
+    val activeCount: Int
+        get() {
+            var c = 0
+            if (minAmount != null || maxAmount != null) c++
+            if (startDateMs != null || endDateMs != null) c++
+            if (payerMemberId != null) c++
+            return c
+        }
+}
+
 class OikoNomosViewModel(application: Application) : AndroidViewModel(application) {
 
     internal val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
         Log.e("OikoNomosVM", "CoroutineExceptionHandler caught unhandled exception: ${throwable.message}", throwable)
+        TelemetryHelper.recordNonFatal("OikoNomosVM", throwable)
     }
 
     internal val repository: ExpenseRepository =
@@ -234,6 +260,34 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     internal val pendingDeletedSavingsGoals = java.util.concurrent.ConcurrentHashMap<String, Pair<String, Long>>()
     internal val inFlightCreateGoalKeys = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
+    // Time-windowed Firestore listener & on-demand older history pagination state
+    internal var liveWindowCutoffMs: Long = FirestoreTransactionsDelegate.defaultLiveWindowCutoffMs()
+    internal var olderExpensesCache = listOf<FirebaseExpense>()
+    internal var olderIncomesCache = listOf<FirebaseIncome>()
+    internal var oldestLoadedExpenseCursorMs: Long = liveWindowCutoffMs
+    internal var oldestLoadedIncomeCursorMs: Long = liveWindowCutoffMs
+    internal var hasMoreOlderExpenses: Boolean = true
+    internal var hasMoreOlderIncomes: Boolean = true
+
+    internal val _hasMoreOlderHistory = MutableStateFlow(true)
+    val hasMoreOlderHistory: StateFlow<Boolean> = _hasMoreOlderHistory.asStateFlow()
+
+    internal val _isLoadingOlderHistory = MutableStateFlow(false)
+    val isLoadingOlderHistory: StateFlow<Boolean> = _isLoadingOlderHistory.asStateFlow()
+
+    internal val _monthlyTotalsSummary = MutableStateFlow<List<FirebaseMonthlyTotal>>(emptyList())
+    val monthlyTotalsSummary: StateFlow<List<FirebaseMonthlyTotal>> = _monthlyTotalsSummary.asStateFlow()
+
+    // Household Invite via Link / QR Code state
+    internal val _activeHouseholdInvite = MutableStateFlow<HouseholdInvite?>(null)
+    val activeHouseholdInvite: StateFlow<HouseholdInvite?> = _activeHouseholdInvite.asStateFlow()
+
+    internal val _isGeneratingInvite = MutableStateFlow(false)
+    val isGeneratingInvite: StateFlow<Boolean> = _isGeneratingInvite.asStateFlow()
+
+    internal val _pendingIncomingInviteCode = MutableStateFlow<String?>(null)
+    val pendingIncomingInviteCode: StateFlow<String?> = _pendingIncomingInviteCode.asStateFlow()
+
     // Domain Data Flows
     internal val _allExpenses = MutableStateFlow<List<Expense>>(emptyList())
     val allExpenses: StateFlow<List<Expense>> = _allExpenses.asStateFlow()
@@ -344,7 +398,15 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         val memberId: Long?,
         val catId: Long?,
         val query: String,
-        val special: AnalyticsSpecialFilter?
+        val special: AnalyticsSpecialFilter?,
+        val advanced: AdvancedExpenseFilter
+    )
+
+    private data class IncomeFilterCriteria(
+        val memberId: Long?,
+        val query: String,
+        val special: AnalyticsSpecialFilter?,
+        val advanced: AdvancedExpenseFilter
     )
 
     internal val _selectedMemberFilter = MutableStateFlow<Long?>(null)
@@ -364,6 +426,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     internal val _activeSpecialFilter = MutableStateFlow<AnalyticsSpecialFilter?>(null)
     val activeSpecialFilter = _activeSpecialFilter.asStateFlow()
+
+    internal val _advancedFilter = MutableStateFlow(AdvancedExpenseFilter())
+    val advancedFilter: StateFlow<AdvancedExpenseFilter> = _advancedFilter.asStateFlow()
 
     internal val _homeDrillDownScrollTrigger = MutableStateFlow(0)
     val homeDrillDownScrollTrigger = _homeDrillDownScrollTrigger.asStateFlow()
@@ -569,14 +634,21 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         allExpenses,
         allMembers,
         allCategories,
-        combine(_selectedMemberFilter, _selectedCategoryFilter, _searchQuery, _activeSpecialFilter) { memberId, catId, query, special ->
-            ExpenseFilterCriteria(memberId, catId, query, special)
+        combine(
+            _selectedMemberFilter,
+            _selectedCategoryFilter,
+            _searchQuery,
+            _activeSpecialFilter,
+            _advancedFilter
+        ) { memberId, catId, query, special, advanced ->
+            ExpenseFilterCriteria(memberId, catId, query, special, advanced)
         }
     ) { expenses, members, categories, criteria ->
         val memberId = criteria.memberId
         val catId = criteria.catId
         val query = criteria.query
         val special = criteria.special
+        val adv = criteria.advanced
 
         expenses.filter { exp ->
             val matchMember = when {
@@ -611,7 +683,15 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 titleNorm.contains(q) || catNorm.contains(q) || membersNorm.contains(q) || noteNorm.contains(q)
             }
 
-            matchMember && matchCat && matchSpecial && matchQuery
+            val matchMin = adv.minAmount == null || exp.amount >= (adv.minAmount - 0.0001)
+            val matchMax = adv.maxAmount == null || exp.amount <= (adv.maxAmount + 0.0001)
+            val matchStart = adv.startDateMs == null || exp.timestamp >= adv.startDateMs
+            val matchEnd = adv.endDateMs == null || exp.timestamp <= adv.endDateMs
+            val matchPayer = adv.payerMemberId == null ||
+                exp.resolveReconciledPayers(members).any { it.id == adv.payerMemberId }
+
+            matchMember && matchCat && matchSpecial && matchQuery &&
+                matchMin && matchMax && matchStart && matchEnd && matchPayer
         }
     }
         .catch { t ->
@@ -623,10 +703,15 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     val filteredIncomes: StateFlow<List<Income>> = combine(
         allIncomes,
         allMembers,
-        _selectedMemberFilter,
-        _searchQuery,
-        _activeSpecialFilter
-    ) { incomes, members, memberId, query, special ->
+        combine(_selectedMemberFilter, _searchQuery, _activeSpecialFilter, _advancedFilter) { memberId, query, special, adv ->
+            IncomeFilterCriteria(memberId, query, special, adv)
+        }
+    ) { incomes, members, criteria ->
+        val memberId = criteria.memberId
+        val query = criteria.query
+        val special = criteria.special
+        val adv = criteria.advanced
+
         incomes.filter { inc ->
             val matchMember = when {
                 special?.exactMemberId != null -> true
@@ -646,7 +731,13 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
                 val noteNorm = GreekVoiceParser.normalizeGreek(inc.note)
                 titleNorm.contains(q) || catNorm.contains(q) || memberNorm.contains(q) || noteNorm.contains(q)
             }
-            matchMember && matchSpecial && matchQuery
+            val matchMin = adv.minAmount == null || inc.amount >= (adv.minAmount - 0.0001)
+            val matchMax = adv.maxAmount == null || inc.amount <= (adv.maxAmount + 0.0001)
+            val matchStart = adv.startDateMs == null || inc.timestamp >= adv.startDateMs
+            val matchEnd = adv.endDateMs == null || inc.timestamp <= adv.endDateMs
+            val matchPayer = adv.payerMemberId == null || inc.memberId == adv.payerMemberId
+            matchMember && matchSpecial && matchQuery &&
+                matchMin && matchMax && matchStart && matchEnd && matchPayer
         }
     }
         .catch { t ->
@@ -930,6 +1021,9 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
         householdIdOverride: String? = null
     ) = syncDelegate.logHouseholdActivity(actionType, targetType, summaryEl, summaryEn, amount, householdIdOverride)
 
+    internal fun syncMonthlyTotalForTimestamp(householdId: String, timestampMs: Long) =
+        syncDelegate.syncMonthlyTotalForTimestamp(householdId, timestampMs)
+
     internal fun resolveDefaultPayerMembers(
         targetUserId: String? = null,
         household: Household? = _currentHousehold.value
@@ -974,6 +1068,10 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun clearVerifiedUserLookupState() { _verifiedUserLookupState.value = VerifiedUserLookupState.Idle }
     fun createHousehold(familyName: String) = householdDelegate.createHousehold(familyName)
     fun joinHousehold(code: String, role: String? = null) = householdDelegate.joinHousehold(code, role)
+    fun generateHouseholdInvite(household: Household, role: HouseholdRole) = householdDelegate.generateHouseholdInvite(household, role)
+    fun clearActiveHouseholdInvite() { _activeHouseholdInvite.value = null }
+    fun handleIncomingInviteCode(code: String) = householdDelegate.handleIncomingInviteCode(code)
+    fun consumePendingIncomingInviteCode() { _pendingIncomingInviteCode.value = null }
     fun updateHouseholdInviteRole(role: String) = householdDelegate.updateHouseholdInviteRole(role)
     fun searchVerifiedUserForSharing(email: String, householdId: String) = householdDelegate.searchVerifiedUserForSharing(email, householdId)
     fun shareHouseholdWithVerifiedUser(householdId: String, targetUser: UserProfile, role: HouseholdRole) = householdDelegate.shareHouseholdWithVerifiedUser(householdId, targetUser, role)
@@ -1004,6 +1102,7 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun onAppResumed() = syncDelegate.onAppResumed()
     fun refreshCloudSync() = syncDelegate.refreshCloudSync()
+    fun loadOlderHistory() = syncDelegate.loadOlderHistory(silent = false)
 
     fun acceptNotificationConsent() = authDelegate.acceptNotificationConsent()
     fun skipNotificationConsent() = authDelegate.skipNotificationConsent()
@@ -1099,6 +1198,8 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun saveExpense(id: Long = 0, title: String, amount: Double, categoryId: Long, categoryName: String, timestamp: Long, splitType: String, memberIds: List<Long>, memberNamesDisplay: String, note: String, payerMemberId: Long = 0L, payerMemberName: String = "", payerMemberIdsCsv: String = "", payerAmountsCsv: String = "") =
         transactionDelegate.saveExpense(id, title, amount, categoryId, categoryName, timestamp, splitType, memberIds, memberNamesDisplay, note, payerMemberId, payerMemberName, payerMemberIdsCsv, payerAmountsCsv)
+    fun bulkUpdateExpenseCategory(expenseIds: Set<Long>, targetCategory: ExpenseCategory) =
+        transactionDelegate.bulkUpdateExpenseCategory(expenseIds, targetCategory)
     fun duplicateExpenseToday(expense: Expense) = transactionDelegate.duplicateExpenseToday(expense)
     fun deleteExpense(expense: Expense) = transactionDelegate.deleteExpense(expense)
     fun openManualIncomeDialog(income: Income? = null) { _editingIncome.value = income; _showManualIncomeDialog.value = true }
@@ -1272,7 +1373,15 @@ class OikoNomosViewModel(application: Application) : AndroidViewModel(applicatio
     fun setMemberFilter(memberId: Long?) = structureDelegate.setMemberFilter(memberId)
     fun setCategoryFilter(categoryId: Long?) = structureDelegate.setCategoryFilter(categoryId)
     fun setSearchQuery(query: String) { _searchQuery.value = query }
-    fun setHomeSelectedMonthKey(monthKey: String?) { _homeSelectedMonthKey.value = monthKey }
+    fun setAdvancedFilter(filter: AdvancedExpenseFilter) {
+        _advancedFilter.value = filter
+        syncDelegate.maybeAutoLoadOlderHistoryForTimestamp(filter.startDateMs)
+    }
+    fun clearAdvancedFilter() { _advancedFilter.value = AdvancedExpenseFilter() }
+    fun setHomeSelectedMonthKey(monthKey: String?) {
+        _homeSelectedMonthKey.value = monthKey
+        syncDelegate.maybeAutoLoadOlderHistoryForPeriod(monthKey)
+    }
     fun setHomeSelectedTypeFilter(typeFilter: String) { _homeSelectedTypeFilter.value = typeFilter }
     fun clearSpecialDrillDownFilter() = structureDelegate.clearSpecialDrillDownFilter()
     fun applyHomeDrillDown(request: HomeDrillDownRequest) = structureDelegate.applyHomeDrillDown(request)

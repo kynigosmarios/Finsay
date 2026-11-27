@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -601,12 +602,16 @@ internal fun ExpensesHeroDashboardCard(
 internal fun ExpensesSearchBar(
     searchQuery: String,
     lang: Localization.Language,
-    onSearchQueryChange: (String) -> Unit
+    onSearchQueryChange: (String) -> Unit,
+    activeAdvancedFilterCount: Int = 0,
+    onOpenAdvancedFilters: (() -> Unit)? = null
 ) {
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp)
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         OutlinedTextField(
             value = searchQuery,
@@ -647,10 +652,54 @@ internal fun ExpensesSearchBar(
                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
             ),
             modifier = Modifier
-                .fillMaxWidth()
+                .weight(1f)
                 .height(50.dp)
                 .testTag("expenses_search_input")
         )
+
+        if (onOpenAdvancedFilters != null) {
+            val isActive = activeAdvancedFilterCount > 0
+            Box(contentAlignment = Alignment.TopEnd) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = if (isActive) Emerald700 else MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(
+                        1.dp,
+                        if (isActive) Emerald700 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                    ),
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable { onOpenAdvancedFilters() }
+                        .testTag("open_advanced_filters_btn")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = Localization.tr(lang, "Advanced Filters", "Προηγμένα Φίλτρα"),
+                            tint = if (isActive) Color.White else Emerald700,
+                            modifier = Modifier.size(21.dp)
+                        )
+                    }
+                }
+                if (isActive) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFEF4444),
+                        modifier = Modifier.size(18.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = activeAdvancedFilterCount.toString(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -128,6 +128,8 @@ import com.example.ui.components.ExodologioDetailsDialog
 import com.example.ui.components.ExodologioManagerDialog
 import com.example.ui.components.HouseholdActiveBar
 import com.example.ui.components.HouseholdActivityDialog
+import com.example.ui.components.HouseholdInviteQrDialog
+import com.example.ui.components.IncomingInviteConfirmDialog
 import com.example.ui.components.LegalDocumentsDialog
 import com.example.ui.components.ExportReportDialog
 import com.example.ui.components.ManualExpenseDialog
@@ -219,6 +221,12 @@ fun MainScreen(
     val homeSelectedMonthKey by viewModel.homeSelectedMonthKey.collectAsStateWithLifecycle()
     val homeSelectedTypeFilter by viewModel.homeSelectedTypeFilter.collectAsStateWithLifecycle()
     val activeSpecialFilter by viewModel.activeSpecialFilter.collectAsStateWithLifecycle()
+    val advancedFilter by viewModel.advancedFilter.collectAsStateWithLifecycle()
+    val hasMoreOlderHistory by viewModel.hasMoreOlderHistory.collectAsStateWithLifecycle()
+    val isLoadingOlderHistory by viewModel.isLoadingOlderHistory.collectAsStateWithLifecycle()
+    val activeHouseholdInvite by viewModel.activeHouseholdInvite.collectAsStateWithLifecycle()
+    val isGeneratingInvite by viewModel.isGeneratingInvite.collectAsStateWithLifecycle()
+    val pendingIncomingInviteCode by viewModel.pendingIncomingInviteCode.collectAsStateWithLifecycle()
     val homeDrillDownScrollTrigger by viewModel.homeDrillDownScrollTrigger.collectAsStateWithLifecycle()
     val homeScrollToTopTrigger by viewModel.homeScrollToTopTrigger.collectAsStateWithLifecycle()
 
@@ -911,7 +919,14 @@ fun MainScreen(
                         onAddMember = { viewModel.openMemberDialog() },
                         onAddCategory = { viewModel.openCategoryDialog() },
                         onSeedStandardCategories = { viewModel.seedStandardCategories() },
-                        isInitialLoading = isInitialExpensesLoading
+                        isInitialLoading = isInitialExpensesLoading,
+                        advancedFilter = advancedFilter,
+                        onAdvancedFilterChange = { viewModel.setAdvancedFilter(it) },
+                        onBulkUpdateExpenseCategory = { ids, cat -> viewModel.bulkUpdateExpenseCategory(ids, cat) },
+                        householdName = currentHousehold?.name.orEmpty(),
+                        hasMoreOlderHistory = hasMoreOlderHistory,
+                        isLoadingOlderHistory = isLoadingOlderHistory,
+                        onLoadOlderHistory = { viewModel.loadOlderHistory() }
                     )
                     1 -> AnalyticsScreen(
                         expenses = allExpenses,
@@ -1039,6 +1054,9 @@ fun MainScreen(
                         },
                         onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
                         onClearExpenses = { viewModel.clearCurrentExodologioExpenses() },
+                        isGeneratingInvite = isGeneratingInvite,
+                        onGenerateInviteLink = { h, role -> viewModel.generateHouseholdInvite(h, role) },
+                        onJoinHouseholdByCode = { code -> viewModel.joinHousehold(code) },
                         onDismiss = {
                             viewModel.clearVerifiedUserLookupState()
                             viewModel.dismissExodologioDetailsDialog()
@@ -1402,6 +1420,9 @@ fun MainScreen(
             onUpdateHouseholdCurrency = { hid, code -> viewModel.updateHouseholdCurrency(hid, code) },
             onDeleteHousehold = { viewModel.deleteHousehold(it) },
             onShowPremiumPaywall = { viewModel.showPremiumPaywall(it) },
+            isGeneratingInvite = isGeneratingInvite,
+            onGenerateInviteLink = { h, role -> viewModel.generateHouseholdInvite(h, role) },
+            onJoinHouseholdByCode = { code -> viewModel.joinHousehold(code) },
             onDismiss = {
                 viewModel.clearVerifiedUserLookupState()
                 viewModel.dismissExodologioManager()
@@ -1575,6 +1596,28 @@ fun MainScreen(
         PrivacyConsentDialog(
             appLanguage = appLanguage,
             onAccept = { viewModel.acceptPrivacyConsent() }
+        )
+    }
+
+    // Household Invite Link & QR Modal
+    activeHouseholdInvite?.let { invite ->
+        HouseholdInviteQrDialog(
+            invite = invite,
+            appLanguage = appLanguage,
+            onDismiss = { viewModel.clearActiveHouseholdInvite() }
+        )
+    }
+
+    // Incoming Deep-Link Household Invite Confirmation Modal
+    pendingIncomingInviteCode?.let { inviteCode ->
+        IncomingInviteConfirmDialog(
+            inviteCode = inviteCode,
+            appLanguage = appLanguage,
+            onConfirmJoin = { code ->
+                viewModel.consumePendingIncomingInviteCode()
+                viewModel.joinHousehold(code)
+            },
+            onDismiss = { viewModel.consumePendingIncomingInviteCode() }
         )
     }
     }

@@ -133,8 +133,12 @@ object RecurringExpenseAutoProcessor {
                     val alreadyRecorded = isAlreadyGeneratedForPeriod(recurring, periodKey, relevantExpenses)
                     if (alreadyRecorded) {
                         processedRoots.add(rootKey)
-                        if (recurring.lastGeneratedMonth != periodKey) {
-                            val updatedRecurring = recurring.copy(lastGeneratedMonth = periodKey)
+                        val isOneTime = RecurringScheduleHelper.isOnce(recurring.frequency)
+                        if (recurring.lastGeneratedMonth != periodKey || (isOneTime && recurring.isActive)) {
+                            val updatedRecurring = recurring.copy(
+                                lastGeneratedMonth = periodKey,
+                                isActive = if (isOneTime) false else recurring.isActive
+                            )
                             repository.updateRecurringExpense(updatedRecurring)
                             if (householdId.isNotBlank() && firestoreSyncRepo != null) {
                                 val fbRec = com.example.data.model.FirebaseRecurringExpense(
@@ -153,7 +157,7 @@ object RecurringExpenseAutoProcessor {
                                     memberIdsCsv = recurring.memberIdsCsv,
                                     memberNamesDisplay = recurring.memberNamesDisplay,
                                     note = recurring.note,
-                                    isActive = recurring.isActive,
+                                    isActive = updatedRecurring.isActive,
                                     lastGeneratedMonth = periodKey,
                                     payerMemberId = recurring.payerMemberId,
                                     payerMemberName = recurring.payerMemberName,
@@ -187,7 +191,11 @@ object RecurringExpenseAutoProcessor {
                         currentMonthExpenses.add(insertedExpense)
                         processedRoots.add(rootKey)
 
-                        val updatedRecurring = recurring.copy(lastGeneratedMonth = periodKey)
+                        val isOneTime = RecurringScheduleHelper.isOnce(recurring.frequency)
+                        val updatedRecurring = recurring.copy(
+                            lastGeneratedMonth = periodKey,
+                            isActive = if (isOneTime) false else recurring.isActive
+                        )
                         repository.updateRecurringExpense(updatedRecurring)
                     }
                 }

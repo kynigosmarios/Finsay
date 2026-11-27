@@ -623,11 +623,17 @@ internal class OikoNomosRecurringGoalsDelegate(
         vm.prefs.edit().putStringSet("dismissed_reminder_keys", updated).apply()
         vm._manualTriggeredReminderIds.value = vm._manualTriggeredReminderIds.value - reminder.id
 
-        // Persist lastGeneratedMonth to Room & Firestore so logout/login or reinstall never re-shows this period's reminder
-        if (reminder.lastGeneratedMonth != periodKey) {
+        val isOneTime = RecurringScheduleHelper.isOnce(reminder.frequency)
+        if (reminder.lastGeneratedMonth != periodKey || (isOneTime && reminder.isActive)) {
             vm.viewModelScope.launch(vm.coroutineExceptionHandler) {
                 try {
-                    val stamped = reminder.copy(lastGeneratedMonth = periodKey)
+                    val stamped = reminder.copy(
+                        lastGeneratedMonth = periodKey,
+                        isActive = if (isOneTime) false else reminder.isActive
+                    )
+                    if (isOneTime) {
+                        BillReminderManager.cancelReminder(vm.getApplication(), stamped.id)
+                    }
                     vm.repository.updateRecurringExpense(stamped)
                     val user = vm._currentUser.value
                     val householdId = vm._currentHousehold.value?.id ?: ""
@@ -780,7 +786,7 @@ internal class OikoNomosRecurringGoalsDelegate(
                 } else {
                     dayOfMonth.coerceIn(1, 31)
                 }
-                val clampedAnchor = anchorMonth.coerceIn(0, 11)
+                val clampedAnchor = RecurringScheduleHelper.sanitizeAnchorMonth(normFreq, anchorMonth)
                 val clampedHour = reminderHour.coerceIn(0, 23)
                 val clampedMinute = reminderMinute.coerceIn(0, 59)
 
@@ -831,6 +837,9 @@ internal class OikoNomosRecurringGoalsDelegate(
                     }
                 }
 
+                val scheduleChangedForOnce = normFreq == RecurringScheduleHelper.FREQ_ONCE &&
+                    existing != null &&
+                    (existing.dayOfMonth != clampedDay || existing.anchorMonth != clampedAnchor || existing.reminderHour != resolvedHour || existing.reminderMinute != resolvedMinute)
                 var recurring = RecurringExpense(
                     id = targetId,
                     title = title,
@@ -845,8 +854,8 @@ internal class OikoNomosRecurringGoalsDelegate(
                     memberIdsCsv = resolvedMemberIdsCsv,
                     memberNamesDisplay = resolvedMemberNamesDisplay,
                     note = note,
-                    isActive = existing?.isActive ?: true,
-                    lastGeneratedMonth = existing?.lastGeneratedMonth ?: "",
+                    isActive = if (scheduleChangedForOnce) true else (existing?.isActive ?: true),
+                    lastGeneratedMonth = if (scheduleChangedForOnce) "" else (existing?.lastGeneratedMonth ?: ""),
                     payerMemberId = effPayerId,
                     payerMemberName = effPayerName,
                     payerMemberIdsCsv = effPayerIdsCsv,
@@ -958,13 +967,24 @@ internal class OikoNomosRecurringGoalsDelegate(
                                 Log.w("OikoNomosVM", "Cloud user expense sync: ${e.message}")
                             }
                         }
-                        recurring = recurring.copy(lastGeneratedMonth = periodKey)
+                        val isOneTime = RecurringScheduleHelper.isOnce(recurring.frequency)
+                        recurring = recurring.copy(
+                            lastGeneratedMonth = periodKey,
+                            isActive = if (isOneTime) false else recurring.isActive
+                        )
                         vm.repository.updateRecurringExpense(recurring)
+                        if (householdId.isNotBlank()) {
+                            vm.syncMonthlyTotalForTimestamp(householdId, targetTimestamp)
+                        }
                         autoRegisteredThisPeriod = true
                     }
                 }
 
-                BillReminderManager.scheduleReminder(vm.getApplication(), recurring)
+                if (recurring.isActive) {
+                    BillReminderManager.scheduleReminder(vm.getApplication(), recurring)
+                } else {
+                    BillReminderManager.cancelReminder(vm.getApplication(), recurring.id)
+                }
 
                 // Clear any prior dismissal/manual flag for this period so the new exact schedule evaluates cleanly
                 val periodDismissKey = "${householdId}|${generatedId}|${periodKey}"
@@ -1212,14 +1232,22 @@ internal class OikoNomosRecurringGoalsDelegate(
                     compareByDescending<Expense> { it.timestamp }.thenByDescending { it.id }
                 )
 
-                val updatedRecurring = recurring.copy(lastGeneratedMonth = periodKey)
+                val isOneTime = RecurringScheduleHelper.isOnce(recurring.frequency)
+                val updatedRecurring = recurring.copy(
+                    lastGeneratedMonth = periodKey,
+                    isActive = if (isOneTime) false else recurring.isActive
+                )
                 vm.repository.updateRecurringExpense(updatedRecurring)
+                if (isOneTime) {
+                    BillReminderManager.cancelReminder(vm.getApplication(), updatedRecurring.id)
+                }
 
                 val user = vm._currentUser.value
                 val householdId = vm._currentHousehold.value?.id ?: ""
                 if (householdId.isNotBlank()) {
                     try {
                         vm.firestoreSyncRepo.syncExpense(savedExpense.toFirebaseExpense(householdId, user?.uid ?: "", user?.displayName ?: "Μέλος"))
+                        vm.syncMonthlyTotalForTimestamp(householdId, targetTimestamp)
                     } catch (_: Exception) {}
                 } else if (user != null) {
                     try {

@@ -248,6 +248,16 @@ class MainActivity : FragmentActivity() {
                 viewModel.enqueueNotificationDeepLink(OikoNomosViewModel.NotificationDeepLink.HouseholdActivity())
                 intent.removeExtra(com.example.util.HouseholdActivityNotificationManager.EXTRA_OPEN_HOUSEHOLD_ACTIVITY)
             }
+
+            val uriString = intent.data?.toString()
+            if (!uriString.isNullOrBlank()) {
+                val extractedCode = com.example.util.QrCodeHelper.extractInviteCode(uriString)
+                if (!extractedCode.isNullOrBlank()) {
+                    Log.d("MainActivity", "Received household invite deep-link code")
+                    viewModel.handleIncomingInviteCode(extractedCode)
+                    intent.data = null
+                }
+            }
         } catch (t: Throwable) {
             Log.w("MainActivity", "Error parsing intent: ${t.message}")
         }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -74,6 +75,7 @@ internal fun ManualExpenseReminderScheduleSection(
     var showAnchorMonthDropdown by remember { mutableStateOf(false) }
 
     val normalizedFreq = RecurringScheduleHelper.normalizeFrequency(frequency)
+    val isOnceMode = normalizedFreq == RecurringScheduleHelper.FREQ_ONCE
     val isWeeklyMode = normalizedFreq == RecurringScheduleHelper.FREQ_WEEKLY ||
         normalizedFreq == RecurringScheduleHelper.FREQ_BIWEEKLY
     val needsAnchorMonth = normalizedFreq == RecurringScheduleHelper.FREQ_QUARTERLY ||
@@ -188,12 +190,21 @@ internal fun ManualExpenseReminderScheduleSection(
                                 } else null,
                                 onClick = {
                                     onFrequencyChange(freqKey)
-                                    if (freqKey == RecurringScheduleHelper.FREQ_WEEKLY ||
-                                        freqKey == RecurringScheduleHelper.FREQ_BIWEEKLY
-                                    ) {
-                                        onDayOfMonthChange(dayOfMonth.coerceIn(1, 7))
-                                    } else {
-                                        onDayOfMonthChange(dayOfMonth.coerceIn(1, 31))
+                                    when (freqKey) {
+                                        RecurringScheduleHelper.FREQ_ONCE -> {
+                                            val cal = java.util.Calendar.getInstance()
+                                            val (y, m) = RecurringScheduleHelper.decodeOnceAnchor(anchorMonth, cal.timeInMillis)
+                                            onAnchorMonthChange(RecurringScheduleHelper.encodeOnceAnchor(y, m))
+                                            onDayOfMonthChange(dayOfMonth.coerceIn(1, 31))
+                                        }
+                                        RecurringScheduleHelper.FREQ_WEEKLY,
+                                        RecurringScheduleHelper.FREQ_BIWEEKLY -> {
+                                            onDayOfMonthChange(dayOfMonth.coerceIn(1, 7))
+                                        }
+                                        else -> {
+                                            onAnchorMonthChange(RecurringScheduleHelper.sanitizeAnchorMonth(freqKey, anchorMonth))
+                                            onDayOfMonthChange(dayOfMonth.coerceIn(1, 31))
+                                        }
                                     }
                                     showFreqDropdown = false
                                 },
@@ -257,13 +268,82 @@ internal fun ManualExpenseReminderScheduleSection(
                 }
             }
 
-            // Row 2: Weekday Dropdown OR Day-of-Month Stepper + Optional Anchor Month Dropdown
+            // Row 2: Exact Date Picker (ONCE) OR Weekday Dropdown OR Day-of-Month Stepper + Optional Anchor Month Dropdown
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isWeeklyMode) {
+                if (isOnceMode) {
+                    val (onceYear, onceMonth) = RecurringScheduleHelper.decodeOnceAnchor(anchorMonth)
+                    val onceDay = dayOfMonth.coerceIn(1, 31)
+                    val formattedOnceDate = String.format(Locale.US, "%02d/%02d/%04d", onceDay, onceMonth + 1, onceYear)
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, pillBorderColor),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clickable {
+                                android.app.DatePickerDialog(
+                                    context,
+                                    { _, selectedYear, selectedMonth, selectedDay ->
+                                        onAnchorMonthChange(
+                                            RecurringScheduleHelper.encodeOnceAnchor(selectedYear, selectedMonth)
+                                        )
+                                        onDayOfMonthChange(selectedDay.coerceIn(1, 31))
+                                    },
+                                    onceYear,
+                                    onceMonth,
+                                    onceDay
+                                ).show()
+                            }
+                            .testTag("reminder_once_date_picker")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarToday,
+                                    contentDescription = Localization.tr(lang, "Reminder date", "Ημερομηνία υπενθύμισης"),
+                                    tint = Emerald700,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = Localization.tr(lang, "Reminder date", "Ημερομηνία υπενθύμισης"),
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = formattedOnceDate,
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = Emerald700,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                } else if (isWeeklyMode) {
                     val selectedIso = dayOfMonth.coerceIn(1, 7)
                     Box(modifier = Modifier.fillMaxWidth()) {
                         Surface(
